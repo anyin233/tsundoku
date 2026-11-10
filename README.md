@@ -104,6 +104,7 @@ for f in koreader/aidoku.koplugin/*.lua; do luajit -b "$f" /dev/null; done
 | [`cbz/`](cbz) | 流式原子写入 `.cbz` 漫画归档与 `ComicInfo.xml` 元数据。 |
 | [`cmd/aidoku-run`](cmd/aidoku-run) | 插件调用的 CLI 后端（支持 `manifests`、`search`、`manga`、`download`、`download-payload`、`covers`、`repo`、`cookie`、`update` 等子命令）。 |
 | [`koreader/aidoku.koplugin`](koreader/aidoku.koplugin) | KOReader Lua 插件前端（书库、多书源搜索 Plus、章节多维排序、非阻塞后台下载队列与下载管理器）。 |
+| [`.agent/skills/kindle-koreader`](.agent/skills/kindle-koreader) | AI Coding Agent 专用的 Kindle + KOReader 真机 SSH 部署、帧缓冲截屏、触控注入与离屏渲染测试 Skill。 |
 
 ---
 
