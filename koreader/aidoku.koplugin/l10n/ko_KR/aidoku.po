@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: aidoku.koplugin\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-26 18:29+0700\n"
+"POT-Creation-Date: 2026-11-10 23:25+0000\n"
 "PO-Revision-Date: 2026-10-07 13:35+0700\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -17,15 +17,112 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 
-#: downloadsbrowser.lua:18 sourcesbrowser.lua:24
-msgid "Downloaded chapters"
+#: downloadqueue.lua:271 downloadqueue.lua:336 subprocess.lua:122
+#: subprocess.lua:177
+#, fuzzy
+msgid "command failed"
+msgstr ""
+"다운로드에 실패했습니다:\n"
+"%1"
+
+#: downloadsbrowser.lua:66 globalsearchbrowser.lua:419 librarybrowser.lua:1059
+#: mangabrowser.lua:273 settingsbrowser.lua:97 sourcesbrowser.lua:24
+#, fuzzy
+msgid "Download Manager"
 msgstr "다운로드한 챕터"
 
-#: downloadsbrowser.lua:46
+#: downloadsbrowser.lua:143
+msgid "%1/%2p (%3%)"
+msgstr ""
+
+#: downloadsbrowser.lua:145 downloadsbrowser.lua:167
+#, fuzzy
+msgid "Preparing…"
+msgstr "검색하는 중…"
+
+#: downloadsbrowser.lua:147
+msgid "Active: %1 · Queue: %2 · Saved: %3 ch (%4)"
+msgstr ""
+
+#: downloadsbrowser.lua:150
+msgid "Paused (%1 queued) · Saved: %2 ch (%3)"
+msgstr ""
+
+#: downloadsbrowser.lua:153
+msgid "%1 failed · Saved: %2 manga / %3 ch (%4)"
+msgstr ""
+
+#: downloadsbrowser.lua:156
+msgid "Idle · Saved: %1 manga / %2 ch (%3)"
+msgstr ""
+
+#: downloadsbrowser.lua:170
+msgid "Paused #%1"
+msgstr ""
+
+#: downloadsbrowser.lua:172
+msgid "Queued #%1"
+msgstr ""
+
+#: downloadsbrowser.lua:174
+msgid "Failed"
+msgstr ""
+
+#: downloadsbrowser.lua:176 globalsearchbrowser.lua:303 mangabrowser.lua:720
+#: subprocess.lua:297 subprocess.lua:378
+msgid "Cancelled"
+msgstr "취소됨"
+
+#: downloadsbrowser.lua:178
+msgid "Done ✓"
+msgstr ""
+
+#: downloadsbrowser.lua:221
+msgid "Paused"
+msgstr ""
+
+#: downloadsbrowser.lua:222
+msgid "%1 remaining"
+msgstr ""
+
+#: downloadsbrowser.lua:224
+msgid "── Download Queue (%1) ──"
+msgstr ""
+
+#: downloadsbrowser.lua:244
+msgid "No active download tasks in queue."
+msgstr ""
+
+#: downloadsbrowser.lua:255
+msgid "── Downloaded Books (%1) ──"
+msgstr ""
+
+#: downloadsbrowser.lua:266
+msgid "All %1 ch · %2"
+msgstr ""
+
+#: downloadsbrowser.lua:268
+msgid "%1/%2 ch · %3"
+msgstr ""
+
+#: downloadsbrowser.lua:270
+msgid "%1 ch · %2"
+msgstr ""
+
+#: downloadsbrowser.lua:280 downloadsbrowser.lua:313
 msgid "No downloaded chapters yet."
 msgstr "아직 다운로드한 챕터가 없습니다."
 
-#: downloadsbrowser.lua:58
+#: downloadsbrowser.lua:294
+#, fuzzy
+msgid "── Downloaded Chapters (%1) ──"
+msgstr "다운로드한 챕터"
+
+#: downloadsbrowser.lua:303 downloadsbrowser.lua:539 mangabrowser.lua:372
+msgid "Read"
+msgstr "읽음"
+
+#: downloadsbrowser.lua:332
 msgid ""
 "Could not load downloads:\n"
 "%1"
@@ -33,11 +130,124 @@ msgstr ""
 "다운로드 목록을 불러올 수 없습니다:\n"
 "%1"
 
-#: downloadsbrowser.lua:81
+#: downloadsbrowser.lua:346
+msgid "View: Queue + Chapters"
+msgstr ""
+
+#: downloadsbrowser.lua:347
+msgid "View: Grouped by Book"
+msgstr ""
+
+#: downloadsbrowser.lua:348
+msgid "View: Queue Only"
+msgstr ""
+
+#: downloadsbrowser.lua:370
+msgid "Pause download queue"
+msgstr ""
+
+#: downloadsbrowser.lua:370
+#, fuzzy
+msgid "Resume download queue"
+msgstr "다운로드 삭제"
+
+#: downloadsbrowser.lua:385
+msgid "Retry failed/cancelled (%1)"
+msgstr ""
+
+#: downloadsbrowser.lua:396
+msgid "Cancel all pending (%1)"
+msgstr ""
+
+#: downloadsbrowser.lua:400
+msgid "Cancel %1 active/queued download(s)?"
+msgstr ""
+
+#: downloadsbrowser.lua:401
+#, fuzzy
+msgid "Cancel downloads"
+msgstr "다시 다운로드"
+
+#: downloadsbrowser.lua:413
+msgid "Clear finished queue history"
+msgstr ""
+
+#: downloadsbrowser.lua:423
+msgid "Refresh status"
+msgstr ""
+
+#: downloadsbrowser.lua:445
+#, fuzzy
+msgid "Download next (prioritize)"
+msgstr "다음 챕터 다운로드"
+
+#: downloadsbrowser.lua:456
+msgid "Cancel this download"
+msgstr ""
+
+#: downloadsbrowser.lua:467
+#, fuzzy
+msgid "Retry download"
+msgstr "다시 다운로드"
+
+#: downloadsbrowser.lua:478
+msgid "Open chapter"
+msgstr ""
+
+#: downloadsbrowser.lua:488
+#, fuzzy
+msgid "Remove from queue list"
+msgstr "서재에서 '%1'을(를) 제거하시겠습니까?"
+
+#: downloadsbrowser.lua:506
 msgid "Download no longer available."
 msgstr "다운로드를 더 이상 사용할 수 없습니다."
 
-#: downloadsbrowser.lua:103
+#: downloadsbrowser.lua:551
+#, fuzzy
+msgid "%1 downloaded chapters (%2)"
+msgstr "다운로드한 챕터"
+
+#: downloadsbrowser.lua:565
+#, fuzzy
+msgid ""
+"Remove download?\n"
+"\n"
+"%1 - %2"
+msgstr ""
+"다운로드를 삭제하시겠습니까?\n"
+"\n"
+"%1"
+
+#: downloadsbrowser.lua:566 downloadsbrowser.lua:660 downloadsbrowser.lua:680
+#: librarybrowser.lua:1376 librarybrowser.lua:1392 sourcesbrowser.lua:155
+msgid "Remove"
+msgstr "삭제"
+
+#: downloadsbrowser.lua:616
+#, fuzzy
+msgid "View downloaded chapters"
+msgstr "다운로드한 챕터"
+
+#: downloadsbrowser.lua:625
+msgid "Open manga detail page"
+msgstr ""
+
+#: downloadsbrowser.lua:631 nextchapter.lua:187
+msgid "Source no longer installed."
+msgstr "소스가 더 이상 설치되어 있지 않습니다."
+
+#: downloadsbrowser.lua:655
+#, fuzzy
+msgid "Remove all %1 downloaded chapters"
+msgstr "아직 다운로드한 챕터가 없습니다."
+
+#: downloadsbrowser.lua:659 librarybrowser.lua:1375
+#, fuzzy
+msgid "Remove all %1 downloaded chapters of '%2'?"
+msgstr "아직 다운로드한 챕터가 없습니다."
+
+#: downloadsbrowser.lua:679
 msgid ""
 "Remove download?\n"
 "\n"
@@ -47,200 +257,406 @@ msgstr ""
 "\n"
 "%1"
 
-#: downloadsbrowser.lua:104 librarybrowser.lua:323 sourcesbrowser.lua:152
-msgid "Remove"
-msgstr "삭제"
-
-#: downloadsengine.lua:232
+#: downloadsengine.lua:237
 msgid "Could not read the downloads index."
 msgstr "다운로드 목록을 읽을 수 없습니다."
 
-#: engine.lua:46
+#: engine.lua:35
 msgid "Fetching repository…"
 msgstr "저장소 가져오는 중…"
 
-#: engine.lua:50
+#: engine.lua:39
 msgid "Installing…"
 msgstr "설치하는 중…"
 
-#: engine.lua:59
+#: engine.lua:43
 msgid "Loading cookies…"
 msgstr "쿠키 불러오는 중…"
 
-#: engine.lua:72
+#: engine.lua:51
 msgid "Checking for updates…"
 msgstr "업데이트 확인하는 중…"
 
-#: engine.lua:76
+#: engine.lua:55
 msgid "Downloading update…"
 msgstr "업데이트 다운로드하는 중…"
 
-#: engine.lua:80
+#: engine.lua:59
 msgid "Loading source…"
 msgstr "소스 불러오는 중…"
 
-#: engine.lua:134
+#: engine.lua:122
 msgid "Could not write search filters"
 msgstr ""
 
-#: engine.lua:138
+#: engine.lua:126
 msgid "Searching…"
 msgstr "검색하는 중…"
 
-#: engine.lua:149
+#: engine.lua:134
 msgid "Loading filters…"
 msgstr "필터 불러오는 중…"
 
-#: engine.lua:156
+#: engine.lua:138
 msgid "Loading settings…"
 msgstr "설정 불러오는 중…"
 
-#: engine.lua:191
+#: engine.lua:161
 msgid "Loading chapters…"
 msgstr "챕터 불러오는 중…"
 
-#: engine.lua:222
+#: engine.lua:210
 msgid "Downloading chapter…"
 msgstr "챕터 다운로드하는 중…"
 
-#: filterbrowser.lua:21
+#: engine.lua:249
+#, fuzzy
+msgid "Could not encode cover request"
+msgstr ""
+"업데이트를 확인할 수 없습니다:\n"
+"%1"
+
+#: engine.lua:259
+#, fuzzy
+msgid "Could not write cover request"
+msgstr ""
+"업데이트를 확인할 수 없습니다:\n"
+"%1"
+
+#: filterbrowser.lua:22
 msgid "Search filters"
 msgstr "검색 필터"
 
-#: filterbrowser.lua:73 filterbrowser.lua:142
+#: filterbrowser.lua:74 filterbrowser.lua:152 mangabrowser.lua:153
 msgid "Sort: %1"
 msgstr "정렬: %1"
 
-#: filterbrowser.lua:73
+#: filterbrowser.lua:74
 msgid "default"
 msgstr "기본"
 
-#: filterbrowser.lua:76
+#: filterbrowser.lua:77
 msgid "Sort: %1 (%2)"
 msgstr "정렬: %1 (%2)"
 
-#: filterbrowser.lua:76
+#: filterbrowser.lua:77
 msgid "ascending"
 msgstr "오름차순"
 
-#: filterbrowser.lua:76
+#: filterbrowser.lua:77
 msgid "descending"
 msgstr "내림차순"
 
-#: filterbrowser.lua:81 filterbrowser.lua:83 filterbrowser.lua:90
-#: filterbrowser.lua:98 filterbrowser.lua:100 sourcesettingsbrowser.lua:116
+#: filterbrowser.lua:82 filterbrowser.lua:84 filterbrowser.lua:91
+#: filterbrowser.lua:108 filterbrowser.lua:110 sourcesettingsbrowser.lua:116
 msgid "%1: %2"
 msgstr "%1: %2"
 
-#: filterbrowser.lua:81 filterbrowser.lua:90
+#: filterbrowser.lua:82 filterbrowser.lua:91
 msgid "any"
 msgstr "무관"
 
-#: filterbrowser.lua:92
+#: filterbrowser.lua:93
 msgid "%1: %2 included, %3 excluded"
 msgstr "%1: 포함 %2, 제외 %3"
 
-#: filterbrowser.lua:98
+#: filterbrowser.lua:108
 msgid "unset"
 msgstr "설정 안 함"
 
-#: filterbrowser.lua:100
+#: filterbrowser.lua:110
 msgid "no"
 msgstr "아니요"
 
-#: filterbrowser.lua:100
+#: filterbrowser.lua:110
 msgid "yes"
 msgstr "예"
 
-#: filterbrowser.lua:121
+#: filterbrowser.lua:131
 msgid "Clear all filters"
 msgstr "모든 필터 지우기"
 
-#: filterbrowser.lua:122
+#: filterbrowser.lua:132
 msgid "Search with these filters"
 msgstr "이 필터로 검색"
 
-#: filterbrowser.lua:169
+#: filterbrowser.lua:179
 msgid "Any"
 msgstr "전체"
 
-#: globalsearchbrowser.lua:24 globalsearchbrowser.lua:63 librarybrowser.lua:137
-msgid "Search all sources"
+#: globalsearchbrowser.lua:26 globalsearchbrowser.lua:476
+msgid "Multi-source Search"
+msgstr ""
+
+#: globalsearchbrowser.lua:110
+#, fuzzy
+msgid "Select Search Sources"
 msgstr "모든 소스에서 검색"
 
-#: globalsearchbrowser.lua:25 searchbrowser.lua:18
-msgid "Hold a result to add/remove from library"
-msgstr "결과를 길게 눌러 서재에 추가/제거"
+#: globalsearchbrowser.lua:112
+msgid "Tap sources to toggle (%1/%2 selected), then tap Start Search"
+msgstr ""
 
-#: globalsearchbrowser.lua:64 searchbrowser.lua:93
+#: globalsearchbrowser.lua:120
+msgid "No sources installed. Install sources in Settings → Sources first."
+msgstr ""
+
+#: globalsearchbrowser.lua:126
+msgid "» Start Search (%1/%2 sources selected)…"
+msgstr ""
+
+#: globalsearchbrowser.lua:127
+#, fuzzy
+msgid "Search >"
+msgstr "검색"
+
+#: globalsearchbrowser.lua:133
+#, fuzzy
+msgid "[✓] Select all sources"
+msgstr "모든 소스에서 검색"
+
+#: globalsearchbrowser.lua:134 globalsearchbrowser.lua:141
+msgid "Invert on hold"
+msgstr ""
+
+#: globalsearchbrowser.lua:140
+#, fuzzy
+msgid "[ ] Deselect all sources"
+msgstr "모든 소스에서 검색"
+
+#: globalsearchbrowser.lua:152
+msgid "Selected"
+msgstr ""
+
+#: globalsearchbrowser.lua:180 searchbrowser.lua:130
+#, fuzzy
+msgid "Downloaded all %1 ch"
+msgstr "다운로드한 챕터"
+
+#: globalsearchbrowser.lua:182 librarybrowser.lua:949 mangabrowser.lua:145
+#: searchbrowser.lua:132
+#, fuzzy
+msgid "Downloaded %1 ch"
+msgstr "다운로드한 챕터"
+
+#: globalsearchbrowser.lua:205
+msgid "» Change sources (%1/%2) or search again…"
+msgstr ""
+
+#: globalsearchbrowser.lua:206
+msgid "Query: %1"
+msgstr ""
+
+#: globalsearchbrowser.lua:222
+#, fuzzy
+msgid "Search: %1"
+msgstr "검색"
+
+#: globalsearchbrowser.lua:223
+msgid "%1 results from %2 selected sources · Hold to bookmark"
+msgstr ""
+
+#: globalsearchbrowser.lua:226
+msgid " (%1 failed)"
+msgstr ""
+
+#: globalsearchbrowser.lua:238 globalsearchbrowser.lua:287
+msgid "Please select at least one source before searching."
+msgstr ""
+
+#: globalsearchbrowser.lua:245
+#, fuzzy
+msgid "Search in %1 selected source(s)"
+msgstr "모든 소스에서 검색"
+
+#: globalsearchbrowser.lua:247 searchbrowser.lua:81
 msgid "Title…"
 msgstr "제목…"
 
-#: globalsearchbrowser.lua:67 mangabrowser.lua:453 searchbrowser.lua:96
-#: settingsbrowser.lua:150 settingsbrowser.lua:184 settingsbrowser.lua:219
-#: settingsbrowser.lua:249 settingsbrowser.lua:286 settingsbrowser.lua:424
+#: globalsearchbrowser.lua:250
+#, fuzzy
+msgid "Sources…"
+msgstr "소스"
+
+#: globalsearchbrowser.lua:257 mangabrowser.lua:674 searchbrowser.lua:84
+#: settingsbrowser.lua:163 settingsbrowser.lua:197 settingsbrowser.lua:232
+#: settingsbrowser.lua:262 settingsbrowser.lua:299 settingsbrowser.lua:437
 #: sourcesettingsbrowser.lua:235
 msgid "Cancel"
 msgstr "취소"
 
-#: globalsearchbrowser.lua:72 searchbrowser.lua:101
+#: globalsearchbrowser.lua:262 searchbrowser.lua:89
 msgid "Search"
 msgstr "검색"
 
-#: globalsearchbrowser.lua:96
-msgid "No sources installed."
-msgstr "설치된 소스가 없습니다."
+#: globalsearchbrowser.lua:301
+#, fuzzy
+msgid "Searching (%1/%2): %3…"
+msgstr "검색하는 중…"
 
-#: globalsearchbrowser.lua:126
-msgid "No results from any source."
+#: globalsearchbrowser.lua:327
+msgid "Search stopped early (%1 results kept)."
+msgstr ""
+
+#: globalsearchbrowser.lua:332
+#, fuzzy
+msgid "No results in the selected sources."
 msgstr "어떤 소스에서도 결과가 없습니다."
 
-#: globalsearchbrowser.lua:129
+#: globalsearchbrowser.lua:337
 msgid "Some sources failed: %1"
 msgstr "일부 소스에서 실패했습니다: %1"
 
-#: globalsearchbrowser.lua:149 searchbrowser.lua:195
+#: globalsearchbrowser.lua:360
+msgid "Search keyword (%1/%2 sources)…"
+msgstr ""
+
+#: globalsearchbrowser.lua:370
+msgid "Select search sources (%1/%2)…"
+msgstr ""
+
+#: globalsearchbrowser.lua:379
+#, fuzzy
+msgid "Select all sources"
+msgstr "모든 소스에서 검색"
+
+#: globalsearchbrowser.lua:390
+#, fuzzy
+msgid "Deselect all sources"
+msgstr "모든 소스에서 검색"
+
+#: globalsearchbrowser.lua:401
+msgid "Invert selection"
+msgstr ""
+
+#: globalsearchbrowser.lua:409
+msgid "Back to last results (%1)"
+msgstr ""
+
+#: globalsearchbrowser.lua:479
+msgid "New search with current sources…"
+msgstr ""
+
+#: globalsearchbrowser.lua:486
+msgid "Change selected sources (%1/%2)…"
+msgstr ""
+
+#: globalsearchbrowser.lua:540
+msgid "Select ONLY this source & search…"
+msgstr ""
+
+#: globalsearchbrowser.lua:554
+msgid "Invert all selections"
+msgstr ""
+
+#: globalsearchbrowser.lua:583 mangabrowser.lua:219 searchbrowser.lua:216
 msgid "Could not update library."
 msgstr ""
 
-#: globalsearchbrowser.lua:159 searchbrowser.lua:205
+#: globalsearchbrowser.lua:591 mangabrowser.lua:227 searchbrowser.lua:224
 msgid "Added '%1' to library"
 msgstr "'%1'을(를) 서재에 추가했습니다."
 
-#: globalsearchbrowser.lua:159 searchbrowser.lua:205
+#: globalsearchbrowser.lua:591 mangabrowser.lua:227 searchbrowser.lua:224
 msgid "Removed '%1' from library"
 msgstr "'%1'을(를) 서재에서 제거했습니다."
 
-#: librarybrowser.lua:27
+#: librarybrowser.lua:63
+msgid "Compact list (title only)"
+msgstr ""
+
+#: librarybrowser.lua:64 settingsbrowser.lua:49
+msgid "Compact list"
+msgstr ""
+
+#: librarybrowser.lua:68 settingsbrowser.lua:50
+msgid "List (cover + title)"
+msgstr ""
+
+#: librarybrowser.lua:69
+msgid "List"
+msgstr ""
+
+#: librarybrowser.lua:73
+msgid "Grid (cover + title)"
+msgstr ""
+
+#: librarybrowser.lua:74 settingsbrowser.lua:51
+msgid "Grid"
+msgstr ""
+
+#: librarybrowser.lua:557
 msgid "Library"
 msgstr "서재"
 
-#: librarybrowser.lua:32 librarybrowser.lua:91 settingsbrowser.lua:114
+#: librarybrowser.lua:879 settingsbrowser.lua:127
 msgid "Ephemeral Mode"
 msgstr "임시 모드"
 
+#: librarybrowser.lua:883
+#, fuzzy
+msgid "Downloading (%1 in queue)"
+msgstr "다운로드 중 %1/%2: %3"
+
+#: librarybrowser.lua:935
+msgid "DL %1"
+msgstr ""
+
+#: librarybrowser.lua:943
+#, fuzzy
+msgid "Downloaded all (%1 ch)"
+msgstr "다운로드한 챕터"
+
+#: librarybrowser.lua:946 mangabrowser.lua:143
+#, fuzzy
+msgid "Downloaded %1/%2 ch"
+msgstr "다운로드 중 %1/%2: %3"
+
 #. TRANSLATORS: KOReader mirrors the layout for RTL languages, so the menu button is top right there.
-#: librarybrowser.lua:77
+#: librarybrowser.lua:972
 msgid "Library is empty. Use the menu (top left) to find manga."
 msgstr "서재가 비어 있습니다. 왼쪽 위 메뉴에서 만화를 찾아보세요."
 
-#: librarybrowser.lua:108 settingsbrowser.lua:35
-msgid "Settings"
-msgstr "설정"
+#: librarybrowser.lua:1022 settingsbrowser.lua:101
+#, fuzzy
+msgid "Library view"
+msgstr "서재"
 
-#: librarybrowser.lua:156
-msgid "Sort: Last read"
-msgstr "정렬: 최근 읽은 순"
-
-#: librarybrowser.lua:156
+#: librarybrowser.lua:1048
 msgid "Sort: Name"
 msgstr "정렬: 이름순"
 
-#: librarybrowser.lua:165
+#: librarybrowser.lua:1049
+msgid "Sort: Last read"
+msgstr "정렬: 최근 읽은 순"
+
+#: librarybrowser.lua:1050
+#, fuzzy
+msgid "Sort: Downloaded first"
+msgstr "정렬: 오래된순"
+
+#: librarybrowser.lua:1058 mangabrowser.lua:272
+#, fuzzy
+msgid "Download Manager (%1 active)"
+msgstr "다음 챕터 다운로드"
+
+#: librarybrowser.lua:1067
+msgid "Multi-source Search…"
+msgstr ""
+
+#: librarybrowser.lua:1093
+msgid "View: %1…"
+msgstr ""
+
+#: librarybrowser.lua:1109 settingsbrowser.lua:35
+msgid "Settings"
+msgstr "설정"
+
+#: librarybrowser.lua:1133
 msgid "Check for Updates"
 msgstr "업데이트 확인"
 
-#: librarybrowser.lua:207
+#: librarybrowser.lua:1161
 msgid ""
 "Could not check for updates:\n"
 "%1"
@@ -248,11 +664,11 @@ msgstr ""
 "업데이트를 확인할 수 없습니다:\n"
 "%1"
 
-#: librarybrowser.lua:212
+#: librarybrowser.lua:1166
 msgid "Plugin is up to date (%1)."
 msgstr "플러그인이 최신 상태입니다 (%1)."
 
-#: librarybrowser.lua:220
+#: librarybrowser.lua:1174
 msgid ""
 "Update available: %1\n"
 "Installed: %2"
@@ -260,11 +676,11 @@ msgstr ""
 "업데이트 가능: %1\n"
 "설치됨: %2"
 
-#: librarybrowser.lua:222
+#: librarybrowser.lua:1176
 msgid "unknown"
 msgstr "알 수 없음"
 
-#: librarybrowser.lua:226
+#: librarybrowser.lua:1180
 msgid ""
 "Latest: %1\n"
 "Installed version unknown."
@@ -272,11 +688,11 @@ msgstr ""
 "최신 버전: %1\n"
 "설치된 버전을 알 수 없습니다."
 
-#: librarybrowser.lua:232
+#: librarybrowser.lua:1186
 msgid "Download & Install"
 msgstr "다운로드 및 설치"
 
-#: librarybrowser.lua:244
+#: librarybrowser.lua:1198
 msgid ""
 "Update failed:\n"
 "%1"
@@ -284,23 +700,72 @@ msgstr ""
 "업데이트에 실패했습니다:\n"
 "%1"
 
-#: librarybrowser.lua:248
+#: librarybrowser.lua:1202
 msgid "Updated to %1. Restart KOReader to apply."
 msgstr "%1(으)로 업데이트했습니다. 적용하려면 KOReader를 다시 시작하세요."
 
-#: librarybrowser.lua:293
+#: librarybrowser.lua:1229
 msgid "'%1' is no longer installed. Hold to remove it."
 msgstr "'%1'이(가) 더 이상 설치되어 있지 않습니다. 길게 눌러 제거하세요."
 
-#: librarybrowser.lua:322
+#: librarybrowser.lua:1260
+#, fuzzy
+msgid "'%1' is no longer installed."
+msgstr "소스가 더 이상 설치되어 있지 않습니다."
+
+#: librarybrowser.lua:1269 mangabrowser.lua:444
+msgid ""
+"Could not load chapters:\n"
+"%1"
+msgstr ""
+"챕터를 불러올 수 없습니다:\n"
+"%1"
+
+#: librarybrowser.lua:1310 mangabrowser.lua:616
+msgid "All %1 chapters are already downloaded locally."
+msgstr ""
+
+#: librarybrowser.lua:1323
+#, fuzzy
+msgid "Queued %1 chapter(s) of '%2' for download."
+msgstr "다운로드할 챕터가 없습니다."
+
+#: librarybrowser.lua:1324 mangabrowser.lua:588
+msgid "View Progress"
+msgstr ""
+
+#: librarybrowser.lua:1325
+msgid "OK"
+msgstr ""
+
+#: librarybrowser.lua:1351
+msgid "Open chapter list"
+msgstr ""
+
+#: librarybrowser.lua:1361
+#, fuzzy
+msgid "Download all chapters"
+msgstr "다운로드한 챕터"
+
+#: librarybrowser.lua:1371
+#, fuzzy
+msgid "Delete %1 downloaded chapter(s)…"
+msgstr "다운로드한 챕터"
+
+#: librarybrowser.lua:1387
+#, fuzzy
+msgid "Remove from library…"
+msgstr "'%1'을(를) 서재에서 제거했습니다."
+
+#: librarybrowser.lua:1391
 msgid "Remove '%1' from your library?"
 msgstr "서재에서 '%1'을(를) 제거하시겠습니까?"
 
-#: main.lua:236
+#: main.lua:238
 msgid "Aidoku"
 msgstr "Aidoku"
 
-#: main.lua:244
+#: main.lua:245
 msgid "AidokuRunner for KOReader"
 msgstr "KOReader용 AidokuRunner"
 
@@ -314,23 +779,106 @@ msgstr ""
 msgid "Could not open the downloads database. Is storage writable?"
 msgstr "다운로드 데이터베이스를 열 수 없습니다. 저장소에 쓰기 권한이 있나요?"
 
-#: mangabrowser.lua:75
-msgid "Sort: Newest first"
-msgstr "정렬: 최신순"
+#: mangabrowser.lua:42
+msgid "Default (Newest chapter first)"
+msgstr ""
 
-#: mangabrowser.lua:75
-msgid "Sort: Oldest first"
-msgstr "정렬: 오래된순"
+#: mangabrowser.lua:42 mangabrowser.lua:56
+msgid "Newest"
+msgstr ""
 
-#: mangabrowser.lua:90
+#: mangabrowser.lua:43
+msgid "Default (Oldest chapter first)"
+msgstr ""
+
+#: mangabrowser.lua:43
+msgid "Oldest"
+msgstr ""
+
+#: mangabrowser.lua:44
+msgid "By Name (A → Z)"
+msgstr ""
+
+#: mangabrowser.lua:44
+msgid "Name ↑"
+msgstr ""
+
+#: mangabrowser.lua:45
+msgid "By Name (Z → A)"
+msgstr ""
+
+#: mangabrowser.lua:45
+msgid "Name ↓"
+msgstr ""
+
+#: mangabrowser.lua:46
+msgid "By Update Time (Latest first)"
+msgstr ""
+
+#: mangabrowser.lua:46
+msgid "Updated ↓"
+msgstr ""
+
+#: mangabrowser.lua:47
+msgid "By Update Time (Earliest first)"
+msgstr ""
+
+#: mangabrowser.lua:47
+msgid "Updated ↑"
+msgstr ""
+
+#: mangabrowser.lua:141
+#, fuzzy
+msgid "✓ All %1 ch downloaded"
+msgstr "이미 다운로드했습니다."
+
+#: mangabrowser.lua:147
+msgid "%1 ch"
+msgstr ""
+
+#: mangabrowser.lua:151
+msgid "Queue %1"
+msgstr ""
+
+#: mangabrowser.lua:184
+#, fuzzy
+msgid "Sort chapters by"
+msgstr "아직 다음 챕터가 없습니다."
+
+#: mangabrowser.lua:241
+#, fuzzy
+msgid "Sort chapters: %1…"
+msgstr "챕터 불러오는 중…"
+
+#: mangabrowser.lua:253
+#, fuzzy
+msgid "Download all chapters (%1 remaining)…"
+msgstr "다음 챕터 다운로드…"
+
+#: mangabrowser.lua:254
+#, fuzzy
+msgid "Download all chapters…"
+msgstr "다음 챕터 다운로드…"
+
+#: mangabrowser.lua:263
 msgid "Download next chapters…"
 msgstr "다음 챕터 다운로드…"
 
-#: mangabrowser.lua:98
+#: mangabrowser.lua:283
+#, fuzzy
+msgid "Add to library"
+msgstr "'%1'을(를) 서재에 추가했습니다."
+
+#: mangabrowser.lua:283
+#, fuzzy
+msgid "Remove from library"
+msgstr "'%1'을(를) 서재에서 제거했습니다."
+
+#: mangabrowser.lua:291
 msgid "Reset reading progress…"
 msgstr "읽기 진행 초기화…"
 
-#: mangabrowser.lua:119
+#: mangabrowser.lua:308
 msgid ""
 "Reset progress for %1?\n"
 "\n"
@@ -340,59 +888,121 @@ msgstr ""
 "\n"
 "읽음 표시와 페이지 위치를 지웁니다."
 
-#: mangabrowser.lua:121
+#: mangabrowser.lua:310
 msgid "Reset"
 msgstr "초기화"
 
-#: mangabrowser.lua:159
-msgid "Read"
-msgstr "읽음"
+#: mangabrowser.lua:346
+#, fuzzy
+msgid "▶ Downloading (%1 in queue) · Tap for options"
+msgstr "다운로드 중 %1/%2: %3"
 
-#: mangabrowser.lua:226
-msgid ""
-"Could not load chapters:\n"
-"%1"
+#: mangabrowser.lua:348
+#, fuzzy
+msgid "✓ All %1 chapters downloaded · Options"
+msgstr "이미 다운로드했습니다."
+
+#: mangabrowser.lua:350
+msgid "» Batch Download (%1/%2 left) & Sort…"
 msgstr ""
-"챕터를 불러올 수 없습니다:\n"
-"%1"
 
-#: mangabrowser.lua:272
+#: mangabrowser.lua:352
+msgid "» Chapter Sort & Options…"
+msgstr ""
+
+#: mangabrowser.lua:356
+#, fuzzy
+msgid "Sort: %1 >"
+msgstr "정렬: %1"
+
+#: mangabrowser.lua:383
+msgid "▶ DL…"
+msgstr ""
+
+#: mangabrowser.lua:386
+msgid "Queued"
+msgstr ""
+
+#: mangabrowser.lua:388
+msgid "✗ Failed"
+msgstr ""
+
+#: mangabrowser.lua:499
 msgid "Resume reading from %1?"
 msgstr "%1부터 이어서 읽으시겠습니까?"
 
-#: mangabrowser.lua:273
+#: mangabrowser.lua:500
 msgid "Resume"
 msgstr "이어 읽기"
 
-#: mangabrowser.lua:274
+#: mangabrowser.lua:501
 msgid "Not now"
 msgstr "나중에"
 
-#: mangabrowser.lua:343
+#: mangabrowser.lua:567
+msgid "All selected chapters are already downloaded."
+msgstr ""
+
+#: mangabrowser.lua:581
+msgid "Chapters are already in the download queue."
+msgstr ""
+
+#: mangabrowser.lua:587
+msgid ""
+"Queued %1 chapter(s) for background download.\n"
+"\n"
+"You can keep browsing or open Download Manager to watch live progress."
+msgstr ""
+
+#: mangabrowser.lua:589
+msgid "Stay Here"
+msgstr ""
+
+#: mangabrowser.lua:602 mangabrowser.lua:663
+msgid "Chapters still loading. Try again shortly."
+msgstr "챕터를 아직 불러오는 중입니다. 잠시 후 다시 시도하세요."
+
+#: mangabrowser.lua:624
+msgid ""
+"Download all chapters of '%1'?\n"
+"\n"
+"Total: %2 chapters\n"
+"Already downloaded: %3\n"
+"To download: %4"
+msgstr ""
+
+#: mangabrowser.lua:626
+#, fuzzy
+msgid "Download %1 ch"
+msgstr "다운로드"
+
+#: mangabrowser.lua:636
 msgid "No chapters to download."
 msgstr "다운로드할 챕터가 없습니다."
 
-#: mangabrowser.lua:366 nextchapter.lua:156
+#: mangabrowser.lua:654 nextchapter.lua:154
 msgid "No next chapter yet."
 msgstr "아직 다음 챕터가 없습니다."
 
-#: mangabrowser.lua:381
-msgid "Already downloaded."
-msgstr "이미 다운로드했습니다."
+#: mangabrowser.lua:668
+msgid "Download next chapters"
+msgstr "다음 챕터 다운로드"
 
-#: mangabrowser.lua:398
-msgid "Downloading %1/%2: %3"
+#: mangabrowser.lua:669
+#, fuzzy
+msgid "Chapters to queue in background, starting after the last one read."
+msgstr "마지막으로 읽은 챕터 다음부터 다운로드할 챕터입니다."
+
+#: mangabrowser.lua:679
+msgid "Download"
+msgstr "다운로드"
+
+#: mangabrowser.lua:712
+#, fuzzy
+msgid "Downloading %1"
 msgstr "다운로드 중 %1/%2: %3"
 
-#: mangabrowser.lua:402 subprocess.lua:138
-msgid "Cancelled"
-msgstr "취소됨"
-
-#: mangabrowser.lua:408
-msgid "Cancelled after %1 of %2 chapters."
-msgstr "%2개 챕터 중 %1개 처리 후 취소됨."
-
-#: mangabrowser.lua:411 mangabrowser.lua:495 nextchapter.lua:214
+#: mangabrowser.lua:721 nextchapter.lua:212
 msgid ""
 "Download failed:\n"
 "%1"
@@ -400,55 +1010,49 @@ msgstr ""
 "다운로드에 실패했습니다:\n"
 "%1"
 
-#: mangabrowser.lua:442
-msgid "Chapters still loading. Try again shortly."
-msgstr "챕터를 아직 불러오는 중입니다. 잠시 후 다시 시도하세요."
-
-#: mangabrowser.lua:447
-msgid "Download next chapters"
-msgstr "다음 챕터 다운로드"
-
-#: mangabrowser.lua:448
-msgid "Chapters to download, starting after the last one read."
-msgstr "마지막으로 읽은 챕터 다음부터 다운로드할 챕터입니다."
-
-#: mangabrowser.lua:458
-msgid "Download"
-msgstr "다운로드"
-
-#: mangabrowser.lua:557
+#: mangabrowser.lua:775
 msgid "Mark as read"
 msgstr "읽음으로 표시"
 
-#: mangabrowser.lua:557
+#: mangabrowser.lua:775
 msgid "Mark as unread"
 msgstr "안 읽음으로 표시"
 
-#: mangabrowser.lua:571
+#: mangabrowser.lua:791
+msgid "Cancel background download"
+msgstr ""
+
+#: mangabrowser.lua:800
+#, fuzzy
+msgid "Download in background"
+msgstr "업데이트 다운로드하는 중…"
+
+#: mangabrowser.lua:818
+#, fuzzy
+msgid "Download from this chapter onward"
+msgstr "다음 챕터 다운로드"
+
+#: mangabrowser.lua:839
 msgid "Re-download"
 msgstr "다시 다운로드"
 
-#: mangabrowser.lua:580
+#: mangabrowser.lua:846
 msgid "Remove download"
 msgstr "다운로드 삭제"
 
-#: nextchapter.lua:173 nextchapter.lua:232
+#: nextchapter.lua:171 nextchapter.lua:230
 msgid "Continue to '%1'?"
 msgstr "'%1'(으)로 계속하시겠습니까?"
 
-#: nextchapter.lua:174 nextchapter.lua:233
+#: nextchapter.lua:172 nextchapter.lua:231
 msgid "Continue"
 msgstr "계속"
 
-#: nextchapter.lua:185
+#: nextchapter.lua:183
 msgid "Offline, and the next chapter isn't downloaded."
 msgstr "오프라인 상태이고 다음 챕터가 다운로드되어 있지 않습니다."
 
-#: nextchapter.lua:189
-msgid "Source no longer installed."
-msgstr "소스가 더 이상 설치되어 있지 않습니다."
-
-#: nextchapter.lua:194
+#: nextchapter.lua:192
 msgid ""
 "Could not check for next chapter:\n"
 "%1"
@@ -484,11 +1088,23 @@ msgstr ""
 msgid "Installed %1"
 msgstr "%1 설치됨"
 
-#: searchbrowser.lua:92
+#: searchbrowser.lua:18
+msgid "Hold a result to add/remove from library"
+msgstr "결과를 길게 눌러 서재에 추가/제거"
+
+#: searchbrowser.lua:80
 msgid "Search manga"
 msgstr "만화 검색"
 
-#: searchbrowser.lua:127
+#: searchbrowser.lua:112
+msgid "Filters (%1 set)…"
+msgstr "필터 (%1개 설정됨)…"
+
+#: searchbrowser.lua:112
+msgid "Filters…"
+msgstr "필터…"
+
+#: searchbrowser.lua:158
 msgid ""
 "Search failed:\n"
 "%1"
@@ -496,15 +1112,7 @@ msgstr ""
 "검색에 실패했습니다:\n"
 "%1"
 
-#: searchbrowser.lua:134
-msgid "Filters (%1 set)…"
-msgstr "필터 (%1개 설정됨)…"
-
-#: searchbrowser.lua:134
-msgid "Filters…"
-msgstr "필터…"
-
-#: searchbrowser.lua:149
+#: searchbrowser.lua:163
 msgid "No results."
 msgstr "결과가 없습니다."
 
@@ -516,109 +1124,109 @@ msgstr "묻기"
 msgid "Auto"
 msgstr "자동"
 
-#: settingsbrowser.lua:45 settingsbrowser.lua:115 sourcesettingsbrowser.lua:92
+#: settingsbrowser.lua:45 settingsbrowser.lua:128 sourcesettingsbrowser.lua:92
 msgid "Off"
 msgstr "끔"
 
-#: settingsbrowser.lua:71
+#: settingsbrowser.lua:78
 msgid "N/A"
 msgstr "해당 없음"
 
-#: settingsbrowser.lua:72 sourcesettingsbrowser.lua:97
+#: settingsbrowser.lua:79 sourcesettingsbrowser.lua:97
 msgid "none"
 msgstr "없음"
 
-#: settingsbrowser.lua:74
+#: settingsbrowser.lua:81
 msgid " (using %1)"
 msgstr " (%1 사용)"
 
-#: settingsbrowser.lua:78 sourcesettingsbrowser.lua:102
+#: settingsbrowser.lua:85 sourcesettingsbrowser.lua:102
 msgid "not set"
 msgstr "설정 안 됨"
 
-#: settingsbrowser.lua:80
+#: settingsbrowser.lua:87
 msgid "Custom"
 msgstr "사용자 지정"
 
-#: settingsbrowser.lua:80
+#: settingsbrowser.lua:87
 msgid "Default"
 msgstr "기본값"
 
-#: settingsbrowser.lua:83
+#: settingsbrowser.lua:90
 msgid "Default (8)"
 msgstr "기본값 (8)"
 
-#: settingsbrowser.lua:89
+#: settingsbrowser.lua:96
 msgid "Sources"
 msgstr "소스"
 
-#: settingsbrowser.lua:93 settingsbrowser.lua:144
+#: settingsbrowser.lua:106 settingsbrowser.lua:157
 msgid "Prefetch next chapters"
 msgstr "다음 챕터 미리 받기"
 
-#: settingsbrowser.lua:100
+#: settingsbrowser.lua:113
 msgid "Auto-advance at chapter end"
 msgstr "챕터 끝에서 자동 넘김"
 
-#: settingsbrowser.lua:105
+#: settingsbrowser.lua:118
 msgid "Storage limit"
 msgstr "저장 용량 제한"
 
-#: settingsbrowser.lua:108 settingsbrowser.lua:211
+#: settingsbrowser.lua:121 settingsbrowser.lua:224
 msgid "Source repository URL"
 msgstr "소스 저장소 URL"
 
-#: settingsbrowser.lua:109 settingsbrowser.lua:243
+#: settingsbrowser.lua:122 settingsbrowser.lua:256
 msgid "Network concurrency"
 msgstr "동시 네트워크 요청 수"
 
-#: settingsbrowser.lua:115 sourcesettingsbrowser.lua:92
+#: settingsbrowser.lua:128 sourcesettingsbrowser.lua:92
 msgid "On"
 msgstr "켬"
 
-#: settingsbrowser.lua:119 settingsbrowser.lua:418
+#: settingsbrowser.lua:132 settingsbrowser.lua:431
 msgid "Ephemeral storage path"
 msgstr "임시 저장 경로"
 
-#: settingsbrowser.lua:123 settingsbrowser.lua:280
+#: settingsbrowser.lua:136 settingsbrowser.lua:293
 msgid "FlareSolverr host"
 msgstr "FlareSolverr 호스트"
 
-#: settingsbrowser.lua:124
+#: settingsbrowser.lua:137
 msgid "Import cookies"
 msgstr "쿠키 가져오기"
 
-#: settingsbrowser.lua:125
+#: settingsbrowser.lua:138
 msgid "Clear stored cookies"
 msgstr "저장된 쿠키 지우기"
 
-#: settingsbrowser.lua:145
+#: settingsbrowser.lua:158
 msgid "Chapters to download ahead while reading. 0 turns it off."
 msgstr "읽는 동안 미리 다운로드할 챕터 수입니다. 0이면 끕니다."
 
-#: settingsbrowser.lua:155 settingsbrowser.lua:189 settingsbrowser.lua:224
-#: settingsbrowser.lua:254 settingsbrowser.lua:291 settingsbrowser.lua:429
+#: settingsbrowser.lua:168 settingsbrowser.lua:202 settingsbrowser.lua:237
+#: settingsbrowser.lua:267 settingsbrowser.lua:304 settingsbrowser.lua:442
 #: sourcesettingsbrowser.lua:240
 msgid "Set"
 msgstr "설정"
 
-#: settingsbrowser.lua:164 settingsbrowser.lua:267
+#: settingsbrowser.lua:177 settingsbrowser.lua:280
 msgid "Enter a number from 0 to %1."
 msgstr ""
 
-#: settingsbrowser.lua:178
+#: settingsbrowser.lua:191
 msgid "Storage limit (MB)"
 msgstr "저장 용량 제한 (MB)"
 
-#: settingsbrowser.lua:179
+#: settingsbrowser.lua:192
 msgid "Oldest chapters are deleted first. 0 means no limit."
 msgstr "가장 오래된 챕터부터 삭제합니다. 0은 제한 없음입니다."
 
-#: settingsbrowser.lua:198
+#: settingsbrowser.lua:211
 msgid "Enter 0 or a positive number."
 msgstr ""
 
-#: settingsbrowser.lua:213
+#: settingsbrowser.lua:226
 msgid ""
 "Repository index URL. Leave blank for the default:\n"
 "%1"
@@ -626,7 +1234,7 @@ msgstr ""
 "저장소 인덱스 URL입니다. 기본값을 쓰려면 비워 두세요:\n"
 "%1"
 
-#: settingsbrowser.lua:244
+#: settingsbrowser.lua:257
 msgid ""
 "Parallel requests per source. Blank or 0 for default (8). Higher uses more "
 "memory."
@@ -634,20 +1242,20 @@ msgstr ""
 "소스별 동시 요청 수입니다. 비우거나 0이면 기본값(8)입니다. 높이면 메모리를 "
 "더 많이 사용합니다."
 
-#: settingsbrowser.lua:281
+#: settingsbrowser.lua:294
 msgid ""
 "Solves Cloudflare challenges, e.g. localhost:8191. Leave blank to disable."
 msgstr "Cloudflare 인증을 해결합니다. 예: localhost:8191. 비우면 끕니다."
 
-#: settingsbrowser.lua:283
+#: settingsbrowser.lua:296
 msgid "host:port"
 msgstr "호스트:포트"
 
-#: settingsbrowser.lua:309
+#: settingsbrowser.lua:322
 msgid "Long-press a cookies.txt to import it"
 msgstr "cookies.txt를 길게 눌러 가져오세요"
 
-#: settingsbrowser.lua:319
+#: settingsbrowser.lua:332
 msgid ""
 "Import failed:\n"
 "%1"
@@ -655,19 +1263,19 @@ msgstr ""
 "가져오기에 실패했습니다:\n"
 "%1"
 
-#: settingsbrowser.lua:329
+#: settingsbrowser.lua:342
 msgid "Clear cookies for all sources? This can't be undone."
 msgstr "모든 소스의 쿠키를 지우시겠습니까? 이 작업은 되돌릴 수 없습니다."
 
-#: settingsbrowser.lua:330
+#: settingsbrowser.lua:343
 msgid "Clear"
 msgstr "지우기"
 
-#: settingsbrowser.lua:335
+#: settingsbrowser.lua:348
 msgid "Cookies cleared."
 msgstr "쿠키를 지웠습니다."
 
-#: settingsbrowser.lua:337
+#: settingsbrowser.lua:350
 msgid ""
 "Could not clear cookies:\n"
 "%1"
@@ -675,25 +1283,25 @@ msgstr ""
 "쿠키를 지울 수 없습니다:\n"
 "%1"
 
-#: settingsbrowser.lua:405
+#: settingsbrowser.lua:418
 msgid "%1 doesn't exist or isn't writable."
 msgstr "%1이(가) 없거나 쓸 수 없습니다."
 
-#: settingsbrowser.lua:411
+#: settingsbrowser.lua:424
 msgid ""
 "The Ephemeral storage path can't be, contain, or be inside the normal "
 "downloads folder."
 msgstr ""
 
-#: settingsbrowser.lua:419
+#: settingsbrowser.lua:432
 msgid "Where chapters are stored in Ephemeral Mode."
 msgstr "임시 모드에서 챕터를 저장할 위치입니다."
 
-#: settingsbrowser.lua:497
+#: settingsbrowser.lua:541
 msgid "Ephemeral Mode limits prefetch to 1 chapter."
 msgstr "임시 모드에서는 미리 받기를 챕터 1개로 제한합니다."
 
-#: settingsbrowser.lua:507
+#: settingsbrowser.lua:551
 msgid "Storage limit is off in Ephemeral Mode."
 msgstr "임시 모드에서는 저장 용량 제한이 꺼집니다."
 
@@ -701,19 +1309,19 @@ msgstr "임시 모드에서는 저장 용량 제한이 꺼집니다."
 msgid "Aidoku sources"
 msgstr "Aidoku 소스"
 
-#: sourcesbrowser.lua:100
+#: sourcesbrowser.lua:103
 msgid "Couldn't read this source. Try again, or reinstall it."
 msgstr ""
 
-#: sourcesbrowser.lua:132
+#: sourcesbrowser.lua:135
 msgid "Source settings"
 msgstr "소스 설정"
 
-#: sourcesbrowser.lua:147
+#: sourcesbrowser.lua:150
 msgid "Remove installed source"
 msgstr "설치된 소스 제거"
 
-#: sourcesbrowser.lua:151
+#: sourcesbrowser.lua:154
 msgid "Remove source '%1'?"
 msgstr "'%1' 소스를 제거하시겠습니까?"
 
@@ -741,17 +1349,27 @@ msgstr ""
 "설정을 저장할 수 없습니다:\n"
 "%1"
 
-#: subprocess.lua:147
-#, fuzzy
-msgid "command failed"
-msgstr ""
-"다운로드에 실패했습니다:\n"
-"%1"
-
-#: subprocess.lua:153
+#: subprocess.lua:126
 msgid "command produced no output"
 msgstr "명령에서 출력이 없었습니다"
 
-#: subprocess.lua:167
+#: subprocess.lua:351
+msgid "%1 (%2/%3 pages, %4%)"
+msgstr ""
+
+#: subprocess.lua:392
 msgid "Invalid response from aidoku-run"
 msgstr ""
+
+#, fuzzy
+#~ msgid "☐ Deselect all sources"
+#~ msgstr "모든 소스에서 검색"
+
+#~ msgid "No sources installed."
+#~ msgstr "설치된 소스가 없습니다."
+
+#~ msgid "Sort: Newest first"
+#~ msgstr "정렬: 최신순"
+
+#~ msgid "Cancelled after %1 of %2 chapters."
+#~ msgstr "%2개 챕터 중 %1개 처리 후 취소됨."

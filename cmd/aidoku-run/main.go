@@ -58,6 +58,10 @@ commands:
                                      source.json, without loading main.wasm -- much cheaper than
                                      info/search/etc. for callers that only need a source's
                                      identity and display name (e.g. listing installed sources)
+  manifests <sources-dir>           read source.json from every .aix in <sources-dir> in one pass
+  covers <payload.json>             batch-fetch and thumbnail manga covers to disk
+  download-payload <payload.json>   download one chapter from a JSON payload carrying pre-fetched
+                                     manga + chapter metadata (avoids a GetMangaUpdate round-trip)
   info                              print source metadata and detected features (default)
   search <query> [page] [filters.json]
                                      call get_search_manga_list; filters.json, if given, is a JSON array
@@ -112,7 +116,7 @@ NETWORK_CONCURRENCY, if set to a positive integer, bounds how many requests
 a guest's net.send_all call runs at once (default 8).
 
 AIDOKU_UPDATE_REPO, if set, overrides the "owner/repo" GitHub slug `+"`update`"+`
-checks/downloads releases from (default ohaiibuzzle/aidoku-backend-0.7).
+checks/downloads releases from (default anyin233/tsundoku).
 
 The <source-dir> argument is required but ignored by the `+"`cookie`"+`, `+"`repo`"+` and
 `+"`update`"+` subcommands, which don't operate on a loaded source. `+"`manifest`"+` does use
@@ -129,7 +133,7 @@ const (
 func run(dir, command string, args []string) (err error) {
 	timeout := defaultCommandTimeout
 	switch command {
-	case "download", "redownload", "update":
+	case "download", "redownload", "download-payload", "update":
 		timeout = longCommandTimeout
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -170,6 +174,12 @@ func run(dir, command string, args []string) (err error) {
 	}
 	if command == "manifest" {
 		return handleManifest(dir)
+	}
+	if command == "manifests" {
+		return handleManifests(dir, args)
+	}
+	if command == "covers" {
+		return handleCovers(ctx, settings, cookiePath, args)
 	}
 	if command == "update" {
 		return handleUpdate(ctx, args)
@@ -416,94 +426,140 @@ func run(dir, command string, args []string) (err error) {
 		if len(args) > 4 {
 			mangaDirName = args[4]
 		}
+		return executeDownload(ctx, src, dir, *updated, *chapter, outputPath, downloadsDir, mangaDirName, redownload, false)
 
-		// A bare, non-indexed download (downloadsDir == "") has nothing to
-		// deduplicate against or record into, so it skips all of the below.
-		if downloadsDir == "" {
-			path, err := src.DownloadChapterCBZ(ctx, *updated, *chapter, outputPath, mangaDirName, printDownloadProgress)
-			if err != nil {
-				return err
-			}
-			fmt.Println(path)
-			return nil
+	case "download-payload":
+		if len(args) < 1 {
+			return fmt.Errorf("usage: download-payload <payload.json>")
 		}
-
-		// The cross-process lock exists purely to stop two invocations
-		// downloading the same indexed chapter at once -- see
-		// downloads.AcquireLock's doc.
-		lock, err := downloads.AcquireLock(ctx, src.Key, updated.Key, chapter.Key)
+		data, err := os.ReadFile(args[0])
 		if err != nil {
-			return fmt.Errorf("acquiring download lock: %w", err)
+			return fmt.Errorf("reading download payload: %w", err)
 		}
-		defer lock.Release()
-
-		store, err := downloads.Open(downloadsDir)
-		if err != nil {
-			return fmt.Errorf("opening downloads index: %w", err)
+		var p downloadPayload
+		if err := json.Unmarshal(data, &p); err != nil {
+			return fmt.Errorf("parsing download payload: %w", err)
 		}
-		defer store.Close()
-
-		// Whoever held this lock before us may have just finished
-		// downloading this exact chapter while we were blocked waiting for
-		// it -- re-check the index now that we own the lock, rather than
-		// unconditionally re-fetching every page. os.Stat guards against a
-		// stale row whose file was since deleted out from under it.
-		// redownload skips this on purpose, and replaces the old file only
-		// once the new one is fully written (cbz.Writer's atomic rename) --
-		// the plugin used to delete first, losing the only copy whenever
-		// the re-fetch failed or the user was offline.
-		existing, err := store.Path(src.Key, updated.Key, chapter.Key)
-		if err != nil {
-			return err
+		if p.Manga.Key == "" || p.Chapter.Key == "" {
+			return fmt.Errorf("download payload requires manga.Key and chapter.Key")
 		}
-		if existing != "" && !redownload {
-			if _, statErr := os.Stat(existing); statErr == nil {
-				fmt.Println(existing)
-				return nil
-			}
-		}
-
-		// Steer clear of a filename another chapter already owns (two
-		// chapters titled e.g. "Omake") before writing, so this download
-		// can't overwrite that chapter's file.
-		path, err := source.ResolveOutputPath(outputPath, mangaDirName, *updated, *chapter)
-		if err != nil {
-			return err
-		}
-		// The chapter lock above doesn't exclude a *different* chapter whose
-		// title sanitizes to the same path; this does, so UnusedPath below
-		// sees the other's row once it's recorded. Always chapter -> path.
-		pathLock, err := downloads.AcquirePathLock(ctx, path)
-		if err != nil {
-			return fmt.Errorf("acquiring output path lock: %w", err)
-		}
-		defer pathLock.Release()
-		if path, err = store.UnusedPath(src.Key, updated.Key, chapter.Key, path); err != nil {
-			return err
-		}
-		cbz.RemoveStaleTemps(filepath.Dir(path), time.Hour)
-		if path, err = src.DownloadChapterCBZ(ctx, *updated, *chapter, path, "", printDownloadProgress); err != nil {
-			return err
-		}
-		// Recording here, in the same process/invocation that just wrote
-		// the CBZ, means a failed or killed download can never leave the
-		// index pointing at a file that doesn't exist (or vice versa). The
-		// recorded path can still differ from the one just written, see
-		// downloads.Store.disambiguatePath.
-		entry, err := store.Record(src.Key, dir, updated.Key, chapter.Key, path, source.MangaLabel(*updated), source.ChapterLabel(*chapter), chapter.ChapterNumber, chapter.VolumeNumber)
-		if err != nil {
-			return fmt.Errorf("recording download: %w", err)
-		}
-		if redownload && existing != "" && existing != entry.Path {
-			_ = os.Remove(existing) // the title (and so its filename) changed since
-		}
-		fmt.Println(entry.Path)
-		return nil
+		return executeDownload(ctx, src, dir, p.Manga, p.Chapter, p.OutputPath, p.DownloadsDir, p.MangaDirName, p.Redownload, true)
 
 	default:
 		usage()
 		return fmt.Errorf("unknown command %q", command)
 	}
+}
+
+type downloadPayload struct {
+	Manga        models.Manga   `json:"manga"`
+	Chapter      models.Chapter `json:"chapter"`
+	OutputPath   string         `json:"outputPath"`
+	DownloadsDir string         `json:"downloadsDir"`
+	MangaDirName string         `json:"mangaDirName"`
+	Redownload   bool           `json:"redownload"`
+}
+
+func chapterEpoch(c models.Chapter) *int64 {
+	if c.DateUploaded == nil {
+		return nil
+	}
+	ts := c.DateUploaded.Unix()
+	return &ts
+}
+
+// executeDownload runs the indexed (or bare) chapter CBZ download. When
+// fallbackUpdate is true (download-payload) and DownloadChapterCBZ fails on
+// the caller-supplied Manga/Chapter metadata, it retries once after fetching
+// fresh metadata via GetMangaUpdate, so sources that require runtime state
+// populated during GetMangaUpdate still succeed seamlessly.
+func executeDownload(ctx context.Context, src *source.Source, dir string, manga models.Manga, chapter models.Chapter, outputPath, downloadsDir, mangaDirName string, redownload, fallbackUpdate bool) error {
+	downloadOnce := func(m models.Manga, c models.Chapter, out, mDir string) (string, models.Manga, models.Chapter, error) {
+		p, err := src.DownloadChapterCBZ(ctx, m, c, out, mDir, printDownloadProgress)
+		if err == nil || !fallbackUpdate {
+			return p, m, c, err
+		}
+		updated, uerr := src.GetMangaUpdate(ctx, models.Manga{Key: m.Key}, true, true, nil)
+		if uerr != nil {
+			return "", m, c, err
+		}
+		var found *models.Chapter
+		for i := range updated.Chapters {
+			if updated.Chapters[i].Key == c.Key {
+				found = &updated.Chapters[i]
+				break
+			}
+		}
+		if found == nil {
+			return "", m, c, err
+		}
+		p2, err2 := src.DownloadChapterCBZ(ctx, *updated, *found, out, mDir, printDownloadProgress)
+		return p2, *updated, *found, err2
+	}
+
+	// A bare, non-indexed download (downloadsDir == "") has nothing to
+	// deduplicate against or record into, so it skips all of the below.
+	if downloadsDir == "" {
+		path, _, _, err := downloadOnce(manga, chapter, outputPath, mangaDirName)
+		if err != nil {
+			return err
+		}
+		fmt.Println(path)
+		return nil
+	}
+
+	// The cross-process lock exists purely to stop two invocations
+	// downloading the same indexed chapter at once -- see
+	// downloads.AcquireLock's doc.
+	lock, err := downloads.AcquireLock(ctx, src.Key, manga.Key, chapter.Key)
+	if err != nil {
+		return fmt.Errorf("acquiring download lock: %w", err)
+	}
+	defer lock.Release()
+
+	store, err := downloads.Open(downloadsDir)
+	if err != nil {
+		return fmt.Errorf("opening downloads index: %w", err)
+	}
+	defer store.Close()
+
+	existing, err := store.Path(src.Key, manga.Key, chapter.Key)
+	if err != nil {
+		return err
+	}
+	if existing != "" && !redownload {
+		if _, statErr := os.Stat(existing); statErr == nil {
+			fmt.Println(existing)
+			return nil
+		}
+	}
+
+	path, err := source.ResolveOutputPath(outputPath, mangaDirName, manga, chapter)
+	if err != nil {
+		return err
+	}
+	pathLock, err := downloads.AcquirePathLock(ctx, path)
+	if err != nil {
+		return fmt.Errorf("acquiring output path lock: %w", err)
+	}
+	defer pathLock.Release()
+	if path, err = store.UnusedPath(src.Key, manga.Key, chapter.Key, path); err != nil {
+		return err
+	}
+	cbz.RemoveStaleTemps(filepath.Dir(path), time.Hour)
+	path, manga, chapter, err = downloadOnce(manga, chapter, path, "")
+	if err != nil {
+		return err
+	}
+	entry, err := store.RecordWithDate(src.Key, dir, manga.Key, chapter.Key, path, source.MangaLabel(manga), source.ChapterLabel(chapter), chapter.ChapterNumber, chapter.VolumeNumber, chapterEpoch(chapter))
+	if err != nil {
+		return fmt.Errorf("recording download: %w", err)
+	}
+	if redownload && existing != "" && existing != entry.Path {
+		_ = os.Remove(existing) // the title (and so its filename) changed since
+	}
+	fmt.Println(entry.Path)
+	return nil
 }
 
 func printDownloadProgress(current, total int) {
@@ -743,6 +799,48 @@ func handleManifest(dir string) error {
 		"version":   info.Version,
 		"languages": info.Languages,
 	})
+}
+
+// handleManifests reads source.json from every .aix entry in sourcesDir in a
+// single process invocation so KOReader doesn't have to fork/exec once per
+// installed source when 20+ sources are installed. Unreadable entries are
+// returned with key="" so the UI can still surface them for removal/reinstall.
+func handleManifests(dir string, args []string) error {
+	sourcesDir := dir
+	if (sourcesDir == "" || sourcesDir == "-") && len(args) > 0 {
+		sourcesDir = args[0]
+	}
+	if sourcesDir == "" || sourcesDir == "-" {
+		return fmt.Errorf("usage: aidoku-run - manifests <sources-dir>")
+	}
+	entries, err := os.ReadDir(sourcesDir)
+	if err != nil {
+		return err
+	}
+	type item struct {
+		File      string   `json:"file"`
+		Path      string   `json:"path"`
+		Key       string   `json:"key,omitempty"`
+		Name      string   `json:"name,omitempty"`
+		Version   int      `json:"version,omitempty"`
+		Languages []string `json:"languages,omitempty"`
+	}
+	out := make([]item, 0, len(entries))
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".aix") {
+			continue
+		}
+		fullPath := filepath.Join(sourcesDir, e.Name())
+		it := item{File: e.Name(), Path: fullPath}
+		if info, merr := source.ReadManifest(fullPath); merr == nil {
+			it.Key = info.Key
+			it.Name = info.Name
+			it.Version = info.Version
+			it.Languages = info.Languages
+		}
+		out = append(out, it)
+	}
+	return printJSON(out)
 }
 
 func handleRepo(ctx context.Context, args []string) error {

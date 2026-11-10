@@ -6,20 +6,19 @@ key = "<source's manifest id>, or nil if unreadable>", version = <int, or nil if
 entries -- shared by sourcesbrowser.lua, globalsearchbrowser.lua,
 librarybrowser.lua (findByKey), and repobrowser.lua.
 
-key/text come from engine:manifest() (reads source.json without loading
-WASM), not guessed from the filename -- the manifest id is the ground
-truth for identity and can't go stale. One subprocess call per source per
-list(), no caching, since a manifest can't change without its file
-changing too.
+Manifests are cached in memory keyed by (path, modification, size) and fetched
+in bulk via engine:manifests(sources_dir) on a cache miss, so listing 20+
+installed sources takes ~0ms warm and a single ~35ms subprocess cold instead
+of 20+ sequential subprocess spawns.
 ]]
 
 local lfs = require("libs/libkoreader-lfs")
 
 local InstalledSources = {}
 
--- displayName falls back to the bare filename if the manifest couldn't be
--- read (e.g. a corrupt or unreadable file) so a broken source still shows
--- up as *something* rather than silently vanishing from the list.
+-- path -> { mtime = number, size = number, manifest = table|false }
+local manifest_cache = {}
+
 local function displayName(filename, manifest)
     if not manifest or type(manifest.name) ~= "string" or manifest.name == "" then
         return filename:gsub("%.aix$", "")
@@ -27,48 +26,94 @@ local function displayName(filename, manifest)
     return manifest.name
 end
 
--- displayText appends "(<languages>)" (matching repobrowser.lua's own
--- repository-listing convention) to name.
 local function displayText(name, manifest)
     local langs = manifest and type(manifest.languages) == "table" and table.concat(manifest.languages, ", ") or ""
     return langs ~= "" and (name .. " (" .. langs .. ")") or name
 end
 
+local function buildEntry(filename, path, manifest)
+    local key = nil
+    if manifest and type(manifest.key) == "string" and manifest.key ~= "" then
+        key = manifest.key
+    end
+    local name = displayName(filename, manifest)
+    local version = manifest and type(manifest.version) == "number" and manifest.version or nil
+    return {
+        text = displayText(name, manifest),
+        mandatory = version and ("v" .. tostring(version)) or nil,
+        name = name,
+        path = path,
+        key = key,
+        version = version,
+    }
+end
+
+function InstalledSources.invalidateCache()
+    manifest_cache = {}
+end
+
 function InstalledSources.list(sources_dir, engine)
-    local sources = {}
+    local files = {}
+    local any_miss = false
+    if lfs.attributes(sources_dir, "mode") ~= "directory" then
+        return {}
+    end
     for entry in lfs.dir(sources_dir) do
         if entry:match("%.aix$") then
             local path = sources_dir .. "/" .. entry
-            local manifest = engine:manifest(path)
-            -- nil when the manifest couldn't be read: the filename changes on
-            -- update, so anything persisted under it would be orphaned.
-            -- Callers must not open/bookmark a source without a key.
-            local key = nil
-            if manifest and type(manifest.key) == "string" and manifest.key ~= "" then
-                key = manifest.key
+            local attr = lfs.attributes(path)
+            local mtime = attr and attr.modification or 0
+            local size = attr and attr.size or 0
+            local cached = manifest_cache[path]
+            if not cached or cached.mtime ~= mtime or cached.size ~= size then
+                any_miss = true
             end
-            local name = displayName(entry, manifest)
-            local version = manifest and manifest.version
-            table.insert(sources, {
-                text = displayText(name, manifest),
-                mandatory = version and ("v" .. tostring(version)) or nil,
-                name = name,
-                path = path,
-                key = key,
-                version = version,
-            })
+            table.insert(files, { entry = entry, path = path, mtime = mtime, size = size })
         end
+    end
+
+    if any_miss and engine then
+        local batch = engine.manifests and engine:manifests(sources_dir) or nil
+        if type(batch) == "table" then
+            local by_path = {}
+            for _idx, item in ipairs(batch) do
+                if type(item) == "table" and item.path then
+                    by_path[item.path] = item
+                end
+            end
+            for _idx, f in ipairs(files) do
+                local item = by_path[f.path]
+                manifest_cache[f.path] = {
+                    mtime = f.mtime,
+                    size = f.size,
+                    manifest = (item and item.key and item.key ~= "") and item or false,
+                }
+            end
+        else
+            for _idx, f in ipairs(files) do
+                local cached = manifest_cache[f.path]
+                if not cached or cached.mtime ~= f.mtime or cached.size ~= f.size then
+                    local m = engine:manifest(f.path)
+                    manifest_cache[f.path] = {
+                        mtime = f.mtime,
+                        size = f.size,
+                        manifest = m or false,
+                    }
+                end
+            end
+        end
+    end
+
+    local sources = {}
+    for _idx, f in ipairs(files) do
+        local cached = manifest_cache[f.path]
+        local manifest = cached and cached.manifest or nil
+        table.insert(sources, buildEntry(f.entry, f.path, manifest))
     end
     table.sort(sources, function(a, b) return a.text < b.text end)
     return sources
 end
 
--- findByKey resolves a source_key (as persisted in a library bookmark or
--- downloads index entry) back to its currently-installed {text, path, key}
--- entry, or nil if no installed source currently has that key -- meaning
--- either it was removed, or its manifest id itself changed (unlike a
--- filename's version suffix, a source's id is not expected to change
--- across an update, so this shouldn't normally happen).
 function InstalledSources.findByKey(sources_dir, engine, source_key)
     for _, source in ipairs(InstalledSources.list(sources_dir, engine)) do
         if source.key == source_key then

@@ -13,6 +13,7 @@ local util = require("util")
 local _ = require("aidoku_l10n")
 
 local ChapterCache = require("chaptercache")
+local DownloadQueue = require("downloadqueue")
 local DownloadsEngine = require("downloadsengine")
 local Engine = require("engine")
 local OpenWidgets = require("openwidgets")
@@ -65,8 +66,10 @@ end
 function Aidoku:init()
     self.sources_dir = dataSubdir("sources")
     self.settings_dir = dataSubdir("settings")
+    self.covers_dir = dataSubdir("covers")
     util.makePath(self.sources_dir)
     util.makePath(self.settings_dir)
+    util.makePath(self.covers_dir)
 
     -- self.path is set by KOReader's plugin loader to this plugin's own
     -- directory; bin_arch (see binArch() above) names match the targets
@@ -113,6 +116,12 @@ function Aidoku:refreshDownloadsDir()
         and self.store:ephemeralPath() or self.persistent_downloads_dir
     util.makePath(self.downloads_dir)
     self.downloads_engine = DownloadsEngine.new(self.downloads_dir)
+    DownloadQueue:setContext({
+        engine = self.engine,
+        store = self.store,
+        downloads_engine = self.downloads_engine,
+        downloads_dir = self.downloads_dir,
+    })
 end
 
 -- markCurrentChapterRead flags self.document's chapter as read (see
@@ -232,15 +241,13 @@ function Aidoku:onDispatcherRegisterActions()
 end
 
 function Aidoku:addToMainMenu(menu_items)
-    if not self.ui.document then -- FileManager menu only
-        menu_items.aidoku = {
-            text = _("AidokuRunner for KOReader"),
-            sorting_hint = "search",
-            callback = function()
-                self:onAidokuBrowseSources()
-            end,
-        }
-    end
+    menu_items.aidoku = {
+        text = _("AidokuRunner for KOReader"),
+        sorting_hint = "search",
+        callback = function()
+            self:onAidokuBrowseSources()
+        end,
+    }
 end
 
 -- Every entry into Library -- a fresh open from the FileManager menu, or
@@ -272,6 +279,7 @@ function Aidoku:onAidokuBrowseSources()
         downloads_engine = self.downloads_engine,
         ui = self.ui,
         sources_dir = self.sources_dir,
+        covers_dir = self.covers_dir,
         downloads_dir = self.downloads_dir,
         is_popout = false,
         is_borderless = true,

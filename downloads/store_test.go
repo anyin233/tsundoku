@@ -568,3 +568,56 @@ func TestReassociate(t *testing.T) {
 		t.Errorf("Path(old.key, ch2) = %q, %v, want \"\" (dropped, not moved)", got, err)
 	}
 }
+
+func TestDateUploadedAndMigration(t *testing.T) {
+	dir := t.TempDir()
+	db, err := sql.Open("sqlite", filepath.Join(dir, "index.db"))
+	if err != nil {
+		t.Fatalf("opening raw db: %v", err)
+	}
+	if _, err := db.Exec(`
+		CREATE TABLE downloads (
+			source_key     TEXT NOT NULL,
+			manga_key      TEXT NOT NULL,
+			chapter_key    TEXT NOT NULL,
+			source_path    TEXT NOT NULL,
+			path           TEXT NOT NULL,
+			manga_title    TEXT NOT NULL,
+			chapter_title  TEXT NOT NULL,
+			size_bytes     INTEGER NOT NULL,
+			downloaded_at  INTEGER NOT NULL,
+			chapter_number REAL,
+			volume_number  REAL,
+			PRIMARY KEY (source_key, manga_key, chapter_key)
+		)
+	`); err != nil {
+		t.Fatalf("seeding pre-date schema: %v", err)
+	}
+	file1 := writeFile(t, dir, "ch1.cbz", 128)
+	if _, err := db.Exec(`INSERT INTO downloads VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		"src.key", "manga1", "ch1", "src.aix", file1, "Manga", "Chapter 1", 128, 1000, 1.0, nil); err != nil {
+		t.Fatalf("seeding row: %v", err)
+	}
+	db.Close()
+
+	s, err := Open(dir)
+	if err != nil {
+		t.Fatalf("Open (migrating date_uploaded): %v", err)
+	}
+	defer s.Close()
+
+	ts := int64(1724774936)
+	file2 := writeFile(t, dir, "ch2.cbz", 256)
+	if _, err := s.RecordWithDate("src.key", "src.aix", "manga1", "ch2", file2, "Manga", "Chapter 2", nil, nil, &ts); err != nil {
+		t.Fatalf("RecordWithDate: %v", err)
+	}
+	entry, err := s.ByPath(file2)
+	if err != nil || entry == nil || entry.DateUploaded == nil || *entry.DateUploaded != ts {
+		t.Fatalf("ByPath(file2) DateUploaded = %+v, err=%v, want %d", entry, err, ts)
+	}
+	entry1, err := s.ByPath(file1)
+	if err != nil || entry1 == nil || entry1.DateUploaded != nil {
+		t.Fatalf("ByPath(file1) DateUploaded = %+v, err=%v, want nil", entry1, err)
+	}
+}
+

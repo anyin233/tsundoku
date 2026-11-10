@@ -13,12 +13,6 @@ local _ = require("aidoku_l10n")
 local Engine = {}
 Engine.__index = Engine
 
--- env_fn, if given, is called on every source-running command (info,
--- search, mangaUpdate, download -- not repoList/repoInstall, which don't
--- load a source at all) to get a fresh {VAR = value} table exported into
--- the command's environment. Used for FLARESOLVERR_HOST, read from
--- store.lua's setting rather than baked in at construction time, so
--- changing it in Settings takes effect on the next call with no restart.
 function Engine.new(bin_path, env_fn)
     return setmetatable({
         runner = Runner.new(bin_path),
@@ -37,11 +31,6 @@ function Engine:sourceEnv()
     return nil
 end
 
--- The leading "-" on repo/cookie subcommands is a required but unused
--- placeholder for aidoku-run's <source-dir> positional argument -- see
--- handleRepo()/handleCookie() in cmd/aidoku-run/main.go, which special-case
--- these commands before a source is ever loaded.
-
 function Engine:repoList(index_url)
     return self.runner:execJSON({ "-", "repo", "list", index_url }, _("Fetching repository…"))
 end
@@ -50,11 +39,6 @@ function Engine:repoInstall(index_url, source_id, dest_dir)
     return self.runner:exec({ "-", "repo", "install", index_url, source_id, dest_dir }, _("Installing…"))
 end
 
--- cookieLoad/cookieClear pass self:sourceEnv() (unlike repoList/repoInstall
--- above) so AIDOKU_SETTINGS_DIR is set on the subprocess -- that's what
--- makes aidoku-run persist the cookie store under the plugin's own settings
--- dir instead of a shared temp file (see cmd/aidoku-run/main.go's
--- cookiePath).
 function Engine:cookieLoad(cookies_path)
     return self.runner:exec({ "-", "cookie", "load", cookies_path }, _("Loading cookies…"), self:sourceEnv())
 end
@@ -63,11 +47,6 @@ function Engine:cookieClear()
     return self.runner:exec({ "-", "cookie", "clear" }, nil, self:sourceEnv())
 end
 
--- checkUpdate/selfUpdate don't load a source either (see handleUpdate() in
--- cmd/aidoku-run/main.go), so they take the same unused leading "-" as
--- repo/cookie above. No sourceEnv() -- AIDOKU_UPDATE_REPO (if a fork needs
--- it) is a real process environment variable set by however KOReader itself
--- was launched, not a plugin setting threaded through here.
 function Engine:checkUpdate(bin_arch, current_version)
     return self.runner:execJSON({ "-", "update", "check", bin_arch, current_version }, _("Checking for updates…"))
 end
@@ -80,22 +59,16 @@ function Engine:info(source_path)
     return self.runner:execJSON({ source_path, "info" }, _("Loading source…"), self:sourceEnv())
 end
 
--- manifest reads {key, name, version, languages} straight from an
--- installed source's source.json, without loading its WASM module -- see
--- cmd/aidoku-run's `manifest` command and source.ReadManifest in the
--- parent Go repo. Much cheaper than info() (which loads the source), so
--- this is what installedsources.lua uses to identify and display every
--- installed source, not just one.
 function Engine:manifest(source_path)
     return self.runner:execJSON({ source_path, "manifest" }, nil)
 end
 
--- encodeFilterValues JSON-encodes filter_values (shaped like
--- filterbrowser.lua's self.values entries), dropping any empty
--- included/excluded array first: KOReader's json module can't tell an
--- empty Lua table meant as an array from one meant as an object, so
--- json.encode({}) produces "{}" instead of "[]", which fails to decode
--- into Go's []string. Omitting the key matches Go's own `omitempty`.
+-- manifests reads source.json from every .aix in sources_dir in a single
+-- process invocation -- turns 20+ subprocess spawns into 1 (~35ms on Kindle).
+function Engine:manifests(sources_dir)
+    return self.runner:execJSON({ "-", "manifests", sources_dir }, nil)
+end
+
 local function encodeFilterValues(filter_values)
     local sanitized = {}
     for i, v in ipairs(filter_values) do
@@ -110,15 +83,31 @@ local function encodeFilterValues(filter_values)
     return json.encode(sanitized)
 end
 
--- filter_values, if given, is an array of tables shaped like
--- filterbrowser.lua's self.values entries (id/type/value/sortIndex/
--- sortAscending/checkValue/included/excluded) -- written to a scratch JSON
--- file and passed as aidoku-run's `search` command's optional third
--- argument, since that's the only way to hand it a JSON body (no stdin
--- piping through Trapper:dismissablePopen()'s shell-command model). The
--- file is an os.tmpname() (tmpfs, like subprocess.lua's stderr capture), so
--- searching doesn't wear flash.
-function Engine:search(source_path, query, page, filter_values)
+-- Strip KOReader json's null-sentinel functions recursively before re-encoding
+-- Manga/Chapter tables back to JSON for aidoku-run's download-payload command.
+local function sanitizeForJSON(val)
+    local t = type(val)
+    if t == "function" or t == "userdata" or t == "thread" then
+        return nil
+    end
+    if t ~= "table" then
+        return val
+    end
+    local out = {}
+    for k, v in pairs(val) do
+        local cleaned = sanitizeForJSON(v)
+        if cleaned ~= nil then
+            -- Drop empty arrays so KOReader's json.encode doesn't emit "{}"
+            -- where Go expects a slice ([]string).
+            if not (type(cleaned) == "table" and next(cleaned) == nil) then
+                out[k] = cleaned
+            end
+        end
+    end
+    return out
+end
+
+function Engine:search(source_path, query, page, filter_values, progress_text)
     local args = { source_path, "search", query, tostring(page or 1) }
     local filters_path
     if filter_values and #filter_values > 0 then
@@ -130,38 +119,25 @@ function Engine:search(source_path, query, page, filter_values)
         end
         if not ok then
             os.remove(filters_path)
-            -- Searching unfiltered instead would silently show wrong results.
             return nil, _("Could not write search filters")
         end
         table.insert(args, filters_path)
     end
-    local result, err = self.runner:execJSON(args, _("Searching…"), self:sourceEnv())
+    local result, err = self.runner:execJSON(args, progress_text or _("Searching…"), self:sourceEnv())
     if filters_path then
         os.remove(filters_path)
     end
     return result, err
 end
 
--- filters lists a source's static + dynamic search filters (see
--- filterbrowser.lua, which renders the sort/select/multi-select/check
--- subset of these).
 function Engine:filters(source_path)
     return self.runner:execJSON({ source_path, "filters" }, _("Loading filters…"), self:sourceEnv())
 end
 
--- settingsList returns a source's full static + dynamic settings schema
--- (see sourcesettingsbrowser.lua, which renders the select/multiselect/
--- toggle/text subset of these).
 function Engine:settingsList(source_path)
     return self.runner:execJSON({ source_path, "settings" }, _("Loading settings…"), self:sourceEnv())
 end
 
--- settingsGet returns the current value of one setting (key is the bare
--- setting key, without the sourceKey. prefix aidoku-run's settings store
--- namespaces it under internally) -- nil if neither an explicit override nor
--- a manifest default exists (aidoku-run prints {"value": null}, which
--- KOReader's json decodes to a function sentinel, mapped back to nil here).
--- On failure returns nil plus an error message.
 function Engine:settingsGet(source_path, key)
     local result, err = self.runner:execJSON({ source_path, "settings", "get", key }, nil, self:sourceEnv())
     if type(result) ~= "table" then
@@ -173,12 +149,6 @@ function Engine:settingsGet(source_path, key)
     return result.value
 end
 
--- settingsSet stores a setting value. setting_type is "toggle"/"select"/
--- "text"/"multiselect" (matching cmd/aidoku-run's settings-set usage), and
--- values is an array of one-or-more already-stringified values: a single
--- "true"/"false" for toggle, a single string for select/text (joined with
--- spaces on the Go side, so this should really only ever be one element),
--- or one element per selection for multiselect.
 function Engine:settingsSet(source_path, key, setting_type, values)
     local args = { source_path, "settings", "set", key, setting_type }
     for _idx, v in ipairs(values) do
@@ -191,38 +161,41 @@ function Engine:mangaUpdate(source_path, manga_key)
     return self.runner:execJSON({ source_path, "manga", manga_key }, _("Loading chapters…"), self:sourceEnv())
 end
 
--- downloads_dir, if given, makes aidoku-run record the download into its
--- own SQLite index, in the same process that writes the CBZ; every call
--- from this plugin should pass it, it's optional only because the bare
--- CLI also runs standalone/indexless.
---
--- silent (background prefetch) passes nil, not false, for the progress
--- text: Trapper:dismissablePopen() only treats a dismissed trap widget as
--- silently-eat-the-tap when the progress arg is false *exactly* -- nil
--- gets the default resend_event=true, so a tap landing on the invisible
--- widget still reaches the reader afterward instead of vanishing. Also
--- runs under lower CPU priority (subprocess.lua's exec()).
---
--- progress_text_override, if given, replaces the default "Downloading
--- chapter…" text (e.g. batch position "Downloading 3/15: Chapter 9").
--- Ignored when silent.
---
--- manga_dir_name, if given, makes aidoku-run create a sanitized
--- subdirectory by that name under out_path's directory and write there
--- instead. Requires downloads_dir too, since it's the next positional CLI
--- arg -- passing one without the other inserts an empty placeholder so
--- later args don't shift.
---
--- redownload re-fetches even an already-indexed chapter (aidoku-run's
--- `redownload`), replacing the old file only once the new one is complete.
-function Engine:download(source_path, manga_key, chapter_key, out_path, downloads_dir, silent, progress_text_override, manga_dir_name, redownload)
-    -- Not "silent and false or ...": that's the classic Lua and/or-ternary
-    -- trap -- it misfires whenever the "true" branch value is itself falsy,
-    -- which false always is.
-    local progress_text = progress_text_override or _("Downloading chapter…")
-    if silent then
-        progress_text = nil
+-- prepareDownloadArgs builds CLI args (and optional scratch payload file) for
+-- downloading one chapter. When manga_obj and chapter_obj are provided, uses
+-- `download-payload` so aidoku-run skips a redundant network GetMangaUpdate
+-- call per chapter during batch downloads.
+function Engine:prepareDownloadArgs(source_path, manga_key, chapter_key, out_path, downloads_dir, manga_dir_name, redownload, manga_obj, chapter_obj)
+    if type(manga_obj) == "table" and type(chapter_obj) == "table" and manga_obj.Key and chapter_obj.Key then
+        local manga_slim = {}
+        for k, v in pairs(manga_obj) do
+            if k ~= "Chapters" then
+                manga_slim[k] = v
+            end
+        end
+        local payload = sanitizeForJSON({
+            manga = manga_slim,
+            chapter = chapter_obj,
+            outputPath = out_path or "",
+            downloadsDir = downloads_dir or "",
+            mangaDirName = manga_dir_name or "",
+            redownload = redownload and true or false,
+        })
+        local ok_enc, encoded = pcall(json.encode, payload)
+        if ok_enc and encoded then
+            local payload_path = os.tmpname()
+            local f = io.open(payload_path, "w")
+            local ok_write = f and f:write(encoded)
+            if f then
+                ok_write = f:close() and ok_write
+            end
+            if ok_write then
+                return { source_path, "download-payload", payload_path }, { payload_path }
+            end
+            os.remove(payload_path)
+        end
     end
+
     local args = { source_path, redownload and "redownload" or "download", manga_key, chapter_key, out_path }
     if downloads_dir or manga_dir_name then
         table.insert(args, downloads_dir or "")
@@ -230,7 +203,62 @@ function Engine:download(source_path, manga_key, chapter_key, out_path, download
     if manga_dir_name then
         table.insert(args, manga_dir_name)
     end
-    return self.runner:exec(args, progress_text, self:sourceEnv(), silent)
+    return args, nil
+end
+
+function Engine:download(source_path, manga_key, chapter_key, out_path, downloads_dir, silent, progress_text_override, manga_dir_name, redownload, manga_obj, chapter_obj)
+    local progress_text = progress_text_override or _("Downloading chapter…")
+    if silent then
+        progress_text = nil
+    end
+    local args, cleanup = self:prepareDownloadArgs(
+        source_path, manga_key, chapter_key, out_path, downloads_dir, manga_dir_name, redownload, manga_obj, chapter_obj)
+    if silent then
+        local out, err = self.runner:exec(args, nil, self:sourceEnv(), true)
+        for _idx, p in ipairs(cleanup or {}) do
+            os.remove(p)
+        end
+        return out, err
+    end
+    return self.runner:execDownload(args, progress_text, self:sourceEnv(), false, cleanup)
+end
+
+-- spawnDownload starts a non-blocking background download subprocess for
+-- DownloadQueue and returns its pollable handle.
+function Engine:spawnDownload(opts)
+    local args, cleanup = self:prepareDownloadArgs(
+        opts.source_path,
+        opts.manga_key,
+        opts.chapter_key,
+        opts.out_path,
+        opts.downloads_dir,
+        opts.manga_dir_name,
+        opts.redownload,
+        opts.manga,
+        opts.chapter
+    )
+    return self.runner:spawnAsync(args, self:sourceEnv(), true, cleanup)
+end
+
+-- spawnCovers starts a non-blocking background cover batch subprocess for
+-- CoverCache and returns its pollable handle.
+function Engine:spawnCovers(payload)
+    local cleaned = sanitizeForJSON(payload)
+    local ok_enc, encoded = pcall(json.encode, cleaned)
+    if not ok_enc or not encoded then
+        return nil, _("Could not encode cover request")
+    end
+    local payload_path = os.tmpname()
+    local f = io.open(payload_path, "w")
+    local ok_write = f and f:write(encoded)
+    if f then
+        ok_write = f:close() and ok_write
+    end
+    if not ok_write then
+        os.remove(payload_path)
+        return nil, _("Could not write cover request")
+    end
+    return self.runner:spawnAsync({ "-", "covers", payload_path }, self:sourceEnv(), true, { payload_path })
 end
 
 return Engine

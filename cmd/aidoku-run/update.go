@@ -25,7 +25,7 @@ import (
 // (not a plugin setting -- engine.lua deliberately doesn't thread it through
 // sourceEnv()) for forks that publish their own releases under a different
 // slug.
-const defaultUpdateRepo = "ohaiibuzzle/aidoku-backend-0.7"
+const defaultUpdateRepo = "anyin233/tsundoku"
 
 // maxUpdateAssetBytes bounds both the downloaded zip and its extracted
 // contents -- this is a small Lua+binary bundle (a few hundred KB of Lua

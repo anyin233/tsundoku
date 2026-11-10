@@ -21,7 +21,7 @@ local SourcesBrowser = Menu:extend{
     title_bar_left_icon = "plus",
 }
 
-local DOWNLOADS_TEXT = _("Downloaded chapters")
+local DOWNLOADS_TEXT = _("Download Manager")
 
 function SourcesBrowser:init()
     self.item_table = {}
@@ -88,9 +88,12 @@ function SourcesBrowser:onMenuSelect(item)
     if item.is_downloads_entry then
         local DownloadsBrowser = require("downloadsbrowser")
         UIManager:show(DownloadsBrowser:new{
+            engine = self.engine,
             downloads_engine = self.downloads_engine,
             store = self.store,
             ui = self.ui,
+            sources_dir = self.sources_dir,
+            downloads_dir = self.downloads_dir,
             is_popout = false,
             is_borderless = true,
             title_bar_fm_style = true,

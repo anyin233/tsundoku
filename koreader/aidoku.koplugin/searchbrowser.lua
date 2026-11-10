@@ -1,9 +1,9 @@
 --[[--
 Prompts for a search query against one installed source and lists the
-results. Tapping a result opens MangaBrowser on it; holding one bookmarks
-(or unbookmarks) it to the library directly, without opening it.
+results, annotating both bookmarked (★) and already-downloaded (✓) manga.
 ]]
 
+local DownloadsEngine = require("downloadsengine")
 local InfoMessage = require("ui/widget/infomessage")
 local InputDialog = require("ui/widget/inputdialog")
 local Menu = require("ui/widget/menu")
@@ -18,9 +18,6 @@ local SearchBrowser = Menu:extend{
     subtitle = _("Hold a result to add/remove from library"),
 }
 
--- Manga.Title is a plain (non-pointer) Go string, so an absent title
--- decodes as "" rather than null -- and "" is truthy in Lua, so this needs
--- an explicit emptiness check rather than just `x or fallback`.
 local function mangaLabel(manga)
     if type(manga.Title) == "string" and manga.Title ~= "" then
         return manga.Title
@@ -28,25 +25,20 @@ local function mangaLabel(manga)
     return manga.Key
 end
 
--- Cover is a nilable Go *string; see the JSON-null note in mangabrowser.lua.
 local function mangaCover(manga)
     return type(manga.Cover) == "string" and manga.Cover or nil
 end
 
 function SearchBrowser:init()
     self.item_table = {}
+    self.raw_entries = {}
     self.page = 1
     self.query = nil
-    self.available_filters = nil -- fetched once, see reloadFilters()
-    self.filter_values = {} -- filter ID -> value table, see filterbrowser.lua
+    self.available_filters = nil
+    self.filter_values = {}
     Menu.init(self)
     OpenWidgets.push(self)
-    -- init() runs during SearchBrowser:new{}, before the caller's own
-    -- UIManager:show(self) -- showing the InputDialog here would get
-    -- painted first and then buried under this Menu when the caller shows
-    -- it next. Defer to the next tick so it shows on top instead.
-    -- Wrapped: outside a Trapper coroutine the filters subprocess falls
-    -- back to a blocking io.popen, freezing the UI with no progress shown.
+
     UIManager:nextTick(function()
         Trapper:wrap(function()
             self:reloadFilters()
@@ -55,15 +47,11 @@ function SearchBrowser:init()
     end)
 end
 
--- See librarybrowser.lua's onCloseWidget for why this is needed.
 function SearchBrowser:onCloseWidget()
     Menu.onCloseWidget(self)
     OpenWidgets.remove(self)
 end
 
--- reloadFilters fetches this source's filters once (not re-fetched on every
--- search) so the "Filters…" row can appear immediately once results exist,
--- without a subprocess call per search.
 function SearchBrowser:reloadFilters()
     local result = self.engine:filters(self.source_path)
     self.available_filters = type(result) == "table" and result or {}
@@ -114,6 +102,49 @@ function SearchBrowser:promptQuery()
     dialog:onShowKeyboard()
 end
 
+function SearchBrowser:rebuildList()
+    local dl_stats = self.downloads_engine:mangaDownloadStats()
+    local meta_map = self.store:getMangaMetaMap()
+    local item_table = {}
+    if self.available_filters and #self.available_filters > 0 then
+        local n = 0
+        for _idx in pairs(self.filter_values) do n = n + 1 end
+        local label = n > 0 and T(_("Filters (%1 set)…"), n) or _("Filters…")
+        table.insert(item_table, { text = label, is_filters_entry = true })
+    end
+
+    for _idx, manga in ipairs(self.raw_entries) do
+        local title = mangaLabel(manga)
+        local prefixes = {}
+        if self.store:isBookmarked(self.source_key, manga.Key) then
+            table.insert(prefixes, "★")
+        end
+        local dl_group = DownloadsEngine.lookupMangaGroup(dl_stats, self.source_key, manga.Key, title)
+        local mandatory = ""
+        if dl_group and dl_group.count > 0 then
+            table.insert(prefixes, "✓")
+            local meta = meta_map[self.source_key .. "\0" .. manga.Key]
+                or meta_map[self.source_key .. "\0" .. dl_group.mangaKey]
+            local total_ch = meta and meta.chapter_count or 0
+            if total_ch > 0 and dl_group.count >= total_ch then
+                mandatory = T(_("Downloaded all %1 ch"), dl_group.count)
+            else
+                mandatory = T(_("Downloaded %1 ch"), dl_group.count)
+            end
+        end
+        local prefix_str = #prefixes > 0 and (table.concat(prefixes, " ") .. " ") or ""
+        table.insert(item_table, {
+            text = prefix_str .. title,
+            mandatory = mandatory,
+            manga = manga,
+        })
+    end
+
+    local saved_page = self.page
+    self.item_table = item_table
+    self:updateItems(saved_page)
+end
+
 function SearchBrowser:runSearch(query)
     self.query = query
     NetworkMgr:runWhenConnected(function()
@@ -127,29 +158,12 @@ function SearchBrowser:runSearch(query)
                 UIManager:show(InfoMessage:new{ text = T(_("Search failed:\n%1"), err) })
                 return
             end
-            local item_table = {}
-            if self.available_filters and #self.available_filters > 0 then
-                local n = 0
-                for _idx in pairs(self.filter_values) do n = n + 1 end
-                local label = n > 0 and T(_("Filters (%1 set)…"), n) or _("Filters…")
-                table.insert(item_table, { text = label, is_filters_entry = true })
-            end
-            -- result.Entries is a Go slice that's always non-nil (even when
-            -- empty) here, but guard anyway -- see the null-decoding note
-            -- in mangabrowser.lua.
-            local entries = type(result.Entries) == "table" and result.Entries or {}
-            for _idx, manga in ipairs(entries) do
-                local label = mangaLabel(manga)
-                if self.store:isBookmarked(self.source_key, manga.Key) then
-                    label = "★ " .. label
-                end
-                table.insert(item_table, { text = label, manga = manga })
-            end
-            if #entries == 0 then
+            self.raw_entries = type(result.Entries) == "table" and result.Entries or {}
+            if #self.raw_entries == 0 then
                 UIManager:show(InfoMessage:new{ text = _("No results."), timeout = 2 })
             end
-            self.item_table = item_table
-            self:updateItems()
+            self.page = 1
+            self:rebuildList()
         end)
     end)
 end
@@ -165,6 +179,7 @@ function SearchBrowser:onMenuSelect(item)
         store = self.store,
         downloads_engine = self.downloads_engine,
         ui = self.ui,
+        sources_dir = self.sources_dir,
         source_path = self.source_path,
         source_key = self.source_key,
         source_name = self.source_name,
@@ -173,6 +188,12 @@ function SearchBrowser:onMenuSelect(item)
         is_popout = false,
         is_borderless = true,
         title_bar_fm_style = true,
+        refresh_callback = function()
+            self:rebuildList()
+            if self.refresh_callback then
+                self.refresh_callback()
+            end
+        end,
     })
     return true
 end
@@ -195,9 +216,7 @@ function SearchBrowser:onMenuHold(item)
         UIManager:show(InfoMessage:new{ text = _("Could not update library."), timeout = 2 })
         return true
     end
-    -- Update this row's marker in place rather than re-running the search.
-    item.text = now_bookmarked and ("★ " .. label) or label
-    self:updateItems()
+    self:rebuildList()
     if self.refresh_callback then
         self.refresh_callback()
     end

@@ -44,6 +44,13 @@ local MB = 1024 * 1024
 local MODE_ORDER = { "off", "ask", "auto" }
 local MODE_LABELS = { off = _("Off"), ask = _("Ask"), auto = _("Auto") }
 
+local VIEW_MODE_ORDER = { "compact", "list", "grid" }
+local VIEW_MODE_LABELS = {
+    compact = _("Compact list"),
+    list = _("List (cover + title)"),
+    grid = _("Grid"),
+}
+
 local function formatMB(bytes)
     return string.format("%.1f MB", bytes / MB)
 end
@@ -86,9 +93,15 @@ function SettingsBrowser:genItemTable()
     -- onMenuSelect) purely to visually group the settings below -- they
     -- carry no state of their own.
     return {
-        { text = _("Sources"), mandatory=">", is_sources_entry = true },
+        { text = _("Sources"), mandatory = ">", is_sources_entry = true },
+        { text = _("Download Manager"), mandatory = ">", is_downloads_entry = true },
 
         { text = "", dim = true, bold = true, is_placeholder = true },
+        {
+            text = _("Library view"),
+            mandatory = VIEW_MODE_LABELS[self.store:libraryViewMode()] or VIEW_MODE_LABELS.compact,
+            is_library_view_entry = true,
+        },
         {
             text = _("Prefetch next chapters"),
             mandatory = self.store:isEphemeralMode()
@@ -460,6 +473,22 @@ function SettingsBrowser:promptEphemeralPath()
     dialog:onShowKeyboard()
 end
 
+function SettingsBrowser:cycleLibraryViewMode()
+    local current = self.store:libraryViewMode()
+    local next_mode = VIEW_MODE_ORDER[1]
+    for i, mode in ipairs(VIEW_MODE_ORDER) do
+        if mode == current then
+            next_mode = VIEW_MODE_ORDER[(i % #VIEW_MODE_ORDER) + 1]
+            break
+        end
+    end
+    self.store:setLibraryViewMode(next_mode)
+    self:refresh()
+    if self.refresh_callback then
+        self.refresh_callback()
+    end
+end
+
 function SettingsBrowser:cycleNextChapterMode()
     local current = self.store:nextChapterMode()
     local next_mode = MODE_ORDER[1]
@@ -491,6 +520,21 @@ function SettingsBrowser:onMenuSelect(item)
             title_bar_fm_style = true,
             refresh_callback = self.refresh_callback,
         })
+    elseif item.is_downloads_entry then
+        local DownloadsBrowser = require("downloadsbrowser")
+        UIManager:show(DownloadsBrowser:new{
+            engine = self.engine,
+            store = self.store,
+            downloads_engine = self.downloads_engine,
+            ui = self.ui,
+            sources_dir = self.sources_dir,
+            downloads_dir = self.downloads_dir,
+            is_popout = false,
+            is_borderless = true,
+            title_bar_fm_style = true,
+        })
+    elseif item.is_library_view_entry then
+        self:cycleLibraryViewMode()
     elseif item.is_buffer_entry then
         if self.store:isEphemeralMode() then
             UIManager:show(InfoMessage:new{

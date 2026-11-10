@@ -1,14 +1,8 @@
 --[[--
 DownloadsEngine reads/writes <downloads_dir>/index.db directly via
-lua-ljsqlite3 -- no record() method here: a download is indexed by
-aidoku-run's own "download" command, in the same process that writes the
-CBZ, so a killed/failed download can never leave the index pointing at a
-missing file. Go's downloads.Open() solely owns the schema; this file only
-does reads/row writes and treats a missing `downloads` table as empty, not
-an error (a fresh install may never have run aidoku-run yet). No WAL (some
-Kindle kernels can't mmap for it), just a busy timeout on both sides for
-lock contention. Numeric columns come back as Lua strings, not numbers --
-always tonumber() them.
+lua-ljsqlite3. Also provides per-manga aggregated download statistics and
+canonical/slug-prefix matching so downloaded manga are accurately annotated
+across LibraryBrowser, SearchBrowser, GlobalSearchBrowser, and DownloadsBrowser.
 ]]
 
 local DocSettings = require("docsettings")
@@ -20,28 +14,19 @@ local _ = require("aidoku_l10n")
 local DownloadsEngine = {}
 DownloadsEngine.__index = DownloadsEngine
 
--- isUnder reports whether file lies strictly inside dir (a trailing slash
--- on dir is ignored) -- a bare prefix check would also match a sibling
--- like "<dir>-old/x".
 function DownloadsEngine.isUnder(file, dir)
     dir = dir:gsub("/+$", "")
     return file:sub(1, #dir + 1) == dir .. "/"
 end
 
-local ENTRY_COLUMNS = "source_key, source_path, manga_key, chapter_key, path, "
+local BASE_COLUMNS = "source_key, source_path, manga_key, chapter_key, path, "
     .. "manga_title, chapter_title, size_bytes, downloaded_at, chapter_number, volume_number"
 
--- float32 reads a chapter/volume number column. Go stores a float32 in a
--- REAL column, so 10.1 comes back as 10.100000381469727 ("Chapter
--- 10.100000381469727" in offline labels); 7 significant digits is float32's
--- precision, which drops that noise.
 local function float32(v)
     v = tonumber(v)
     return v and tonumber(string.format("%.7g", v))
 end
 
--- rowToEntry decodes one ENTRY_COLUMNS-shaped row (as returned by
--- stmt:step()) into the lowerCamelCase-keyed table every caller expects.
 local function rowToEntry(row)
     return {
         sourceKey = row[1],
@@ -55,13 +40,10 @@ local function rowToEntry(row)
         downloadedAt = tonumber(row[9]) or 0,
         chapterNumber = float32(row[10]),
         volumeNumber = float32(row[11]),
+        dateUploaded = row[12] and tonumber(row[12]) or nil,
     }
 end
 
--- purgeSidecar deletes a document's KOReader reading-progress sidecar,
--- using DocSettings:getSidecarDir rather than a guessed "<path>.sdr" path
--- since the user's document_metadata_folder setting can relocate sidecars
--- away from the document. Best-effort: a purgeDir failure is ignored.
 local function purgeSidecar(path)
     local sidecar_dir = DocSettings:getSidecarDir(path)
     if sidecar_dir ~= "" and lfs.attributes(sidecar_dir, "mode") == "directory" then
@@ -69,11 +51,6 @@ local function purgeSidecar(path)
     end
 end
 
--- query prepares sql, binds binds (if any), and returns fn(stmt) -- or
--- fallback instead of raising if any step fails (a busy timeout running
--- out under a concurrent aidoku-run write, a damaged index.db after power
--- loss, ...). Every caller is a UI screen that doesn't expect an error, so
--- an unguarded prepare/step would crash it. The statement is always closed.
 local function query(conn, fallback, sql, binds, fn)
     local ok, stmt = pcall(conn.prepare, conn, sql)
     if not ok then
@@ -100,6 +77,7 @@ function DownloadsEngine.new(downloads_dir)
     local self = setmetatable({
         downloads_dir = downloads_dir,
         conn = nil,
+        has_date_uploaded = nil,
     }, DownloadsEngine)
     local ok, conn = pcall(SQ3.open, downloads_dir .. "/index.db")
     if ok and pcall(conn.set_busy_timeout, conn, 5000) then
@@ -108,17 +86,10 @@ function DownloadsEngine.new(downloads_dir)
     return self
 end
 
--- isAvailable reports whether index.db could be opened at all (storage not
--- writable/mounted, etc). It says nothing about whether the `downloads`
--- table exists yet -- see tableExists().
 function DownloadsEngine:isAvailable()
     return self.conn ~= nil
 end
 
--- tableExists is the "has aidoku-run ever recorded a download" check --
--- sqlite_master always exists even in a brand-new/empty database, unlike
--- querying `downloads` directly on a fresh install. An unreadable database
--- counts as "no table", so every caller degrades to its empty result.
 function DownloadsEngine:tableExists()
     if not self.conn then
         return false
@@ -128,9 +99,26 @@ function DownloadsEngine:tableExists()
     return ok and (tonumber(count) or 0) > 0
 end
 
--- indexedPath returns the path recorded for a chapter, or "" if there's no
--- row -- whether or not that file still exists. Only remove() wants this;
--- everything else goes through path().
+function DownloadsEngine:entryColumns()
+    if self.has_date_uploaded then
+        return BASE_COLUMNS .. ", date_uploaded"
+    end
+    local found = query(self.conn, false, "PRAGMA table_info(downloads)", nil, function(stmt)
+        local row = {}
+        while stmt:step(row) do
+            if row[2] == "date_uploaded" then
+                return true
+            end
+        end
+        return false
+    end)
+    if found then
+        self.has_date_uploaded = true
+        return BASE_COLUMNS .. ", date_uploaded"
+    end
+    return BASE_COLUMNS
+end
+
 function DownloadsEngine:indexedPath(source_key, manga_key, chapter_key)
     if not self:tableExists() then
         return ""
@@ -141,12 +129,6 @@ function DownloadsEngine:indexedPath(source_key, manga_key, chapter_key)
     return row and row[1] or ""
 end
 
--- path returns the local CBZ path for a chapter, or "" if not downloaded --
--- including a stale row whose file is gone (deleted from KOReader's file
--- browser, or left behind by aidoku-run's same-filename disambiguation), so
--- no caller ever tries to open a missing file. source_key is the source's
--- stable manifest ID (e.g. "en.weebcentral"), not its installed file's
--- path -- see the downloads Go package doc for why entries are keyed by that.
 function DownloadsEngine:path(source_key, manga_key, chapter_key)
     local p = self:indexedPath(source_key, manga_key, chapter_key)
     if p ~= "" and lfs.attributes(p, "mode") ~= "file" then
@@ -155,33 +137,24 @@ function DownloadsEngine:path(source_key, manga_key, chapter_key)
     return p
 end
 
--- byPath is the reverse lookup: given a local file path (as opened in the
--- reader), find which (source, manga, chapter) it is. Returns nil if path
--- isn't indexed.
 function DownloadsEngine:byPath(file_path)
     if not self:tableExists() then
         return nil
     end
+    local cols = self:entryColumns()
     local row = query(self.conn, nil,
-        "SELECT " .. ENTRY_COLUMNS .. " FROM downloads WHERE path=?", { file_path }, firstRow)
+        "SELECT " .. cols .. " FROM downloads WHERE path=?", { file_path }, firstRow)
     if not row then
         return nil
     end
     return rowToEntry(row)
 end
 
--- remove deletes the index entry, its backing file, and its KOReader
--- reading-progress sidecar (all no-ops, not errors, if already absent).
--- Sidecar cleanup is unconditional (not just Ephemeral Mode) -- see
--- purgeSidecar.
 function DownloadsEngine:remove(source_key, manga_key, chapter_key)
     local path = self:indexedPath(source_key, manga_key, chapter_key)
     if path == "" then
         return true
     end
-    -- File first: if that fails the row stays, so a later remove/prune can
-    -- retry, instead of leaving a file nothing indexes (and so nothing ever
-    -- deletes).
     if lfs.attributes(path, "mode") == "file" then
         local ok, err = os.remove(path)
         if not ok then
@@ -198,29 +171,61 @@ function DownloadsEngine:remove(source_key, manga_key, chapter_key)
     return true
 end
 
--- resetProgress drops the reading-progress sidecar of every downloaded
--- chapter of one manga, leaving the CBZs themselves in place, so they
--- reopen at page 1. Used by mangabrowser.lua's "Reset reading progress".
+-- removeManga deletes every downloaded chapter matching (source_key, manga_key)
+-- (including canonical slug/id variants), returning how many chapters were removed.
+function DownloadsEngine:removeManga(source_key, manga_key, manga_title)
+    local removed = 0
+    for _idx, e in ipairs(self:list() or {}) do
+        if DownloadsEngine.entryMatchesManga(e, source_key, manga_key, manga_title) then
+            if self:remove(e.sourceKey, e.mangaKey, e.chapterKey) then
+                removed = removed + 1
+            end
+        end
+    end
+    return removed
+end
+
+-- entryMatchesManga handles sources (e.g. zh.godamanga) where search returns
+-- manga.Key = "<slug>" while mangaUpdate canonicalizes it to "<slug>/<numeric_id>".
+function DownloadsEngine.entryMatchesManga(entry, source_key, manga_key, manga_title)
+    if entry.sourceKey ~= source_key then
+        return false
+    end
+    if manga_key and manga_key ~= "" then
+        if entry.mangaKey == manga_key then
+            return true
+        end
+        if entry.mangaKey:sub(1, #manga_key + 1) == manga_key .. "/" then
+            return true
+        end
+        if manga_key:sub(1, #entry.mangaKey + 1) == entry.mangaKey .. "/" then
+            return true
+        end
+    end
+    if manga_title and manga_title ~= "" and entry.mangaTitle == manga_title then
+        return true
+    end
+    return false
+end
+
 function DownloadsEngine:resetProgress(source_key, manga_key)
     if not self:tableExists() then
         return
     end
     for _idx, e in ipairs(self:list() or {}) do
-        if e.sourceKey == source_key and e.mangaKey == manga_key then
+        if DownloadsEngine.entryMatchesManga(e, source_key, manga_key) then
             purgeSidecar(e.path)
         end
     end
 end
 
--- list returns every downloaded chapter, most recently downloaded first, or
--- (nil, err) if the index couldn't be read -- what downloadsbrowser.lua's
--- caller checks for.
 function DownloadsEngine:list()
     if not self:tableExists() then
         return {}
     end
+    local cols = self:entryColumns()
     local entries = query(self.conn, nil,
-        "SELECT " .. ENTRY_COLUMNS .. " FROM downloads ORDER BY downloaded_at DESC", nil,
+        "SELECT " .. cols .. " FROM downloads ORDER BY downloaded_at DESC", nil,
         function(stmt)
             local out, row = {}, {}
             while stmt:step(row) do
@@ -234,7 +239,83 @@ function DownloadsEngine:list()
     return entries
 end
 
--- totalBytes returns the sum of every indexed download's size.
+-- mangaDownloadStats aggregates valid (still-on-disk) downloaded chapters per
+-- manga, indexed by exact key, slug prefix (before '/'), and manga title so
+-- lookups from LibraryBrowser, SearchBrowser, and GlobalSearchBrowser are O(1).
+function DownloadsEngine:mangaDownloadStats(entries)
+    entries = entries or self:list() or {}
+    local by_exact = {}
+    local by_prefix = {}
+    local by_title = {}
+    local groups = {}
+
+    for _idx, e in ipairs(entries) do
+        if e.path ~= "" and lfs.attributes(e.path, "mode") == "file" then
+            local exact_id = e.sourceKey .. "\0" .. e.mangaKey
+            local group = by_exact[exact_id]
+            if not group then
+                group = {
+                    sourceKey = e.sourceKey,
+                    sourcePath = e.sourcePath,
+                    mangaKey = e.mangaKey,
+                    mangaTitle = e.mangaTitle,
+                    count = 0,
+                    sizeBytes = 0,
+                    latestAt = 0,
+                    chapters = {},
+                }
+                by_exact[exact_id] = group
+                table.insert(groups, group)
+
+                local slug = e.mangaKey:match("^([^/]+)/")
+                if slug and slug ~= "" then
+                    by_prefix[e.sourceKey .. "\0" .. slug] = group
+                end
+                if e.mangaTitle and e.mangaTitle ~= "" then
+                    by_title[e.sourceKey .. "\0" .. e.mangaTitle] = group
+                end
+            end
+            group.count = group.count + 1
+            group.sizeBytes = group.sizeBytes + (e.sizeBytes or 0)
+            if (e.downloadedAt or 0) > group.latestAt then
+                group.latestAt = e.downloadedAt
+            end
+            table.insert(group.chapters, e)
+        end
+    end
+
+    return {
+        groups = groups,
+        by_exact = by_exact,
+        by_prefix = by_prefix,
+        by_title = by_title,
+    }
+end
+
+function DownloadsEngine.lookupMangaGroup(stats, source_key, manga_key, manga_title, canonical_key)
+    if not stats or not source_key then
+        return nil
+    end
+    if canonical_key and canonical_key ~= "" then
+        local g = stats.by_exact[source_key .. "\0" .. canonical_key]
+        if g then return g end
+    end
+    if manga_key and manga_key ~= "" then
+        local g = stats.by_exact[source_key .. "\0" .. manga_key]
+            or stats.by_prefix[source_key .. "\0" .. manga_key]
+        if g then return g end
+        local slug = manga_key:match("^([^/]+)/")
+        if slug and slug ~= "" then
+            g = stats.by_prefix[source_key .. "\0" .. slug] or stats.by_exact[source_key .. "\0" .. slug]
+            if g then return g end
+        end
+    end
+    if manga_title and manga_title ~= "" then
+        return stats.by_title[source_key .. "\0" .. manga_title]
+    end
+    return nil
+end
+
 function DownloadsEngine:totalBytes()
     if not self:tableExists() then
         return 0
@@ -243,16 +324,6 @@ function DownloadsEngine:totalBytes()
     return ok and tonumber(total) or 0
 end
 
--- prune deletes the oldest downloads (index entry + file) until under
--- limit_bytes, returning what was removed. limit_bytes <= 0 means "no
--- limit" (store.lua's zero-value default for an unset preference).
---
--- keep_path, if given, is never deleted -- callers pass the chapter
--- they're about to open, so a limit smaller than that chapter's own size
--- can't delete it out from under them (confirmed on-device: prefetch.lua
--- once called this with no keep_path at all and deleted the chapter the
--- user was actively reading). It may also be a set ({ [path] = true }) to
--- protect several, e.g. a bulk download's whole batch.
 function DownloadsEngine:prune(limit_bytes, keep_path)
     if not limit_bytes or limit_bytes <= 0 then
         return {}
@@ -261,9 +332,9 @@ function DownloadsEngine:prune(limit_bytes, keep_path)
     if total <= limit_bytes then
         return {}
     end
-    local entries = self:list() or {} -- most-recently-downloaded first
+    local entries = self:list() or {}
     local removed = {}
-    for i = #entries, 1, -1 do -- walk from the oldest end
+    for i = #entries, 1, -1 do
         if total <= limit_bytes then
             break
         end
@@ -285,12 +356,6 @@ function DownloadsEngine:prune(limit_bytes, keep_path)
     return removed
 end
 
--- removeAllExcept deletes every indexed download except the one at keep_path
--- (index entry + file), or everything if keep_path is nil. Used by Ephemeral
--- Mode: to purge the RAM-disk directory when the mode is turned off (keep_path
--- = nil), and to drop the previous chapter right after a new one opens
--- (keep_path = the newly opened path) -- see mangabrowser.lua/nextchapter.lua/
--- settingsbrowser.lua.
 function DownloadsEngine:removeAllExcept(keep_path)
     for _idx, e in ipairs(self:list() or {}) do
         if e.path ~= keep_path then
