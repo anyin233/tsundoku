@@ -20,11 +20,10 @@ local UIManager = require("ui/uimanager")
 local T = require("ffi/util").template
 local _ = require("aidoku_l10n")
 
-local RepoBrowser = Menu:extend{
-    title = _("Source repository"),
-}
+local RepoBrowser = Menu:extend{}
 
 function RepoBrowser:init()
+    self.title = _("Source repository")
     self.item_table = {}
     Menu.init(self)
     OpenWidgets.push(self)

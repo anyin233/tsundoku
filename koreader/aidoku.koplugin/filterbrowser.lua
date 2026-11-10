@@ -18,9 +18,7 @@ local util = require("util")
 local T = require("ffi/util").template
 local _ = require("aidoku_l10n")
 
-local FilterBrowser = Menu:extend{
-    title = _("Search filters"),
-}
+local FilterBrowser = Menu:extend{}
 
 local SUPPORTED_KINDS = { sort = true, select = true, ["multi-select"] = true, check = true }
 
@@ -46,6 +44,7 @@ local function array(t)
 end
 
 function FilterBrowser:init()
+    self.title = _("Search filters")
     self.filters = {}
     for _idx, f in ipairs(self.all_filters or {}) do
         if SUPPORTED_KINDS[f.Kind] then

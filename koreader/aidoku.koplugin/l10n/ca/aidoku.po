@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: aidoku.koplugin\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-10 23:25+0000\n"
+"POT-Creation-Date: 2026-11-10 23:33+0000\n"
 "PO-Revision-Date: 2026-10-08 09:53+0700\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -25,8 +25,8 @@ msgstr ""
 "La descàrrega ha fallat:\n"
 "%1"
 
-#: downloadsbrowser.lua:66 globalsearchbrowser.lua:419 librarybrowser.lua:1059
-#: mangabrowser.lua:273 settingsbrowser.lua:97 sourcesbrowser.lua:24
+#: downloadsbrowser.lua:70 globalsearchbrowser.lua:419 librarybrowser.lua:1060
+#: mangabrowser.lua:273 settingsbrowser.lua:120 sourcesbrowser.lua:45
 #, fuzzy
 msgid "Download Manager"
 msgstr "Capítols descarregats"
@@ -220,7 +220,7 @@ msgstr ""
 "%1"
 
 #: downloadsbrowser.lua:566 downloadsbrowser.lua:660 downloadsbrowser.lua:680
-#: librarybrowser.lua:1376 librarybrowser.lua:1392 sourcesbrowser.lua:155
+#: librarybrowser.lua:1377 librarybrowser.lua:1393 sourcesbrowser.lua:153
 msgid "Remove"
 msgstr "Elimina"
 
@@ -242,7 +242,7 @@ msgstr "La font ja no està instal·lada."
 msgid "Remove all %1 downloaded chapters"
 msgstr "Encara no hi ha capítols descarregats."
 
-#: downloadsbrowser.lua:659 librarybrowser.lua:1375
+#: downloadsbrowser.lua:659 librarybrowser.lua:1376
 #, fuzzy
 msgid "Remove all %1 downloaded chapters of '%2'?"
 msgstr "Encara no hi ha capítols descarregats."
@@ -323,68 +323,68 @@ msgstr ""
 "No s'ha pogut comprovar si hi ha actualitzacions:\n"
 "%1"
 
-#: filterbrowser.lua:22
+#: filterbrowser.lua:47
 msgid "Search filters"
 msgstr "Filtres de cerca"
 
-#: filterbrowser.lua:74 filterbrowser.lua:152 mangabrowser.lua:153
+#: filterbrowser.lua:73 filterbrowser.lua:151 mangabrowser.lua:153
 msgid "Sort: %1"
 msgstr "Ordre: %1"
 
-#: filterbrowser.lua:74
+#: filterbrowser.lua:73
 msgid "default"
 msgstr "per defecte"
 
-#: filterbrowser.lua:77
+#: filterbrowser.lua:76
 msgid "Sort: %1 (%2)"
 msgstr "Ordre: %1 (%2)"
 
-#: filterbrowser.lua:77
+#: filterbrowser.lua:76
 msgid "ascending"
 msgstr "ascendent"
 
-#: filterbrowser.lua:77
+#: filterbrowser.lua:76
 msgid "descending"
 msgstr "descendent"
 
-#: filterbrowser.lua:82 filterbrowser.lua:84 filterbrowser.lua:91
-#: filterbrowser.lua:108 filterbrowser.lua:110 sourcesettingsbrowser.lua:116
+#: filterbrowser.lua:81 filterbrowser.lua:83 filterbrowser.lua:90
+#: filterbrowser.lua:107 filterbrowser.lua:109 sourcesettingsbrowser.lua:116
 msgid "%1: %2"
 msgstr "%1: %2"
 
-#: filterbrowser.lua:82 filterbrowser.lua:91
+#: filterbrowser.lua:81 filterbrowser.lua:90
 msgid "any"
 msgstr "qualsevol"
 
-#: filterbrowser.lua:93
+#: filterbrowser.lua:92
 msgid "%1: %2 included, %3 excluded"
 msgstr "%1: %2 inclosos, %3 exclosos"
 
-#: filterbrowser.lua:108
+#: filterbrowser.lua:107
 msgid "unset"
 msgstr "sense definir"
 
-#: filterbrowser.lua:110
+#: filterbrowser.lua:109
 msgid "no"
 msgstr "no"
 
-#: filterbrowser.lua:110
+#: filterbrowser.lua:109
 msgid "yes"
 msgstr "sí"
 
-#: filterbrowser.lua:131
+#: filterbrowser.lua:130
 msgid "Clear all filters"
 msgstr "Esborra tots els filtres"
 
-#: filterbrowser.lua:132
+#: filterbrowser.lua:131
 msgid "Search with these filters"
 msgstr "Cerca amb aquests filtres"
 
-#: filterbrowser.lua:179
+#: filterbrowser.lua:178
 msgid "Any"
 msgstr "Qualsevol"
 
-#: globalsearchbrowser.lua:26 globalsearchbrowser.lua:476
+#: globalsearchbrowser.lua:41 globalsearchbrowser.lua:476
 msgid "Multi-source Search"
 msgstr ""
 
@@ -428,13 +428,13 @@ msgstr "Cerca a totes les fonts"
 msgid "Selected"
 msgstr ""
 
-#: globalsearchbrowser.lua:180 searchbrowser.lua:130
+#: globalsearchbrowser.lua:180 searchbrowser.lua:129
 #, fuzzy
 msgid "Downloaded all %1 ch"
 msgstr "Capítols descarregats"
 
 #: globalsearchbrowser.lua:182 librarybrowser.lua:949 mangabrowser.lua:145
-#: searchbrowser.lua:132
+#: searchbrowser.lua:131
 #, fuzzy
 msgid "Downloaded %1 ch"
 msgstr "Capítols descarregats"
@@ -469,7 +469,7 @@ msgstr ""
 msgid "Search in %1 selected source(s)"
 msgstr "Cerca a totes les fonts"
 
-#: globalsearchbrowser.lua:247 searchbrowser.lua:81
+#: globalsearchbrowser.lua:247 searchbrowser.lua:80
 msgid "Title…"
 msgstr "Títol…"
 
@@ -478,14 +478,14 @@ msgstr "Títol…"
 msgid "Sources…"
 msgstr "Fonts"
 
-#: globalsearchbrowser.lua:257 mangabrowser.lua:674 searchbrowser.lua:84
-#: settingsbrowser.lua:163 settingsbrowser.lua:197 settingsbrowser.lua:232
-#: settingsbrowser.lua:262 settingsbrowser.lua:299 settingsbrowser.lua:437
+#: globalsearchbrowser.lua:257 mangabrowser.lua:674 searchbrowser.lua:83
+#: settingsbrowser.lua:195 settingsbrowser.lua:229 settingsbrowser.lua:264
+#: settingsbrowser.lua:294 settingsbrowser.lua:331 settingsbrowser.lua:478
 #: sourcesettingsbrowser.lua:235
 msgid "Cancel"
 msgstr "Cancel·la"
 
-#: globalsearchbrowser.lua:262 searchbrowser.lua:89
+#: globalsearchbrowser.lua:262 searchbrowser.lua:88
 msgid "Search"
 msgstr "Cerca"
 
@@ -549,15 +549,15 @@ msgstr ""
 msgid "Invert all selections"
 msgstr ""
 
-#: globalsearchbrowser.lua:583 mangabrowser.lua:219 searchbrowser.lua:216
+#: globalsearchbrowser.lua:583 mangabrowser.lua:219 searchbrowser.lua:215
 msgid "Could not update library."
 msgstr ""
 
-#: globalsearchbrowser.lua:591 mangabrowser.lua:227 searchbrowser.lua:224
+#: globalsearchbrowser.lua:591 mangabrowser.lua:227 searchbrowser.lua:223
 msgid "Added '%1' to library"
 msgstr "'%1' afegit a la biblioteca"
 
-#: globalsearchbrowser.lua:591 mangabrowser.lua:227 searchbrowser.lua:224
+#: globalsearchbrowser.lua:591 mangabrowser.lua:227 searchbrowser.lua:223
 msgid "Removed '%1' from library"
 msgstr "'%1' eliminat de la biblioteca"
 
@@ -565,11 +565,11 @@ msgstr "'%1' eliminat de la biblioteca"
 msgid "Compact list (title only)"
 msgstr ""
 
-#: librarybrowser.lua:64 settingsbrowser.lua:49
+#: librarybrowser.lua:64 settingsbrowser.lua:56
 msgid "Compact list"
 msgstr ""
 
-#: librarybrowser.lua:68 settingsbrowser.lua:50
+#: librarybrowser.lua:68 settingsbrowser.lua:52
 msgid "List (cover + title)"
 msgstr ""
 
@@ -581,15 +581,15 @@ msgstr ""
 msgid "Grid (cover + title)"
 msgstr ""
 
-#: librarybrowser.lua:74 settingsbrowser.lua:51
+#: librarybrowser.lua:74 settingsbrowser.lua:54
 msgid "Grid"
 msgstr ""
 
-#: librarybrowser.lua:557
+#: librarybrowser.lua:561 librarybrowser.lua:986
 msgid "Library"
 msgstr "Biblioteca"
 
-#: librarybrowser.lua:879 settingsbrowser.lua:127
+#: librarybrowser.lua:879 settingsbrowser.lua:155
 msgid "Ephemeral Mode"
 msgstr "Mode efímer"
 
@@ -619,46 +619,46 @@ msgstr ""
 "La biblioteca és buida. Fes servir el menú (a dalt a l'esquerra) per trobar "
 "manga."
 
-#: librarybrowser.lua:1022 settingsbrowser.lua:101
+#: librarybrowser.lua:1023 settingsbrowser.lua:129
 #, fuzzy
 msgid "Library view"
 msgstr "Biblioteca"
 
-#: librarybrowser.lua:1048
+#: librarybrowser.lua:1049
 msgid "Sort: Name"
 msgstr "Ordre: Nom"
 
-#: librarybrowser.lua:1049
+#: librarybrowser.lua:1050
 msgid "Sort: Last read"
 msgstr "Ordre: Última lectura"
 
-#: librarybrowser.lua:1050
+#: librarybrowser.lua:1051
 #, fuzzy
 msgid "Sort: Downloaded first"
 msgstr "Ordre: Més antics primer"
 
-#: librarybrowser.lua:1058 mangabrowser.lua:272
+#: librarybrowser.lua:1059 mangabrowser.lua:272
 #, fuzzy
 msgid "Download Manager (%1 active)"
 msgstr "Descarrega els següents capítols"
 
-#: librarybrowser.lua:1067
+#: librarybrowser.lua:1068
 msgid "Multi-source Search…"
 msgstr ""
 
-#: librarybrowser.lua:1093
+#: librarybrowser.lua:1094
 msgid "View: %1…"
 msgstr ""
 
-#: librarybrowser.lua:1109 settingsbrowser.lua:35
+#: librarybrowser.lua:1110 settingsbrowser.lua:81 settingsbrowser.lua:172
 msgid "Settings"
 msgstr "Configuració"
 
-#: librarybrowser.lua:1133
+#: librarybrowser.lua:1134
 msgid "Check for Updates"
 msgstr "Comprova si hi ha actualitzacions"
 
-#: librarybrowser.lua:1161
+#: librarybrowser.lua:1162
 msgid ""
 "Could not check for updates:\n"
 "%1"
@@ -666,11 +666,11 @@ msgstr ""
 "No s'ha pogut comprovar si hi ha actualitzacions:\n"
 "%1"
 
-#: librarybrowser.lua:1166
+#: librarybrowser.lua:1167
 msgid "Plugin is up to date (%1)."
 msgstr "El complement està al dia (%1)."
 
-#: librarybrowser.lua:1174
+#: librarybrowser.lua:1175
 msgid ""
 "Update available: %1\n"
 "Installed: %2"
@@ -678,11 +678,11 @@ msgstr ""
 "Actualització disponible: %1\n"
 "Instal·lada: %2"
 
-#: librarybrowser.lua:1176
+#: librarybrowser.lua:1177
 msgid "unknown"
 msgstr "desconeguda"
 
-#: librarybrowser.lua:1180
+#: librarybrowser.lua:1181
 msgid ""
 "Latest: %1\n"
 "Installed version unknown."
@@ -690,11 +690,11 @@ msgstr ""
 "Última: %1\n"
 "La versió instal·lada és desconeguda."
 
-#: librarybrowser.lua:1186
+#: librarybrowser.lua:1187
 msgid "Download & Install"
 msgstr "Descarrega i instal·la"
 
-#: librarybrowser.lua:1198
+#: librarybrowser.lua:1199
 msgid ""
 "Update failed:\n"
 "%1"
@@ -702,20 +702,20 @@ msgstr ""
 "L'actualització ha fallat:\n"
 "%1"
 
-#: librarybrowser.lua:1202
+#: librarybrowser.lua:1203
 msgid "Updated to %1. Restart KOReader to apply."
 msgstr "Actualitzat a %1. Reinicia KOReader per aplicar-ho."
 
-#: librarybrowser.lua:1229
+#: librarybrowser.lua:1230
 msgid "'%1' is no longer installed. Hold to remove it."
 msgstr "'%1' ja no està instal·lat. Mantén premut per eliminar-lo."
 
-#: librarybrowser.lua:1260
+#: librarybrowser.lua:1261
 #, fuzzy
 msgid "'%1' is no longer installed."
 msgstr "La font ja no està instal·lada."
 
-#: librarybrowser.lua:1269 mangabrowser.lua:444
+#: librarybrowser.lua:1270 mangabrowser.lua:444
 msgid ""
 "Could not load chapters:\n"
 "%1"
@@ -723,61 +723,61 @@ msgstr ""
 "No s'han pogut carregar els capítols:\n"
 "%1"
 
-#: librarybrowser.lua:1310 mangabrowser.lua:616
+#: librarybrowser.lua:1311 mangabrowser.lua:616
 msgid "All %1 chapters are already downloaded locally."
 msgstr ""
 
-#: librarybrowser.lua:1323
+#: librarybrowser.lua:1324
 #, fuzzy
 msgid "Queued %1 chapter(s) of '%2' for download."
 msgstr "No hi ha capítols per descarregar."
 
-#: librarybrowser.lua:1324 mangabrowser.lua:588
+#: librarybrowser.lua:1325 mangabrowser.lua:588
 msgid "View Progress"
 msgstr ""
 
-#: librarybrowser.lua:1325
+#: librarybrowser.lua:1326
 msgid "OK"
 msgstr ""
 
-#: librarybrowser.lua:1351
+#: librarybrowser.lua:1352
 msgid "Open chapter list"
 msgstr ""
 
-#: librarybrowser.lua:1361
+#: librarybrowser.lua:1362
 #, fuzzy
 msgid "Download all chapters"
 msgstr "Capítols descarregats"
 
-#: librarybrowser.lua:1371
+#: librarybrowser.lua:1372
 #, fuzzy
 msgid "Delete %1 downloaded chapter(s)…"
 msgstr "Capítols descarregats"
 
-#: librarybrowser.lua:1387
+#: librarybrowser.lua:1388
 #, fuzzy
 msgid "Remove from library…"
 msgstr "'%1' eliminat de la biblioteca"
 
-#: librarybrowser.lua:1391
+#: librarybrowser.lua:1392
 msgid "Remove '%1' from your library?"
 msgstr "Voleu eliminar '%1' de la biblioteca?"
 
-#: main.lua:238
+#: main.lua:241
 msgid "Aidoku"
 msgstr "Aidoku"
 
-#: main.lua:245
+#: main.lua:248 main.lua:250
 msgid "AidokuRunner for KOReader"
 msgstr "AidokuRunner per a KOReader"
 
-#: main.lua:263
+#: main.lua:269
 msgid "aidoku-run binary not found. Rebuild the plugin with koreader/build.sh."
 msgstr ""
 "No s'ha trobat el binari aidoku-run. Torna a compilar el complement amb "
 "koreader/build.sh."
 
-#: main.lua:269
+#: main.lua:275
 msgid "Could not open the downloads database. Is storage writable?"
 msgstr ""
 "No s'ha pogut obrir la base de dades de descàrregues. L'emmagatzematge té "
@@ -1069,11 +1069,11 @@ msgstr ""
 msgid "Chapter %1"
 msgstr "Capítol %1"
 
-#: repobrowser.lua:24
+#: repobrowser.lua:26
 msgid "Source repository"
 msgstr "Repositori de fonts"
 
-#: repobrowser.lua:51
+#: repobrowser.lua:50
 msgid ""
 "Could not load repository:\n"
 "%1"
@@ -1081,7 +1081,7 @@ msgstr ""
 "No s'ha pogut carregar el repositori:\n"
 "%1"
 
-#: repobrowser.lua:105
+#: repobrowser.lua:104
 msgid ""
 "Install failed:\n"
 "%1"
@@ -1089,27 +1089,27 @@ msgstr ""
 "La instal·lació ha fallat:\n"
 "%1"
 
-#: repobrowser.lua:113
+#: repobrowser.lua:112
 msgid "Installed %1"
 msgstr "%1 instal·lat"
 
-#: searchbrowser.lua:18
+#: searchbrowser.lua:31
 msgid "Hold a result to add/remove from library"
 msgstr "Mantén premut un resultat per afegir-lo o treure'l de la biblioteca"
 
-#: searchbrowser.lua:80
+#: searchbrowser.lua:79
 msgid "Search manga"
 msgstr "Cerca manga"
 
-#: searchbrowser.lua:112
+#: searchbrowser.lua:111
 msgid "Filters (%1 set)…"
 msgstr "Filtres (%1 definits)…"
 
-#: searchbrowser.lua:112
+#: searchbrowser.lua:111
 msgid "Filters…"
 msgstr "Filtres…"
 
-#: searchbrowser.lua:158
+#: searchbrowser.lua:157
 msgid ""
 "Search failed:\n"
 "%1"
@@ -1117,121 +1117,133 @@ msgstr ""
 "La cerca ha fallat:\n"
 "%1"
 
-#: searchbrowser.lua:163
+#: searchbrowser.lua:162
 msgid "No results."
 msgstr "Sense resultats."
 
-#: settingsbrowser.lua:45
-msgid "Ask"
-msgstr "Pregunta"
-
-#: settingsbrowser.lua:45
-msgid "Auto"
-msgstr "Automàtic"
-
-#: settingsbrowser.lua:45 settingsbrowser.lua:128 sourcesettingsbrowser.lua:92
+#: settingsbrowser.lua:42 settingsbrowser.lua:156 sourcesettingsbrowser.lua:92
 msgid "Off"
 msgstr "Desactivat"
 
-#: settingsbrowser.lua:78
+#: settingsbrowser.lua:44
+msgid "Auto"
+msgstr "Automàtic"
+
+#: settingsbrowser.lua:46
+msgid "Ask"
+msgstr "Pregunta"
+
+#: settingsbrowser.lua:60
+msgid "Auto (Follow KOReader)"
+msgstr ""
+
+#: settingsbrowser.lua:60
+msgid "Auto (System)"
+msgstr ""
+
+#: settingsbrowser.lua:101
 msgid "N/A"
 msgstr "N/D"
 
-#: settingsbrowser.lua:79 sourcesettingsbrowser.lua:97
+#: settingsbrowser.lua:102 sourcesettingsbrowser.lua:97
 msgid "none"
 msgstr "cap"
 
-#: settingsbrowser.lua:81
+#: settingsbrowser.lua:104
 msgid " (using %1)"
 msgstr " (usant %1)"
 
-#: settingsbrowser.lua:85 sourcesettingsbrowser.lua:102
+#: settingsbrowser.lua:108 sourcesettingsbrowser.lua:102
 msgid "not set"
 msgstr "no definit"
 
-#: settingsbrowser.lua:87
+#: settingsbrowser.lua:110
 msgid "Custom"
 msgstr "Personalitzat"
 
-#: settingsbrowser.lua:87
+#: settingsbrowser.lua:110
 msgid "Default"
 msgstr "Per defecte"
 
-#: settingsbrowser.lua:90
+#: settingsbrowser.lua:113
 msgid "Default (8)"
 msgstr "Per defecte (8)"
 
-#: settingsbrowser.lua:96
+#: settingsbrowser.lua:119
 msgid "Sources"
 msgstr "Fonts"
 
-#: settingsbrowser.lua:106 settingsbrowser.lua:157
+#: settingsbrowser.lua:124
+msgid "Language"
+msgstr ""
+
+#: settingsbrowser.lua:134 settingsbrowser.lua:189
 msgid "Prefetch next chapters"
 msgstr "Precàrrega dels següents capítols"
 
-#: settingsbrowser.lua:113
+#: settingsbrowser.lua:141
 msgid "Auto-advance at chapter end"
 msgstr "Avanç automàtic al final del capítol"
 
-#: settingsbrowser.lua:118
+#: settingsbrowser.lua:146
 msgid "Storage limit"
 msgstr "Límit d'emmagatzematge"
 
-#: settingsbrowser.lua:121 settingsbrowser.lua:224
+#: settingsbrowser.lua:149 settingsbrowser.lua:256
 msgid "Source repository URL"
 msgstr "URL del repositori de fonts"
 
-#: settingsbrowser.lua:122 settingsbrowser.lua:256
+#: settingsbrowser.lua:150 settingsbrowser.lua:288
 msgid "Network concurrency"
 msgstr "Concurrència de xarxa"
 
-#: settingsbrowser.lua:128 sourcesettingsbrowser.lua:92
+#: settingsbrowser.lua:156 sourcesettingsbrowser.lua:92
 msgid "On"
 msgstr "Activat"
 
-#: settingsbrowser.lua:132 settingsbrowser.lua:431
+#: settingsbrowser.lua:160 settingsbrowser.lua:472
 msgid "Ephemeral storage path"
 msgstr "Ruta d'emmagatzematge efímer"
 
-#: settingsbrowser.lua:136 settingsbrowser.lua:293
+#: settingsbrowser.lua:164 settingsbrowser.lua:325
 msgid "FlareSolverr host"
 msgstr "Servidor FlareSolverr"
 
-#: settingsbrowser.lua:137
+#: settingsbrowser.lua:165
 msgid "Import cookies"
 msgstr "Importa galetes"
 
-#: settingsbrowser.lua:138
+#: settingsbrowser.lua:166
 msgid "Clear stored cookies"
 msgstr "Esborra les galetes emmagatzemades"
 
-#: settingsbrowser.lua:158
+#: settingsbrowser.lua:190
 msgid "Chapters to download ahead while reading. 0 turns it off."
 msgstr "Capítols a descarregar per avançat mentre llegeixes. 0 ho desactiva."
 
-#: settingsbrowser.lua:168 settingsbrowser.lua:202 settingsbrowser.lua:237
-#: settingsbrowser.lua:267 settingsbrowser.lua:304 settingsbrowser.lua:442
+#: settingsbrowser.lua:200 settingsbrowser.lua:234 settingsbrowser.lua:269
+#: settingsbrowser.lua:299 settingsbrowser.lua:336 settingsbrowser.lua:483
 #: sourcesettingsbrowser.lua:240
 msgid "Set"
 msgstr "Defineix"
 
-#: settingsbrowser.lua:177 settingsbrowser.lua:280
+#: settingsbrowser.lua:209 settingsbrowser.lua:312
 msgid "Enter a number from 0 to %1."
 msgstr ""
 
-#: settingsbrowser.lua:191
+#: settingsbrowser.lua:223
 msgid "Storage limit (MB)"
 msgstr "Límit d'emmagatzematge (MB)"
 
-#: settingsbrowser.lua:192
+#: settingsbrowser.lua:224
 msgid "Oldest chapters are deleted first. 0 means no limit."
 msgstr "Els capítols més antics s'eliminen primer. 0 vol dir sense límit."
 
-#: settingsbrowser.lua:211
+#: settingsbrowser.lua:243
 msgid "Enter 0 or a positive number."
 msgstr ""
 
-#: settingsbrowser.lua:226
+#: settingsbrowser.lua:258
 msgid ""
 "Repository index URL. Leave blank for the default:\n"
 "%1"
@@ -1239,7 +1251,7 @@ msgstr ""
 "URL de l'índex del repositori. Deixa-ho en blanc per usar el predeterminat:\n"
 "%1"
 
-#: settingsbrowser.lua:257
+#: settingsbrowser.lua:289
 msgid ""
 "Parallel requests per source. Blank or 0 for default (8). Higher uses more "
 "memory."
@@ -1247,22 +1259,31 @@ msgstr ""
 "Peticions paral·leles per font. En blanc o 0 per al valor per defecte (8). "
 "Un valor més alt fa servir més memòria."
 
-#: settingsbrowser.lua:294
+#: settingsbrowser.lua:326
 msgid ""
 "Solves Cloudflare challenges, e.g. localhost:8191. Leave blank to disable."
 msgstr ""
 "Resol els reptes de Cloudflare, p. ex. localhost:8191. Deixa-ho en blanc per "
 "desactivar-ho."
 
-#: settingsbrowser.lua:296
+#: settingsbrowser.lua:328
 msgid "host:port"
 msgstr "host:port"
 
-#: settingsbrowser.lua:322
+#: settingsbrowser.lua:354
 msgid "Long-press a cookies.txt to import it"
 msgstr "Mantén premut un cookies.txt per importar-lo"
 
-#: settingsbrowser.lua:332
+#: settingsbrowser.lua:364
+msgid "No usable (non-expired) cookies found in that file."
+msgstr ""
+
+#: settingsbrowser.lua:368
+#, fuzzy
+msgid "Imported %1 cookie(s)."
+msgstr "Importa galetes"
+
+#: settingsbrowser.lua:373
 msgid ""
 "Import failed:\n"
 "%1"
@@ -1270,21 +1291,21 @@ msgstr ""
 "La importació ha fallat:\n"
 "%1"
 
-#: settingsbrowser.lua:342
+#: settingsbrowser.lua:383
 msgid "Clear cookies for all sources? This can't be undone."
 msgstr ""
 "Voleu esborrar les galetes de totes les fonts? Aquesta acció no es pot "
 "desfer."
 
-#: settingsbrowser.lua:343
+#: settingsbrowser.lua:384
 msgid "Clear"
 msgstr "Esborra"
 
-#: settingsbrowser.lua:348
+#: settingsbrowser.lua:389
 msgid "Cookies cleared."
 msgstr "Galetes esborrades."
 
-#: settingsbrowser.lua:350
+#: settingsbrowser.lua:391
 msgid ""
 "Could not clear cookies:\n"
 "%1"
@@ -1292,45 +1313,50 @@ msgstr ""
 "No s'han pogut esborrar les galetes:\n"
 "%1"
 
-#: settingsbrowser.lua:418
+#: settingsbrowser.lua:459
 msgid "%1 doesn't exist or isn't writable."
 msgstr "%1 no existeix o no té permís d'escriptura."
 
-#: settingsbrowser.lua:424
+#: settingsbrowser.lua:465
 msgid ""
 "The Ephemeral storage path can't be, contain, or be inside the normal "
 "downloads folder."
 msgstr ""
 
-#: settingsbrowser.lua:432
+#: settingsbrowser.lua:473
 msgid "Where chapters are stored in Ephemeral Mode."
 msgstr "On s'emmagatzemen els capítols en mode efímer."
 
-#: settingsbrowser.lua:541
+#: settingsbrowser.lua:539
+#, fuzzy
+msgid "Select Language"
+msgstr "Cerca a totes les fonts"
+
+#: settingsbrowser.lua:612
 msgid "Ephemeral Mode limits prefetch to 1 chapter."
 msgstr "El mode efímer limita la precàrrega a 1 capítol."
 
-#: settingsbrowser.lua:551
+#: settingsbrowser.lua:622
 msgid "Storage limit is off in Ephemeral Mode."
 msgstr "El límit d'emmagatzematge està desactivat en mode efímer."
 
-#: sourcesbrowser.lua:20
+#: sourcesbrowser.lua:24
 msgid "Aidoku sources"
 msgstr "Fonts d'Aidoku"
 
-#: sourcesbrowser.lua:103
+#: sourcesbrowser.lua:101
 msgid "Couldn't read this source. Try again, or reinstall it."
 msgstr ""
 
-#: sourcesbrowser.lua:135
+#: sourcesbrowser.lua:133
 msgid "Source settings"
 msgstr "Configuració de la font"
 
-#: sourcesbrowser.lua:150
+#: sourcesbrowser.lua:148
 msgid "Remove installed source"
 msgstr "Elimina la font instal·lada"
 
-#: sourcesbrowser.lua:154
+#: sourcesbrowser.lua:152
 msgid "Remove source '%1'?"
 msgstr "Voleu eliminar la font '%1'?"
 

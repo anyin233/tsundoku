@@ -82,6 +82,9 @@ function Aidoku:init()
     -- uses, without duplicating binArch()'s /proc/cpuinfo probing.
     self.bin_arch = bin_arch
     self.store = Store.new(dataSubdir(""))
+    if type(_.setLanguage) == "function" then
+        _.setLanguage(self.store:language())
+    end
     self.engine = Engine.new(self.path .. "/bin/" .. bin_arch .. "/aidoku-run", function()
         local concurrency = self.store:networkConcurrency()
         return {
@@ -243,6 +246,9 @@ end
 function Aidoku:addToMainMenu(menu_items)
     menu_items.aidoku = {
         text = _("AidokuRunner for KOReader"),
+        text_func = function()
+            return _("AidokuRunner for KOReader")
+        end,
         sorting_hint = "search",
         callback = function()
             self:onAidokuBrowseSources()

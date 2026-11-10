@@ -63,11 +63,11 @@ local function formatChapterRowTitle(manga_title, chapter_title, max_manga_chars
 end
 
 local DownloadsBrowser = Menu:extend{
-    title = _("Download Manager"),
     title_bar_left_icon = "appbar.menu",
 }
 
 function DownloadsBrowser:init()
+    self.title = _("Download Manager")
     self.view_mode = self.view_mode or "all" -- "all" | "by_manga" | "queue_only"
     self.cached_entries = {}
     self.item_table = {}

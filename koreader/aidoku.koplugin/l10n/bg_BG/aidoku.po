@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: aidoku.koplugin\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-10 23:25+0000\n"
+"POT-Creation-Date: 2026-11-10 23:33+0000\n"
 "PO-Revision-Date: 2026-10-08 09:53+0700\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -25,8 +25,8 @@ msgstr ""
 "Изтеглянето не успя:\n"
 "%1"
 
-#: downloadsbrowser.lua:66 globalsearchbrowser.lua:419 librarybrowser.lua:1059
-#: mangabrowser.lua:273 settingsbrowser.lua:97 sourcesbrowser.lua:24
+#: downloadsbrowser.lua:70 globalsearchbrowser.lua:419 librarybrowser.lua:1060
+#: mangabrowser.lua:273 settingsbrowser.lua:120 sourcesbrowser.lua:45
 #, fuzzy
 msgid "Download Manager"
 msgstr "Изтеглени глави"
@@ -220,7 +220,7 @@ msgstr ""
 "%1"
 
 #: downloadsbrowser.lua:566 downloadsbrowser.lua:660 downloadsbrowser.lua:680
-#: librarybrowser.lua:1376 librarybrowser.lua:1392 sourcesbrowser.lua:155
+#: librarybrowser.lua:1377 librarybrowser.lua:1393 sourcesbrowser.lua:153
 msgid "Remove"
 msgstr "Премахни"
 
@@ -242,7 +242,7 @@ msgstr "Източникът вече не е инсталиран."
 msgid "Remove all %1 downloaded chapters"
 msgstr "Все още няма изтеглени глави."
 
-#: downloadsbrowser.lua:659 librarybrowser.lua:1375
+#: downloadsbrowser.lua:659 librarybrowser.lua:1376
 #, fuzzy
 msgid "Remove all %1 downloaded chapters of '%2'?"
 msgstr "Все още няма изтеглени глави."
@@ -323,68 +323,68 @@ msgstr ""
 "Не можа да се провери за актуализации:\n"
 "%1"
 
-#: filterbrowser.lua:22
+#: filterbrowser.lua:47
 msgid "Search filters"
 msgstr "Филтри за търсене"
 
-#: filterbrowser.lua:74 filterbrowser.lua:152 mangabrowser.lua:153
+#: filterbrowser.lua:73 filterbrowser.lua:151 mangabrowser.lua:153
 msgid "Sort: %1"
 msgstr "Подреждане: %1"
 
-#: filterbrowser.lua:74
+#: filterbrowser.lua:73
 msgid "default"
 msgstr "по подразбиране"
 
-#: filterbrowser.lua:77
+#: filterbrowser.lua:76
 msgid "Sort: %1 (%2)"
 msgstr "Подреждане: %1 (%2)"
 
-#: filterbrowser.lua:77
+#: filterbrowser.lua:76
 msgid "ascending"
 msgstr "възходящо"
 
-#: filterbrowser.lua:77
+#: filterbrowser.lua:76
 msgid "descending"
 msgstr "низходящо"
 
-#: filterbrowser.lua:82 filterbrowser.lua:84 filterbrowser.lua:91
-#: filterbrowser.lua:108 filterbrowser.lua:110 sourcesettingsbrowser.lua:116
+#: filterbrowser.lua:81 filterbrowser.lua:83 filterbrowser.lua:90
+#: filterbrowser.lua:107 filterbrowser.lua:109 sourcesettingsbrowser.lua:116
 msgid "%1: %2"
 msgstr "%1: %2"
 
-#: filterbrowser.lua:82 filterbrowser.lua:91
+#: filterbrowser.lua:81 filterbrowser.lua:90
 msgid "any"
 msgstr "без значение"
 
-#: filterbrowser.lua:93
+#: filterbrowser.lua:92
 msgid "%1: %2 included, %3 excluded"
 msgstr "%1: включени %2, изключени %3"
 
-#: filterbrowser.lua:108
+#: filterbrowser.lua:107
 msgid "unset"
 msgstr "неустановено"
 
-#: filterbrowser.lua:110
+#: filterbrowser.lua:109
 msgid "no"
 msgstr "не"
 
-#: filterbrowser.lua:110
+#: filterbrowser.lua:109
 msgid "yes"
 msgstr "да"
 
-#: filterbrowser.lua:131
+#: filterbrowser.lua:130
 msgid "Clear all filters"
 msgstr "Изчисти всички филтри"
 
-#: filterbrowser.lua:132
+#: filterbrowser.lua:131
 msgid "Search with these filters"
 msgstr "Търси с тези филтри"
 
-#: filterbrowser.lua:179
+#: filterbrowser.lua:178
 msgid "Any"
 msgstr "Без значение"
 
-#: globalsearchbrowser.lua:26 globalsearchbrowser.lua:476
+#: globalsearchbrowser.lua:41 globalsearchbrowser.lua:476
 msgid "Multi-source Search"
 msgstr ""
 
@@ -428,13 +428,13 @@ msgstr "Търси във всички източници"
 msgid "Selected"
 msgstr ""
 
-#: globalsearchbrowser.lua:180 searchbrowser.lua:130
+#: globalsearchbrowser.lua:180 searchbrowser.lua:129
 #, fuzzy
 msgid "Downloaded all %1 ch"
 msgstr "Изтеглени глави"
 
 #: globalsearchbrowser.lua:182 librarybrowser.lua:949 mangabrowser.lua:145
-#: searchbrowser.lua:132
+#: searchbrowser.lua:131
 #, fuzzy
 msgid "Downloaded %1 ch"
 msgstr "Изтеглени глави"
@@ -469,7 +469,7 @@ msgstr ""
 msgid "Search in %1 selected source(s)"
 msgstr "Търси във всички източници"
 
-#: globalsearchbrowser.lua:247 searchbrowser.lua:81
+#: globalsearchbrowser.lua:247 searchbrowser.lua:80
 msgid "Title…"
 msgstr "Заглавие…"
 
@@ -478,14 +478,14 @@ msgstr "Заглавие…"
 msgid "Sources…"
 msgstr "Източници"
 
-#: globalsearchbrowser.lua:257 mangabrowser.lua:674 searchbrowser.lua:84
-#: settingsbrowser.lua:163 settingsbrowser.lua:197 settingsbrowser.lua:232
-#: settingsbrowser.lua:262 settingsbrowser.lua:299 settingsbrowser.lua:437
+#: globalsearchbrowser.lua:257 mangabrowser.lua:674 searchbrowser.lua:83
+#: settingsbrowser.lua:195 settingsbrowser.lua:229 settingsbrowser.lua:264
+#: settingsbrowser.lua:294 settingsbrowser.lua:331 settingsbrowser.lua:478
 #: sourcesettingsbrowser.lua:235
 msgid "Cancel"
 msgstr "Отказ"
 
-#: globalsearchbrowser.lua:262 searchbrowser.lua:89
+#: globalsearchbrowser.lua:262 searchbrowser.lua:88
 msgid "Search"
 msgstr "Търсене"
 
@@ -549,15 +549,15 @@ msgstr ""
 msgid "Invert all selections"
 msgstr ""
 
-#: globalsearchbrowser.lua:583 mangabrowser.lua:219 searchbrowser.lua:216
+#: globalsearchbrowser.lua:583 mangabrowser.lua:219 searchbrowser.lua:215
 msgid "Could not update library."
 msgstr ""
 
-#: globalsearchbrowser.lua:591 mangabrowser.lua:227 searchbrowser.lua:224
+#: globalsearchbrowser.lua:591 mangabrowser.lua:227 searchbrowser.lua:223
 msgid "Added '%1' to library"
 msgstr "„%1“ е добавено към библиотеката"
 
-#: globalsearchbrowser.lua:591 mangabrowser.lua:227 searchbrowser.lua:224
+#: globalsearchbrowser.lua:591 mangabrowser.lua:227 searchbrowser.lua:223
 msgid "Removed '%1' from library"
 msgstr "„%1“ е премахнато от библиотеката"
 
@@ -565,11 +565,11 @@ msgstr "„%1“ е премахнато от библиотеката"
 msgid "Compact list (title only)"
 msgstr ""
 
-#: librarybrowser.lua:64 settingsbrowser.lua:49
+#: librarybrowser.lua:64 settingsbrowser.lua:56
 msgid "Compact list"
 msgstr ""
 
-#: librarybrowser.lua:68 settingsbrowser.lua:50
+#: librarybrowser.lua:68 settingsbrowser.lua:52
 msgid "List (cover + title)"
 msgstr ""
 
@@ -581,15 +581,15 @@ msgstr ""
 msgid "Grid (cover + title)"
 msgstr ""
 
-#: librarybrowser.lua:74 settingsbrowser.lua:51
+#: librarybrowser.lua:74 settingsbrowser.lua:54
 msgid "Grid"
 msgstr ""
 
-#: librarybrowser.lua:557
+#: librarybrowser.lua:561 librarybrowser.lua:986
 msgid "Library"
 msgstr "Библиотека"
 
-#: librarybrowser.lua:879 settingsbrowser.lua:127
+#: librarybrowser.lua:879 settingsbrowser.lua:155
 msgid "Ephemeral Mode"
 msgstr "Временен режим"
 
@@ -618,46 +618,46 @@ msgid "Library is empty. Use the menu (top left) to find manga."
 msgstr ""
 "Библиотеката е празна. Използвайте менюто (горе вляво), за да намерите манга."
 
-#: librarybrowser.lua:1022 settingsbrowser.lua:101
+#: librarybrowser.lua:1023 settingsbrowser.lua:129
 #, fuzzy
 msgid "Library view"
 msgstr "Библиотека"
 
-#: librarybrowser.lua:1048
+#: librarybrowser.lua:1049
 msgid "Sort: Name"
 msgstr "Подреждане: Име"
 
-#: librarybrowser.lua:1049
+#: librarybrowser.lua:1050
 msgid "Sort: Last read"
 msgstr "Подреждане: Последно прочетени"
 
-#: librarybrowser.lua:1050
+#: librarybrowser.lua:1051
 #, fuzzy
 msgid "Sort: Downloaded first"
 msgstr "Подреждане: Най-стари първо"
 
-#: librarybrowser.lua:1058 mangabrowser.lua:272
+#: librarybrowser.lua:1059 mangabrowser.lua:272
 #, fuzzy
 msgid "Download Manager (%1 active)"
 msgstr "Изтегли следващите глави"
 
-#: librarybrowser.lua:1067
+#: librarybrowser.lua:1068
 msgid "Multi-source Search…"
 msgstr ""
 
-#: librarybrowser.lua:1093
+#: librarybrowser.lua:1094
 msgid "View: %1…"
 msgstr ""
 
-#: librarybrowser.lua:1109 settingsbrowser.lua:35
+#: librarybrowser.lua:1110 settingsbrowser.lua:81 settingsbrowser.lua:172
 msgid "Settings"
 msgstr "Настройки"
 
-#: librarybrowser.lua:1133
+#: librarybrowser.lua:1134
 msgid "Check for Updates"
 msgstr "Провери за актуализации"
 
-#: librarybrowser.lua:1161
+#: librarybrowser.lua:1162
 msgid ""
 "Could not check for updates:\n"
 "%1"
@@ -665,11 +665,11 @@ msgstr ""
 "Не можа да се провери за актуализации:\n"
 "%1"
 
-#: librarybrowser.lua:1166
+#: librarybrowser.lua:1167
 msgid "Plugin is up to date (%1)."
 msgstr "Приставката е актуална (%1)."
 
-#: librarybrowser.lua:1174
+#: librarybrowser.lua:1175
 msgid ""
 "Update available: %1\n"
 "Installed: %2"
@@ -677,11 +677,11 @@ msgstr ""
 "Налична актуализация: %1\n"
 "Инсталирана: %2"
 
-#: librarybrowser.lua:1176
+#: librarybrowser.lua:1177
 msgid "unknown"
 msgstr "неизвестна"
 
-#: librarybrowser.lua:1180
+#: librarybrowser.lua:1181
 msgid ""
 "Latest: %1\n"
 "Installed version unknown."
@@ -689,11 +689,11 @@ msgstr ""
 "Последна: %1\n"
 "Инсталираната версия е неизвестна."
 
-#: librarybrowser.lua:1186
+#: librarybrowser.lua:1187
 msgid "Download & Install"
 msgstr "Изтегли и инсталирай"
 
-#: librarybrowser.lua:1198
+#: librarybrowser.lua:1199
 msgid ""
 "Update failed:\n"
 "%1"
@@ -701,20 +701,20 @@ msgstr ""
 "Актуализацията не успя:\n"
 "%1"
 
-#: librarybrowser.lua:1202
+#: librarybrowser.lua:1203
 msgid "Updated to %1. Restart KOReader to apply."
 msgstr "Актуализирано до %1. Рестартирайте KOReader, за да се приложи."
 
-#: librarybrowser.lua:1229
+#: librarybrowser.lua:1230
 msgid "'%1' is no longer installed. Hold to remove it."
 msgstr "„%1“ вече не е инсталирано. Задръжте, за да го премахнете."
 
-#: librarybrowser.lua:1260
+#: librarybrowser.lua:1261
 #, fuzzy
 msgid "'%1' is no longer installed."
 msgstr "Източникът вече не е инсталиран."
 
-#: librarybrowser.lua:1269 mangabrowser.lua:444
+#: librarybrowser.lua:1270 mangabrowser.lua:444
 msgid ""
 "Could not load chapters:\n"
 "%1"
@@ -722,61 +722,61 @@ msgstr ""
 "Главите не можаха да се заредят:\n"
 "%1"
 
-#: librarybrowser.lua:1310 mangabrowser.lua:616
+#: librarybrowser.lua:1311 mangabrowser.lua:616
 msgid "All %1 chapters are already downloaded locally."
 msgstr ""
 
-#: librarybrowser.lua:1323
+#: librarybrowser.lua:1324
 #, fuzzy
 msgid "Queued %1 chapter(s) of '%2' for download."
 msgstr "Няма глави за изтегляне."
 
-#: librarybrowser.lua:1324 mangabrowser.lua:588
+#: librarybrowser.lua:1325 mangabrowser.lua:588
 msgid "View Progress"
 msgstr ""
 
-#: librarybrowser.lua:1325
+#: librarybrowser.lua:1326
 msgid "OK"
 msgstr ""
 
-#: librarybrowser.lua:1351
+#: librarybrowser.lua:1352
 msgid "Open chapter list"
 msgstr ""
 
-#: librarybrowser.lua:1361
+#: librarybrowser.lua:1362
 #, fuzzy
 msgid "Download all chapters"
 msgstr "Изтеглени глави"
 
-#: librarybrowser.lua:1371
+#: librarybrowser.lua:1372
 #, fuzzy
 msgid "Delete %1 downloaded chapter(s)…"
 msgstr "Изтеглени глави"
 
-#: librarybrowser.lua:1387
+#: librarybrowser.lua:1388
 #, fuzzy
 msgid "Remove from library…"
 msgstr "„%1“ е премахнато от библиотеката"
 
-#: librarybrowser.lua:1391
+#: librarybrowser.lua:1392
 msgid "Remove '%1' from your library?"
 msgstr "Да се премахне ли „%1“ от библиотеката ви?"
 
-#: main.lua:238
+#: main.lua:241
 msgid "Aidoku"
 msgstr "Aidoku"
 
-#: main.lua:245
+#: main.lua:248 main.lua:250
 msgid "AidokuRunner for KOReader"
 msgstr "AidokuRunner за KOReader"
 
-#: main.lua:263
+#: main.lua:269
 msgid "aidoku-run binary not found. Rebuild the plugin with koreader/build.sh."
 msgstr ""
 "Двоичният файл aidoku-run не е намерен. Компилирайте приставката наново с "
 "koreader/build.sh."
 
-#: main.lua:269
+#: main.lua:275
 msgid "Could not open the downloads database. Is storage writable?"
 msgstr ""
 "Базата данни с изтеглянията не можа да се отвори. Дали паметта е с права за "
@@ -1067,11 +1067,11 @@ msgstr ""
 msgid "Chapter %1"
 msgstr "Глава %1"
 
-#: repobrowser.lua:24
+#: repobrowser.lua:26
 msgid "Source repository"
 msgstr "Хранилище на източници"
 
-#: repobrowser.lua:51
+#: repobrowser.lua:50
 msgid ""
 "Could not load repository:\n"
 "%1"
@@ -1079,7 +1079,7 @@ msgstr ""
 "Хранилището не можа да се зареди:\n"
 "%1"
 
-#: repobrowser.lua:105
+#: repobrowser.lua:104
 msgid ""
 "Install failed:\n"
 "%1"
@@ -1087,27 +1087,27 @@ msgstr ""
 "Инсталирането не успя:\n"
 "%1"
 
-#: repobrowser.lua:113
+#: repobrowser.lua:112
 msgid "Installed %1"
 msgstr "Инсталирано: %1"
 
-#: searchbrowser.lua:18
+#: searchbrowser.lua:31
 msgid "Hold a result to add/remove from library"
 msgstr "Задръжте резултат, за да го добавите или премахнете от библиотеката"
 
-#: searchbrowser.lua:80
+#: searchbrowser.lua:79
 msgid "Search manga"
 msgstr "Търси манга"
 
-#: searchbrowser.lua:112
+#: searchbrowser.lua:111
 msgid "Filters (%1 set)…"
 msgstr "Филтри (зададени: %1)…"
 
-#: searchbrowser.lua:112
+#: searchbrowser.lua:111
 msgid "Filters…"
 msgstr "Филтри…"
 
-#: searchbrowser.lua:158
+#: searchbrowser.lua:157
 msgid ""
 "Search failed:\n"
 "%1"
@@ -1115,121 +1115,133 @@ msgstr ""
 "Търсенето не успя:\n"
 "%1"
 
-#: searchbrowser.lua:163
+#: searchbrowser.lua:162
 msgid "No results."
 msgstr "Няма резултати."
 
-#: settingsbrowser.lua:45
-msgid "Ask"
-msgstr "Питай"
-
-#: settingsbrowser.lua:45
-msgid "Auto"
-msgstr "Автоматично"
-
-#: settingsbrowser.lua:45 settingsbrowser.lua:128 sourcesettingsbrowser.lua:92
+#: settingsbrowser.lua:42 settingsbrowser.lua:156 sourcesettingsbrowser.lua:92
 msgid "Off"
 msgstr "Изключено"
 
-#: settingsbrowser.lua:78
+#: settingsbrowser.lua:44
+msgid "Auto"
+msgstr "Автоматично"
+
+#: settingsbrowser.lua:46
+msgid "Ask"
+msgstr "Питай"
+
+#: settingsbrowser.lua:60
+msgid "Auto (Follow KOReader)"
+msgstr ""
+
+#: settingsbrowser.lua:60
+msgid "Auto (System)"
+msgstr ""
+
+#: settingsbrowser.lua:101
 msgid "N/A"
 msgstr "Н/П"
 
-#: settingsbrowser.lua:79 sourcesettingsbrowser.lua:97
+#: settingsbrowser.lua:102 sourcesettingsbrowser.lua:97
 msgid "none"
 msgstr "няма"
 
-#: settingsbrowser.lua:81
+#: settingsbrowser.lua:104
 msgid " (using %1)"
 msgstr " (използва %1)"
 
-#: settingsbrowser.lua:85 sourcesettingsbrowser.lua:102
+#: settingsbrowser.lua:108 sourcesettingsbrowser.lua:102
 msgid "not set"
 msgstr "не е зададено"
 
-#: settingsbrowser.lua:87
+#: settingsbrowser.lua:110
 msgid "Custom"
 msgstr "Персонализиран"
 
-#: settingsbrowser.lua:87
+#: settingsbrowser.lua:110
 msgid "Default"
 msgstr "По подразбиране"
 
-#: settingsbrowser.lua:90
+#: settingsbrowser.lua:113
 msgid "Default (8)"
 msgstr "По подразбиране (8)"
 
-#: settingsbrowser.lua:96
+#: settingsbrowser.lua:119
 msgid "Sources"
 msgstr "Източници"
 
-#: settingsbrowser.lua:106 settingsbrowser.lua:157
+#: settingsbrowser.lua:124
+msgid "Language"
+msgstr ""
+
+#: settingsbrowser.lua:134 settingsbrowser.lua:189
 msgid "Prefetch next chapters"
 msgstr "Предварително изтегляне на следващите глави"
 
-#: settingsbrowser.lua:113
+#: settingsbrowser.lua:141
 msgid "Auto-advance at chapter end"
 msgstr "Автоматично преминаване в края на главата"
 
-#: settingsbrowser.lua:118
+#: settingsbrowser.lua:146
 msgid "Storage limit"
 msgstr "Ограничение на паметта"
 
-#: settingsbrowser.lua:121 settingsbrowser.lua:224
+#: settingsbrowser.lua:149 settingsbrowser.lua:256
 msgid "Source repository URL"
 msgstr "URL на хранилището на източници"
 
-#: settingsbrowser.lua:122 settingsbrowser.lua:256
+#: settingsbrowser.lua:150 settingsbrowser.lua:288
 msgid "Network concurrency"
 msgstr "Паралелност на мрежата"
 
-#: settingsbrowser.lua:128 sourcesettingsbrowser.lua:92
+#: settingsbrowser.lua:156 sourcesettingsbrowser.lua:92
 msgid "On"
 msgstr "Включено"
 
-#: settingsbrowser.lua:132 settingsbrowser.lua:431
+#: settingsbrowser.lua:160 settingsbrowser.lua:472
 msgid "Ephemeral storage path"
 msgstr "Път за временно хранилище"
 
-#: settingsbrowser.lua:136 settingsbrowser.lua:293
+#: settingsbrowser.lua:164 settingsbrowser.lua:325
 msgid "FlareSolverr host"
 msgstr "Сървър на FlareSolverr"
 
-#: settingsbrowser.lua:137
+#: settingsbrowser.lua:165
 msgid "Import cookies"
 msgstr "Импортирай бисквитки"
 
-#: settingsbrowser.lua:138
+#: settingsbrowser.lua:166
 msgid "Clear stored cookies"
 msgstr "Изчисти запазените бисквитки"
 
-#: settingsbrowser.lua:158
+#: settingsbrowser.lua:190
 msgid "Chapters to download ahead while reading. 0 turns it off."
 msgstr "Глави за изтегляне напред при четене. 0 го изключва."
 
-#: settingsbrowser.lua:168 settingsbrowser.lua:202 settingsbrowser.lua:237
-#: settingsbrowser.lua:267 settingsbrowser.lua:304 settingsbrowser.lua:442
+#: settingsbrowser.lua:200 settingsbrowser.lua:234 settingsbrowser.lua:269
+#: settingsbrowser.lua:299 settingsbrowser.lua:336 settingsbrowser.lua:483
 #: sourcesettingsbrowser.lua:240
 msgid "Set"
 msgstr "Задай"
 
-#: settingsbrowser.lua:177 settingsbrowser.lua:280
+#: settingsbrowser.lua:209 settingsbrowser.lua:312
 msgid "Enter a number from 0 to %1."
 msgstr ""
 
-#: settingsbrowser.lua:191
+#: settingsbrowser.lua:223
 msgid "Storage limit (MB)"
 msgstr "Ограничение на паметта (MB)"
 
-#: settingsbrowser.lua:192
+#: settingsbrowser.lua:224
 msgid "Oldest chapters are deleted first. 0 means no limit."
 msgstr "Първо се изтриват най-старите глави. 0 означава без ограничение."
 
-#: settingsbrowser.lua:211
+#: settingsbrowser.lua:243
 msgid "Enter 0 or a positive number."
 msgstr ""
 
-#: settingsbrowser.lua:226
+#: settingsbrowser.lua:258
 msgid ""
 "Repository index URL. Leave blank for the default:\n"
 "%1"
@@ -1237,7 +1249,7 @@ msgstr ""
 "URL на индекса на хранилището. Оставете празно за стандартния:\n"
 "%1"
 
-#: settingsbrowser.lua:257
+#: settingsbrowser.lua:289
 msgid ""
 "Parallel requests per source. Blank or 0 for default (8). Higher uses more "
 "memory."
@@ -1245,22 +1257,31 @@ msgstr ""
 "Паралелни заявки за източник. Празно или 0 за стандартните (8). По-високите "
 "стойности използват повече памет."
 
-#: settingsbrowser.lua:294
+#: settingsbrowser.lua:326
 msgid ""
 "Solves Cloudflare challenges, e.g. localhost:8191. Leave blank to disable."
 msgstr ""
 "Решава Cloudflare предизвикателства, напр. localhost:8191. Оставете празно, "
 "за да изключите."
 
-#: settingsbrowser.lua:296
+#: settingsbrowser.lua:328
 msgid "host:port"
 msgstr "хост:порт"
 
-#: settingsbrowser.lua:322
+#: settingsbrowser.lua:354
 msgid "Long-press a cookies.txt to import it"
 msgstr "Задръжте cookies.txt, за да го импортирате"
 
-#: settingsbrowser.lua:332
+#: settingsbrowser.lua:364
+msgid "No usable (non-expired) cookies found in that file."
+msgstr ""
+
+#: settingsbrowser.lua:368
+#, fuzzy
+msgid "Imported %1 cookie(s)."
+msgstr "Импортирай бисквитки"
+
+#: settingsbrowser.lua:373
 msgid ""
 "Import failed:\n"
 "%1"
@@ -1268,20 +1289,20 @@ msgstr ""
 "Импортирането не успя:\n"
 "%1"
 
-#: settingsbrowser.lua:342
+#: settingsbrowser.lua:383
 msgid "Clear cookies for all sources? This can't be undone."
 msgstr ""
 "Да се изчистят бисквитките за всички източници? Това не може да се отмени."
 
-#: settingsbrowser.lua:343
+#: settingsbrowser.lua:384
 msgid "Clear"
 msgstr "Изчисти"
 
-#: settingsbrowser.lua:348
+#: settingsbrowser.lua:389
 msgid "Cookies cleared."
 msgstr "Бисквитките са изчистени."
 
-#: settingsbrowser.lua:350
+#: settingsbrowser.lua:391
 msgid ""
 "Could not clear cookies:\n"
 "%1"
@@ -1289,45 +1310,50 @@ msgstr ""
 "Бисквитките не можаха да се изчистят:\n"
 "%1"
 
-#: settingsbrowser.lua:418
+#: settingsbrowser.lua:459
 msgid "%1 doesn't exist or isn't writable."
 msgstr "%1 не съществува или не е с права за запис."
 
-#: settingsbrowser.lua:424
+#: settingsbrowser.lua:465
 msgid ""
 "The Ephemeral storage path can't be, contain, or be inside the normal "
 "downloads folder."
 msgstr ""
 
-#: settingsbrowser.lua:432
+#: settingsbrowser.lua:473
 msgid "Where chapters are stored in Ephemeral Mode."
 msgstr "Къде се съхраняват главите във временен режим."
 
-#: settingsbrowser.lua:541
+#: settingsbrowser.lua:539
+#, fuzzy
+msgid "Select Language"
+msgstr "Търси във всички източници"
+
+#: settingsbrowser.lua:612
 msgid "Ephemeral Mode limits prefetch to 1 chapter."
 msgstr "Временният режим ограничава предварителното изтегляне до 1 глава."
 
-#: settingsbrowser.lua:551
+#: settingsbrowser.lua:622
 msgid "Storage limit is off in Ephemeral Mode."
 msgstr "Ограничението на паметта е изключено във временен режим."
 
-#: sourcesbrowser.lua:20
+#: sourcesbrowser.lua:24
 msgid "Aidoku sources"
 msgstr "Източници на Aidoku"
 
-#: sourcesbrowser.lua:103
+#: sourcesbrowser.lua:101
 msgid "Couldn't read this source. Try again, or reinstall it."
 msgstr ""
 
-#: sourcesbrowser.lua:135
+#: sourcesbrowser.lua:133
 msgid "Source settings"
 msgstr "Настройки на източника"
 
-#: sourcesbrowser.lua:150
+#: sourcesbrowser.lua:148
 msgid "Remove installed source"
 msgstr "Премахни инсталирания източник"
 
-#: sourcesbrowser.lua:154
+#: sourcesbrowser.lua:152
 msgid "Remove source '%1'?"
 msgstr "Да се премахне ли източникът „%1“?"
 

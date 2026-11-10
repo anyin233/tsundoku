@@ -17,13 +17,11 @@ local T = require("ffi/util").template
 local _ = require("aidoku_l10n")
 
 local SourcesBrowser = Menu:extend{
-    title = _("Aidoku sources"),
     title_bar_left_icon = "plus",
 }
 
-local DOWNLOADS_TEXT = _("Download Manager")
-
 function SourcesBrowser:init()
+    self.title = _("Aidoku sources")
     self.item_table = {}
     Menu.init(self)
     OpenWidgets.push(self)
@@ -44,7 +42,7 @@ end
 
 function SourcesBrowser:genItemTable()
     local item_table = {}
-    table.insert(item_table, { text = DOWNLOADS_TEXT, is_downloads_entry = true })
+    table.insert(item_table, { text = _("Download Manager"), is_downloads_entry = true })
     for _idx, source in ipairs(InstalledSources.list(self.sources_dir, self.engine)) do
         table.insert(item_table, source)
     end

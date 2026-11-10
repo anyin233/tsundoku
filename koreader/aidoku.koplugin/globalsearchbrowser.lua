@@ -23,7 +23,6 @@ local T = require("ffi/util").template
 local _ = require("aidoku_l10n")
 
 local GlobalSearchBrowser = Menu:extend{
-    title = _("Multi-source Search"),
     title_bar_left_icon = "appbar.menu",
 }
 
@@ -39,6 +38,7 @@ local function mangaCover(manga)
 end
 
 function GlobalSearchBrowser:init()
+    self.title = _("Multi-source Search")
     self.mode = "select_sources" -- "select_sources" | "results"
     self.sources = {}
     self.selected_map = {} -- source_key -> boolean

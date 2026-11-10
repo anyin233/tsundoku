@@ -307,6 +307,35 @@ Store.LIBRARY_VIEW_MODES = {
     grid = true,
 }
 
+Store.LANGUAGE_MODES = {
+    auto = true,
+    en = true,
+    zh_CN = true,
+    zh_TW = true,
+    ja = true,
+}
+
+-- language returns one of: "auto" | "en" | "zh_CN" | "zh_TW" | "ja"
+function Store:language()
+    local lang = self.settings:readSetting("ui_language", "auto")
+    if Store.LANGUAGE_MODES[lang] then
+        return lang
+    end
+    return "auto"
+end
+
+function Store:setLanguage(lang)
+    if not Store.LANGUAGE_MODES[lang] then
+        lang = "auto"
+    end
+    self.settings:saveSetting("ui_language", lang)
+    self.settings:flush()
+    local ok, l10n = pcall(require, "aidoku_l10n")
+    if ok and l10n and type(l10n.setLanguage) == "function" then
+        l10n.setLanguage(lang)
+    end
+end
+
 -- libraryViewMode returns one of:
 --   "compact" (title only) | "list" (cover + title) | "grid" (cover grid + small title)
 function Store:libraryViewMode()

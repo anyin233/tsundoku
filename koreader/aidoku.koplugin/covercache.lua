@@ -145,7 +145,7 @@ local function scaleAspectFill(raw_bb, target_w, target_h)
     local ok_ri, RenderImage = pcall(require, "ui/renderimage")
     local ok_sc, scaled_bb = pcall(function()
         if ok_ri and RenderImage and type(RenderImage.scaleBlitBuffer) == "function" then
-            return RenderImage:scaleBlitBuffer(raw_bb, scaled_w, scaled_h)
+            return RenderImage:scaleBlitBuffer(raw_bb, scaled_w, scaled_h, false)
         end
         return raw_bb:scale(scaled_w, scaled_h)
     end)

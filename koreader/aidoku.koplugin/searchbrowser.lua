@@ -14,9 +14,7 @@ local UIManager = require("ui/uimanager")
 local T = require("ffi/util").template
 local _ = require("aidoku_l10n")
 
-local SearchBrowser = Menu:extend{
-    subtitle = _("Hold a result to add/remove from library"),
-}
+local SearchBrowser = Menu:extend{}
 
 local function mangaLabel(manga)
     if type(manga.Title) == "string" and manga.Title ~= "" then
@@ -30,6 +28,7 @@ local function mangaCover(manga)
 end
 
 function SearchBrowser:init()
+    self.subtitle = _("Hold a result to add/remove from library")
     self.item_table = {}
     self.raw_entries = {}
     self.page = 1

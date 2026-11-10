@@ -1,16 +1,15 @@
-# Chinese translations for aidoku.koplugin package.
-# Copyright (C) 2026 THE aidoku.koplugin'S COPYRIGHT HOLDER
+# Simplified Chinese translations for aidoku.koplugin package.
+# Copyright (C) 2026 Tsundoku Contributors
 # This file is distributed under the same license as the aidoku.koplugin package.
-# Automatically generated, 2026.
 #
 msgid ""
 msgstr ""
 "Project-Id-Version: aidoku.koplugin\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-10 23:25+0000\n"
-"PO-Revision-Date: 2026-11-10 22:30+0000\n"
-"Last-Translator: Aidoku KOReader Plugin\n"
-"Language-Team: none\n"
+"POT-Creation-Date: 2026-11-10 23:36+0000\n"
+"PO-Revision-Date: 2026-11-10 23:36+0000\n"
+"Last-Translator: Tsundoku Team\n"
+"Language-Team: Chinese (Simplified)\n"
 "Language: zh_CN\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -21,8 +20,8 @@ msgstr ""
 msgid "command failed"
 msgstr "命令执行失败"
 
-#: downloadsbrowser.lua:66 globalsearchbrowser.lua:419 librarybrowser.lua:1059
-#: mangabrowser.lua:273 settingsbrowser.lua:97 sourcesbrowser.lua:24
+#: downloadsbrowser.lua:70 globalsearchbrowser.lua:419 librarybrowser.lua:1060
+#: mangabrowser.lua:273 settingsbrowser.lua:120 sourcesbrowser.lua:45
 msgid "Download Manager"
 msgstr "下载管理"
 
@@ -206,7 +205,7 @@ msgstr ""
 "%1 - %2"
 
 #: downloadsbrowser.lua:566 downloadsbrowser.lua:660 downloadsbrowser.lua:680
-#: librarybrowser.lua:1376 librarybrowser.lua:1392 sourcesbrowser.lua:155
+#: librarybrowser.lua:1377 librarybrowser.lua:1393 sourcesbrowser.lua:153
 msgid "Remove"
 msgstr "删除"
 
@@ -226,7 +225,7 @@ msgstr "该书源已不再安装。"
 msgid "Remove all %1 downloaded chapters"
 msgstr "删除全部 %1 个已下载章节"
 
-#: downloadsbrowser.lua:659 librarybrowser.lua:1375
+#: downloadsbrowser.lua:659 librarybrowser.lua:1376
 msgid "Remove all %1 downloaded chapters of '%2'?"
 msgstr "确定删除「%2」的全部 %1 个已下载章节吗？"
 
@@ -294,74 +293,74 @@ msgstr "正在下载章节…"
 
 #: engine.lua:249
 msgid "Could not encode cover request"
-msgstr "无法编码封面请求"
+msgstr "无法编码封面请求数据"
 
 #: engine.lua:259
 msgid "Could not write cover request"
-msgstr "无法写入封面请求"
+msgstr "无法写入封面请求临时文件"
 
-#: filterbrowser.lua:22
+#: filterbrowser.lua:47
 msgid "Search filters"
 msgstr "搜索筛选"
 
-#: filterbrowser.lua:74 filterbrowser.lua:152 mangabrowser.lua:153
+#: filterbrowser.lua:73 filterbrowser.lua:151 mangabrowser.lua:153
 msgid "Sort: %1"
 msgstr "排序: %1"
 
-#: filterbrowser.lua:74
+#: filterbrowser.lua:73
 msgid "default"
 msgstr "默认"
 
-#: filterbrowser.lua:77
+#: filterbrowser.lua:76
 msgid "Sort: %1 (%2)"
 msgstr "排序: %1 (%2)"
 
-#: filterbrowser.lua:77
+#: filterbrowser.lua:76
 msgid "ascending"
 msgstr "升序"
 
-#: filterbrowser.lua:77
+#: filterbrowser.lua:76
 msgid "descending"
 msgstr "降序"
 
-#: filterbrowser.lua:82 filterbrowser.lua:84 filterbrowser.lua:91
-#: filterbrowser.lua:108 filterbrowser.lua:110 sourcesettingsbrowser.lua:116
+#: filterbrowser.lua:81 filterbrowser.lua:83 filterbrowser.lua:90
+#: filterbrowser.lua:107 filterbrowser.lua:109 sourcesettingsbrowser.lua:116
 msgid "%1: %2"
 msgstr "%1: %2"
 
-#: filterbrowser.lua:82 filterbrowser.lua:91
+#: filterbrowser.lua:81 filterbrowser.lua:90
 msgid "any"
 msgstr "任意"
 
-#: filterbrowser.lua:93
+#: filterbrowser.lua:92
 msgid "%1: %2 included, %3 excluded"
 msgstr "%1: 包含 %2，排除 %3"
 
-#: filterbrowser.lua:108
+#: filterbrowser.lua:107
 msgid "unset"
 msgstr "未设置"
 
-#: filterbrowser.lua:110
+#: filterbrowser.lua:109
 msgid "no"
 msgstr "否"
 
-#: filterbrowser.lua:110
+#: filterbrowser.lua:109
 msgid "yes"
 msgstr "是"
 
-#: filterbrowser.lua:131
+#: filterbrowser.lua:130
 msgid "Clear all filters"
 msgstr "清除所有筛选"
 
-#: filterbrowser.lua:132
+#: filterbrowser.lua:131
 msgid "Search with these filters"
 msgstr "按这些筛选搜索"
 
-#: filterbrowser.lua:179
+#: filterbrowser.lua:178
 msgid "Any"
 msgstr "任意"
 
-#: globalsearchbrowser.lua:26 globalsearchbrowser.lua:476
+#: globalsearchbrowser.lua:41 globalsearchbrowser.lua:476
 msgid "Multi-source Search"
 msgstr "多书源搜索 Plus"
 
@@ -375,7 +374,7 @@ msgstr "点击书源切换勾选 (已选 %1/%2)，随后点击「开始搜索」
 
 #: globalsearchbrowser.lua:120
 msgid "No sources installed. Install sources in Settings → Sources first."
-msgstr "尚未安装任何书源。请先在「设置 → 源」中添加书源。"
+msgstr "尚未安装任何书源。请先在「设置 → 书源管理」中添加书源。"
 
 #: globalsearchbrowser.lua:126
 msgid "» Start Search (%1/%2 sources selected)…"
@@ -401,12 +400,12 @@ msgstr "[ ] 清空全部选择"
 msgid "Selected"
 msgstr "已选"
 
-#: globalsearchbrowser.lua:180 searchbrowser.lua:130
+#: globalsearchbrowser.lua:180 searchbrowser.lua:129
 msgid "Downloaded all %1 ch"
 msgstr "已全本下载 %1 章"
 
 #: globalsearchbrowser.lua:182 librarybrowser.lua:949 mangabrowser.lua:145
-#: searchbrowser.lua:132
+#: searchbrowser.lua:131
 msgid "Downloaded %1 ch"
 msgstr "已下载 %1 章"
 
@@ -438,7 +437,7 @@ msgstr "请至少勾选一个书源后再开始搜索。"
 msgid "Search in %1 selected source(s)"
 msgstr "在已选的 %1 个书源中搜索"
 
-#: globalsearchbrowser.lua:247 searchbrowser.lua:81
+#: globalsearchbrowser.lua:247 searchbrowser.lua:80
 msgid "Title…"
 msgstr "输入漫画名称…"
 
@@ -446,14 +445,14 @@ msgstr "输入漫画名称…"
 msgid "Sources…"
 msgstr "重选书源…"
 
-#: globalsearchbrowser.lua:257 mangabrowser.lua:674 searchbrowser.lua:84
-#: settingsbrowser.lua:163 settingsbrowser.lua:197 settingsbrowser.lua:232
-#: settingsbrowser.lua:262 settingsbrowser.lua:299 settingsbrowser.lua:437
+#: globalsearchbrowser.lua:257 mangabrowser.lua:674 searchbrowser.lua:83
+#: settingsbrowser.lua:195 settingsbrowser.lua:229 settingsbrowser.lua:264
+#: settingsbrowser.lua:294 settingsbrowser.lua:331 settingsbrowser.lua:478
 #: sourcesettingsbrowser.lua:235
 msgid "Cancel"
 msgstr "取消"
 
-#: globalsearchbrowser.lua:262 searchbrowser.lua:89
+#: globalsearchbrowser.lua:262 searchbrowser.lua:88
 msgid "Search"
 msgstr "搜索"
 
@@ -513,47 +512,47 @@ msgstr "仅勾选此书源并立即搜索…"
 msgid "Invert all selections"
 msgstr "反选全部书源"
 
-#: globalsearchbrowser.lua:583 mangabrowser.lua:219 searchbrowser.lua:216
+#: globalsearchbrowser.lua:583 mangabrowser.lua:219 searchbrowser.lua:215
 msgid "Could not update library."
 msgstr "无法更新书库。"
 
-#: globalsearchbrowser.lua:591 mangabrowser.lua:227 searchbrowser.lua:224
+#: globalsearchbrowser.lua:591 mangabrowser.lua:227 searchbrowser.lua:223
 msgid "Added '%1' to library"
 msgstr "已将「%1」加入书库"
 
-#: globalsearchbrowser.lua:591 mangabrowser.lua:227 searchbrowser.lua:224
+#: globalsearchbrowser.lua:591 mangabrowser.lua:227 searchbrowser.lua:223
 msgid "Removed '%1' from library"
 msgstr "已将「%1」移出书库"
 
 #: librarybrowser.lua:63
 msgid "Compact list (title only)"
-msgstr "精简列表（仅标题）"
+msgstr "精简列表 (仅标题)"
 
-#: librarybrowser.lua:64 settingsbrowser.lua:49
+#: librarybrowser.lua:64 settingsbrowser.lua:56
 msgid "Compact list"
 msgstr "精简列表"
 
-#: librarybrowser.lua:68 settingsbrowser.lua:50
+#: librarybrowser.lua:68 settingsbrowser.lua:52
 msgid "List (cover + title)"
-msgstr "列表（封面 + 标题）"
+msgstr "图文列表 (封面 + 标题)"
 
 #: librarybrowser.lua:69
 msgid "List"
-msgstr "列表"
+msgstr "图文列表"
 
 #: librarybrowser.lua:73
 msgid "Grid (cover + title)"
-msgstr "网格（封面 + 小字标题）"
+msgstr "封面网格 (封面 + 标题)"
 
-#: librarybrowser.lua:74 settingsbrowser.lua:51
+#: librarybrowser.lua:74 settingsbrowser.lua:54
 msgid "Grid"
-msgstr "网格"
+msgstr "封面网格"
 
-#: librarybrowser.lua:557
+#: librarybrowser.lua:561 librarybrowser.lua:986
 msgid "Library"
 msgstr "漫画书库"
 
-#: librarybrowser.lua:879 settingsbrowser.lua:127
+#: librarybrowser.lua:879 settingsbrowser.lua:155
 msgid "Ephemeral Mode"
 msgstr "临时模式"
 
@@ -578,43 +577,43 @@ msgstr "已下载 %1/%2 章"
 msgid "Library is empty. Use the menu (top left) to find manga."
 msgstr "书库为空。请点击左上角菜单搜索漫画。"
 
-#: librarybrowser.lua:1022 settingsbrowser.lua:101
+#: librarybrowser.lua:1023 settingsbrowser.lua:129
 msgid "Library view"
 msgstr "书库视图"
 
-#: librarybrowser.lua:1048
+#: librarybrowser.lua:1049
 msgid "Sort: Name"
 msgstr "书库排序: 按书名"
 
-#: librarybrowser.lua:1049
+#: librarybrowser.lua:1050
 msgid "Sort: Last read"
 msgstr "书库排序: 最近阅读"
 
-#: librarybrowser.lua:1050
+#: librarybrowser.lua:1051
 msgid "Sort: Downloaded first"
 msgstr "书库排序: 已下载优先"
 
-#: librarybrowser.lua:1058 mangabrowser.lua:272
+#: librarybrowser.lua:1059 mangabrowser.lua:272
 msgid "Download Manager (%1 active)"
 msgstr "下载管理 (进行中 %1)"
 
-#: librarybrowser.lua:1067
+#: librarybrowser.lua:1068
 msgid "Multi-source Search…"
 msgstr "多书源搜索 Plus…"
 
-#: librarybrowser.lua:1093
+#: librarybrowser.lua:1094
 msgid "View: %1…"
 msgstr "书库视图: %1…"
 
-#: librarybrowser.lua:1109 settingsbrowser.lua:35
+#: librarybrowser.lua:1110 settingsbrowser.lua:81 settingsbrowser.lua:172
 msgid "Settings"
 msgstr "设置"
 
-#: librarybrowser.lua:1133
+#: librarybrowser.lua:1134
 msgid "Check for Updates"
 msgstr "检查更新"
 
-#: librarybrowser.lua:1161
+#: librarybrowser.lua:1162
 msgid ""
 "Could not check for updates:\n"
 "%1"
@@ -622,11 +621,11 @@ msgstr ""
 "无法检查更新:\n"
 "%1"
 
-#: librarybrowser.lua:1166
+#: librarybrowser.lua:1167
 msgid "Plugin is up to date (%1)."
 msgstr "插件已是最新版本 (%1)。"
 
-#: librarybrowser.lua:1174
+#: librarybrowser.lua:1175
 msgid ""
 "Update available: %1\n"
 "Installed: %2"
@@ -634,11 +633,11 @@ msgstr ""
 "有可用更新: %1\n"
 "已安装: %2"
 
-#: librarybrowser.lua:1176
+#: librarybrowser.lua:1177
 msgid "unknown"
 msgstr "未知"
 
-#: librarybrowser.lua:1180
+#: librarybrowser.lua:1181
 msgid ""
 "Latest: %1\n"
 "Installed version unknown."
@@ -646,11 +645,11 @@ msgstr ""
 "最新版本: %1\n"
 "已安装版本未知。"
 
-#: librarybrowser.lua:1186
+#: librarybrowser.lua:1187
 msgid "Download & Install"
 msgstr "下载并安装"
 
-#: librarybrowser.lua:1198
+#: librarybrowser.lua:1199
 msgid ""
 "Update failed:\n"
 "%1"
@@ -658,19 +657,19 @@ msgstr ""
 "更新失败:\n"
 "%1"
 
-#: librarybrowser.lua:1202
+#: librarybrowser.lua:1203
 msgid "Updated to %1. Restart KOReader to apply."
 msgstr "已更新至 %1。请重启 KOReader 以生效。"
 
-#: librarybrowser.lua:1229
+#: librarybrowser.lua:1230
 msgid "'%1' is no longer installed. Hold to remove it."
 msgstr "「%1」所属书源未安装。长按可将其移除。"
 
-#: librarybrowser.lua:1260
+#: librarybrowser.lua:1261
 msgid "'%1' is no longer installed."
 msgstr "「%1」所属书源未安装。"
 
-#: librarybrowser.lua:1269 mangabrowser.lua:444
+#: librarybrowser.lua:1270 mangabrowser.lua:444
 msgid ""
 "Could not load chapters:\n"
 "%1"
@@ -678,55 +677,55 @@ msgstr ""
 "无法加载章节:\n"
 "%1"
 
-#: librarybrowser.lua:1310 mangabrowser.lua:616
+#: librarybrowser.lua:1311 mangabrowser.lua:616
 msgid "All %1 chapters are already downloaded locally."
 msgstr "全部 %1 个章节均已下载到本地。"
 
-#: librarybrowser.lua:1323
+#: librarybrowser.lua:1324
 msgid "Queued %1 chapter(s) of '%2' for download."
 msgstr "已将「%2」的 %1 个章节加入后台下载队列。"
 
-#: librarybrowser.lua:1324 mangabrowser.lua:588
+#: librarybrowser.lua:1325 mangabrowser.lua:588
 msgid "View Progress"
 msgstr "查看下载进度"
 
-#: librarybrowser.lua:1325
+#: librarybrowser.lua:1326
 msgid "OK"
 msgstr "确定"
 
-#: librarybrowser.lua:1351
+#: librarybrowser.lua:1352
 msgid "Open chapter list"
 msgstr "打开章节列表"
 
-#: librarybrowser.lua:1361
+#: librarybrowser.lua:1362
 msgid "Download all chapters"
 msgstr "一键下载全部章节"
 
-#: librarybrowser.lua:1371
+#: librarybrowser.lua:1372
 msgid "Delete %1 downloaded chapter(s)…"
 msgstr "删除已下载的 %1 个章节…"
 
-#: librarybrowser.lua:1387
+#: librarybrowser.lua:1388
 msgid "Remove from library…"
 msgstr "从书库中移除…"
 
-#: librarybrowser.lua:1391
+#: librarybrowser.lua:1392
 msgid "Remove '%1' from your library?"
 msgstr "从书库中移除「%1」？"
 
-#: main.lua:238
+#: main.lua:241
 msgid "Aidoku"
 msgstr "Aidoku"
 
-#: main.lua:245
+#: main.lua:248 main.lua:250
 msgid "AidokuRunner for KOReader"
 msgstr "KOReader 版 Aidoku 漫画管理"
 
-#: main.lua:263
+#: main.lua:269
 msgid "aidoku-run binary not found. Rebuild the plugin with koreader/build.sh."
 msgstr "未找到 aidoku-run 程序。请使用 koreader/build.sh 重新构建插件。"
 
-#: main.lua:269
+#: main.lua:275
 msgid "Could not open the downloads database. Is storage writable?"
 msgstr "无法打开下载数据库。存储是否可写？"
 
@@ -1008,11 +1007,11 @@ msgstr ""
 msgid "Chapter %1"
 msgstr "第 %1 章"
 
-#: repobrowser.lua:24
+#: repobrowser.lua:26
 msgid "Source repository"
 msgstr "书源仓库"
 
-#: repobrowser.lua:51
+#: repobrowser.lua:50
 msgid ""
 "Could not load repository:\n"
 "%1"
@@ -1020,7 +1019,7 @@ msgstr ""
 "无法加载仓库:\n"
 "%1"
 
-#: repobrowser.lua:105
+#: repobrowser.lua:104
 msgid ""
 "Install failed:\n"
 "%1"
@@ -1028,27 +1027,27 @@ msgstr ""
 "安装失败:\n"
 "%1"
 
-#: repobrowser.lua:113
+#: repobrowser.lua:112
 msgid "Installed %1"
 msgstr "已安装 %1"
 
-#: searchbrowser.lua:18
+#: searchbrowser.lua:31
 msgid "Hold a result to add/remove from library"
 msgstr "长按结果可加入/移出书库"
 
-#: searchbrowser.lua:80
+#: searchbrowser.lua:79
 msgid "Search manga"
 msgstr "搜索漫画"
 
-#: searchbrowser.lua:112
+#: searchbrowser.lua:111
 msgid "Filters (%1 set)…"
 msgstr "筛选 (已设 %1 项)…"
 
-#: searchbrowser.lua:112
+#: searchbrowser.lua:111
 msgid "Filters…"
 msgstr "筛选…"
 
-#: searchbrowser.lua:158
+#: searchbrowser.lua:157
 msgid ""
 "Search failed:\n"
 "%1"
@@ -1056,121 +1055,133 @@ msgstr ""
 "搜索失败:\n"
 "%1"
 
-#: searchbrowser.lua:163
+#: searchbrowser.lua:162
 msgid "No results."
 msgstr "无结果。"
 
-#: settingsbrowser.lua:45
-msgid "Ask"
-msgstr "询问"
-
-#: settingsbrowser.lua:45
-msgid "Auto"
-msgstr "自动"
-
-#: settingsbrowser.lua:45 settingsbrowser.lua:128 sourcesettingsbrowser.lua:92
+#: settingsbrowser.lua:42 settingsbrowser.lua:156 sourcesettingsbrowser.lua:92
 msgid "Off"
 msgstr "关"
 
-#: settingsbrowser.lua:78
+#: settingsbrowser.lua:44
+msgid "Auto"
+msgstr "自动"
+
+#: settingsbrowser.lua:46
+msgid "Ask"
+msgstr "询问"
+
+#: settingsbrowser.lua:60
+msgid "Auto (Follow KOReader)"
+msgstr "跟随系统 (KOReader)"
+
+#: settingsbrowser.lua:60
+msgid "Auto (System)"
+msgstr "跟随系统"
+
+#: settingsbrowser.lua:101
 msgid "N/A"
 msgstr "不适用"
 
-#: settingsbrowser.lua:79 sourcesettingsbrowser.lua:97
+#: settingsbrowser.lua:102 sourcesettingsbrowser.lua:97
 msgid "none"
 msgstr "无"
 
-#: settingsbrowser.lua:81
+#: settingsbrowser.lua:104
 msgid " (using %1)"
 msgstr " (已占 %1)"
 
-#: settingsbrowser.lua:85 sourcesettingsbrowser.lua:102
+#: settingsbrowser.lua:108 sourcesettingsbrowser.lua:102
 msgid "not set"
 msgstr "未设置"
 
-#: settingsbrowser.lua:87
+#: settingsbrowser.lua:110
 msgid "Custom"
 msgstr "自定义"
 
-#: settingsbrowser.lua:87
+#: settingsbrowser.lua:110
 msgid "Default"
 msgstr "默认"
 
-#: settingsbrowser.lua:90
+#: settingsbrowser.lua:113
 msgid "Default (8)"
 msgstr "默认 (8)"
 
-#: settingsbrowser.lua:96
+#: settingsbrowser.lua:119
 msgid "Sources"
 msgstr "书源管理"
 
-#: settingsbrowser.lua:106 settingsbrowser.lua:157
+#: settingsbrowser.lua:124
+msgid "Language"
+msgstr "界面语言"
+
+#: settingsbrowser.lua:134 settingsbrowser.lua:189
 msgid "Prefetch next chapters"
 msgstr "预下载后续章节"
 
-#: settingsbrowser.lua:113
+#: settingsbrowser.lua:141
 msgid "Auto-advance at chapter end"
 msgstr "章节结束时自动翻到下一章"
 
-#: settingsbrowser.lua:118
+#: settingsbrowser.lua:146
 msgid "Storage limit"
 msgstr "存储上限"
 
-#: settingsbrowser.lua:121 settingsbrowser.lua:224
+#: settingsbrowser.lua:149 settingsbrowser.lua:256
 msgid "Source repository URL"
 msgstr "书源仓库地址"
 
-#: settingsbrowser.lua:122 settingsbrowser.lua:256
+#: settingsbrowser.lua:150 settingsbrowser.lua:288
 msgid "Network concurrency"
 msgstr "网络并发数"
 
-#: settingsbrowser.lua:128 sourcesettingsbrowser.lua:92
+#: settingsbrowser.lua:156 sourcesettingsbrowser.lua:92
 msgid "On"
 msgstr "开"
 
-#: settingsbrowser.lua:132 settingsbrowser.lua:431
+#: settingsbrowser.lua:160 settingsbrowser.lua:472
 msgid "Ephemeral storage path"
 msgstr "临时存储路径"
 
-#: settingsbrowser.lua:136 settingsbrowser.lua:293
+#: settingsbrowser.lua:164 settingsbrowser.lua:325
 msgid "FlareSolverr host"
 msgstr "FlareSolverr 地址"
 
-#: settingsbrowser.lua:137
+#: settingsbrowser.lua:165
 msgid "Import cookies"
 msgstr "导入 Cookie"
 
-#: settingsbrowser.lua:138
+#: settingsbrowser.lua:166
 msgid "Clear stored cookies"
 msgstr "清除已存储的 Cookie"
 
-#: settingsbrowser.lua:158
+#: settingsbrowser.lua:190
 msgid "Chapters to download ahead while reading. 0 turns it off."
 msgstr "阅读时预先下载的章节数。0 表示关闭。"
 
-#: settingsbrowser.lua:168 settingsbrowser.lua:202 settingsbrowser.lua:237
-#: settingsbrowser.lua:267 settingsbrowser.lua:304 settingsbrowser.lua:442
+#: settingsbrowser.lua:200 settingsbrowser.lua:234 settingsbrowser.lua:269
+#: settingsbrowser.lua:299 settingsbrowser.lua:336 settingsbrowser.lua:483
 #: sourcesettingsbrowser.lua:240
 msgid "Set"
 msgstr "设置"
 
-#: settingsbrowser.lua:177 settingsbrowser.lua:280
+#: settingsbrowser.lua:209 settingsbrowser.lua:312
 msgid "Enter a number from 0 to %1."
 msgstr "请输入 0 到 %1 之间的数字。"
 
-#: settingsbrowser.lua:191
+#: settingsbrowser.lua:223
 msgid "Storage limit (MB)"
 msgstr "存储上限 (MB)"
 
-#: settingsbrowser.lua:192
+#: settingsbrowser.lua:224
 msgid "Oldest chapters are deleted first. 0 means no limit."
 msgstr "超出上限时优先清理最早下载的章节。0 表示不限制。"
 
-#: settingsbrowser.lua:211
+#: settingsbrowser.lua:243
 msgid "Enter 0 or a positive number."
 msgstr "请输入 0 或正数。"
 
-#: settingsbrowser.lua:226
+#: settingsbrowser.lua:258
 msgid ""
 "Repository index URL. Leave blank for the default:\n"
 "%1"
@@ -1178,27 +1189,35 @@ msgstr ""
 "仓库索引地址。留空则使用默认值:\n"
 "%1"
 
-#: settingsbrowser.lua:257
+#: settingsbrowser.lua:289
 msgid ""
 "Parallel requests per source. Blank or 0 for default (8). Higher uses more "
 "memory."
 msgstr ""
 "每个源的并行请求数。留空或填 0 则使用默认值 (8)。数值越高，占用内存越多。"
 
-#: settingsbrowser.lua:294
+#: settingsbrowser.lua:326
 msgid ""
 "Solves Cloudflare challenges, e.g. localhost:8191. Leave blank to disable."
 msgstr "用于通过 Cloudflare 验证，例如 localhost:8191。留空则禁用。"
 
-#: settingsbrowser.lua:296
+#: settingsbrowser.lua:328
 msgid "host:port"
 msgstr "主机:端口"
 
-#: settingsbrowser.lua:322
+#: settingsbrowser.lua:354
 msgid "Long-press a cookies.txt to import it"
 msgstr "长按 cookies.txt 文件即可导入"
 
-#: settingsbrowser.lua:332
+#: settingsbrowser.lua:364
+msgid "No usable (non-expired) cookies found in that file."
+msgstr "该文件中没有可用（未过期）的 Cookie。"
+
+#: settingsbrowser.lua:368
+msgid "Imported %1 cookie(s)."
+msgstr "成功导入 %1 条 Cookie。"
+
+#: settingsbrowser.lua:373
 msgid ""
 "Import failed:\n"
 "%1"
@@ -1206,19 +1225,19 @@ msgstr ""
 "导入失败:\n"
 "%1"
 
-#: settingsbrowser.lua:342
+#: settingsbrowser.lua:383
 msgid "Clear cookies for all sources? This can't be undone."
 msgstr "清除所有源的 Cookie？此操作无法撤销。"
 
-#: settingsbrowser.lua:343
+#: settingsbrowser.lua:384
 msgid "Clear"
 msgstr "清除"
 
-#: settingsbrowser.lua:348
+#: settingsbrowser.lua:389
 msgid "Cookies cleared."
 msgstr "Cookie 已清除。"
 
-#: settingsbrowser.lua:350
+#: settingsbrowser.lua:391
 msgid ""
 "Could not clear cookies:\n"
 "%1"
@@ -1226,45 +1245,49 @@ msgstr ""
 "无法清除 Cookie:\n"
 "%1"
 
-#: settingsbrowser.lua:418
+#: settingsbrowser.lua:459
 msgid "%1 doesn't exist or isn't writable."
 msgstr "%1 不存在或不可写。"
 
-#: settingsbrowser.lua:424
+#: settingsbrowser.lua:465
 msgid ""
 "The Ephemeral storage path can't be, contain, or be inside the normal "
 "downloads folder."
 msgstr "临时存储路径不能与普通下载目录相同或相互嵌套。"
 
-#: settingsbrowser.lua:432
+#: settingsbrowser.lua:473
 msgid "Where chapters are stored in Ephemeral Mode."
 msgstr "临时模式下章节的存储位置。"
 
-#: settingsbrowser.lua:541
+#: settingsbrowser.lua:539
+msgid "Select Language"
+msgstr "选择界面语言"
+
+#: settingsbrowser.lua:612
 msgid "Ephemeral Mode limits prefetch to 1 chapter."
 msgstr "临时模式下预下载上限为 1 章。"
 
-#: settingsbrowser.lua:551
+#: settingsbrowser.lua:622
 msgid "Storage limit is off in Ephemeral Mode."
 msgstr "临时模式下不启用存储上限。"
 
-#: sourcesbrowser.lua:20
+#: sourcesbrowser.lua:24
 msgid "Aidoku sources"
 msgstr "已安装书源"
 
-#: sourcesbrowser.lua:103
+#: sourcesbrowser.lua:101
 msgid "Couldn't read this source. Try again, or reinstall it."
 msgstr "无法读取此书源，请重试或重新安装。"
 
-#: sourcesbrowser.lua:135
+#: sourcesbrowser.lua:133
 msgid "Source settings"
 msgstr "书源设置"
 
-#: sourcesbrowser.lua:150
+#: sourcesbrowser.lua:148
 msgid "Remove installed source"
 msgstr "删除已安装的书源"
 
-#: sourcesbrowser.lua:154
+#: sourcesbrowser.lua:152
 msgid "Remove source '%1'?"
 msgstr "删除书源「%1」？"
 

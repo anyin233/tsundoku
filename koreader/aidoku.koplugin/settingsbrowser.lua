@@ -6,6 +6,7 @@ Reached from the Library screen's title bar, keeping the Library list
 itself just the user's bookmarked manga.
 ]]
 
+local ButtonDialog = require("ui/widget/buttondialog")
 local ConfirmBox = require("ui/widget/confirmbox")
 local DownloadsEngine = require("downloadsengine")
 local InfoMessage = require("ui/widget/infomessage")
@@ -31,31 +32,53 @@ local function showInvalid(text)
     UIManager:show(InfoMessage:new{ text = text })
 end
 
-local SettingsBrowser = Menu:extend{
-    title = _("Settings"),
-}
+local SettingsBrowser = Menu:extend{}
 
 local MB = 1024 * 1024
 
--- next_chapter_mode cycles through these in order each time its row is
--- tapped -- see the note on this in mangabrowser.lua/main.lua about the
--- end-of-book auto-advance hook this setting is for, which still needs its
--- own reader-API research pass before it reads this value.
 local MODE_ORDER = { "off", "ask", "auto" }
-local MODE_LABELS = { off = _("Off"), ask = _("Ask"), auto = _("Auto") }
+local function modeLabel(mode)
+    if mode == "off" then
+        return _("Off")
+    elseif mode == "auto" then
+        return _("Auto")
+    end
+    return _("Ask")
+end
 
 local VIEW_MODE_ORDER = { "compact", "list", "grid" }
-local VIEW_MODE_LABELS = {
-    compact = _("Compact list"),
-    list = _("List (cover + title)"),
-    grid = _("Grid"),
+local function viewModeLabel(mode)
+    if mode == "list" then
+        return _("List (cover + title)")
+    elseif mode == "grid" then
+        return _("Grid")
+    end
+    return _("Compact list")
+end
+
+local LANGUAGE_OPTIONS = {
+    { id = "auto",  label = function() return _("Auto (Follow KOReader)") end, short = function() return _("Auto (System)") end },
+    { id = "en",    label = function() return "English" end,                   short = function() return "English" end },
+    { id = "zh_CN", label = function() return "简体中文" end,                   short = function() return "简体中文" end },
+    { id = "zh_TW", label = function() return "繁體中文" end,                   short = function() return "繁體中文" end },
+    { id = "ja",    label = function() return "日本語" end,                     short = function() return "日本語" end },
 }
+
+local function languageShortLabel(lang)
+    for _idx, opt in ipairs(LANGUAGE_OPTIONS) do
+        if opt.id == lang then
+            return opt.short()
+        end
+    end
+    return LANGUAGE_OPTIONS[1].short()
+end
 
 local function formatMB(bytes)
     return string.format("%.1f MB", bytes / MB)
 end
 
 function SettingsBrowser:init()
+    self.title = _("Settings")
     self.usage_bytes = nil -- fetched async, see reloadUsage()
     self.item_table = self:genItemTable()
     Menu.init(self)
@@ -98,8 +121,13 @@ function SettingsBrowser:genItemTable()
 
         { text = "", dim = true, bold = true, is_placeholder = true },
         {
+            text = _("Language"),
+            mandatory = languageShortLabel(self.store:language()),
+            is_language_entry = true,
+        },
+        {
             text = _("Library view"),
-            mandatory = VIEW_MODE_LABELS[self.store:libraryViewMode()] or VIEW_MODE_LABELS.compact,
+            mandatory = viewModeLabel(self.store:libraryViewMode()),
             is_library_view_entry = true,
         },
         {
@@ -111,7 +139,7 @@ function SettingsBrowser:genItemTable()
         },
         {
             text = _("Auto-advance at chapter end"),
-            mandatory = MODE_LABELS[self.store:nextChapterMode()],
+            mandatory = modeLabel(self.store:nextChapterMode()),
             is_next_chapter_entry = true,
         },
 
@@ -140,8 +168,12 @@ function SettingsBrowser:genItemTable()
 end
 
 function SettingsBrowser:refresh()
+    if self.title_bar then
+        self.title_bar:setTitle(_("Settings"))
+    end
+    local saved_page = self.page
     self.item_table = self:genItemTable()
-    self:updateItems()
+    self:updateItems(saved_page)
 end
 
 function SettingsBrowser:reloadUsage()
@@ -327,7 +359,16 @@ function SettingsBrowser:importCookies()
             Trapper:wrap(function()
                 local ok, err = self.engine:cookieLoad(cookies_path)
                 if ok then
-                    UIManager:show(InfoMessage:new{ text = ok, timeout = 3 })
+                    local msg = ok
+                    if ok:match("^no usable") then
+                        msg = _("No usable (non-expired) cookies found in that file.")
+                    else
+                        local count = ok:match("^loaded (%d+) cookie")
+                        if count then
+                            msg = T(_("Imported %1 cookie(s)."), count)
+                        end
+                    end
+                    UIManager:show(InfoMessage:new{ text = msg, timeout = 3 })
                 else
                     UIManager:show(InfoMessage:new{ text = T(_("Import failed:\n%1"), err) })
                 end
@@ -473,6 +514,34 @@ function SettingsBrowser:promptEphemeralPath()
     dialog:onShowKeyboard()
 end
 
+function SettingsBrowser:promptLanguage()
+    local current = self.store:language()
+    local dialog
+    local buttons = {}
+    for _idx, opt in ipairs(LANGUAGE_OPTIONS) do
+        local is_cur = (opt.id == current)
+        local lang_id = opt.id
+        table.insert(buttons, {{
+            text = (is_cur and "✓ " or "") .. opt.label(),
+            callback = function()
+                UIManager:close(dialog)
+                if lang_id ~= current then
+                    self.store:setLanguage(lang_id)
+                    self:refresh()
+                    if self.refresh_callback then
+                        self.refresh_callback()
+                    end
+                end
+            end,
+        }})
+    end
+    dialog = ButtonDialog:new{
+        title = _("Select Language"),
+        buttons = buttons,
+    }
+    UIManager:show(dialog)
+end
+
 function SettingsBrowser:cycleLibraryViewMode()
     local current = self.store:libraryViewMode()
     local next_mode = VIEW_MODE_ORDER[1]
@@ -533,6 +602,8 @@ function SettingsBrowser:onMenuSelect(item)
             is_borderless = true,
             title_bar_fm_style = true,
         })
+    elseif item.is_language_entry then
+        self:promptLanguage()
     elseif item.is_library_view_entry then
         self:cycleLibraryViewMode()
     elseif item.is_buffer_entry then

@@ -554,11 +554,11 @@ end
 -- ===== LibraryBrowser =====
 
 local LibraryBrowser = Menu:extend{
-    title = _("Library"),
     title_bar_left_icon = "appbar.menu",
 }
 
 function LibraryBrowser:init()
+    self.title = _("Library")
     self.refresh_pending = false
     CoverCache:resetFailures()
     self.item_table = self:genItemTable()
@@ -749,7 +749,7 @@ function LibraryBrowser:updateItems(select_number, no_recalculate_dimen)
     local old_selected = snapshotFocus(self)
 
     self.layout = {}
-    self.item_group:clear(true)
+    self.item_group:clear()
     if self.page_info then self.page_info:resetLayout() end
     if self.return_button then self.return_button:resetLayout() end
     if self.content_group then self.content_group:resetLayout() end
@@ -983,6 +983,7 @@ function LibraryBrowser:refresh()
     self._layout_metrics = nil
     self:updateItems(saved_page)
     if self.title_bar then
+        self.title_bar:setTitle(_("Library"))
         self.title_bar:setSubTitle(self:computeSubtitle(), true)
     end
 end
