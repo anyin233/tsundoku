@@ -23,14 +23,14 @@
 ## 核心特性 (Features)
 
 <p align="center">
-  <img src="koreader/aidoku.koplugin/screenshots/library.png" width="32%" alt="漫画书库与已下载标注" />
-  <img src="koreader/aidoku.koplugin/screenshots/global_search.png" width="32%" alt="多书源搜索 Plus" />
-  <img src="koreader/aidoku.koplugin/screenshots/manga_detail.png" width="32%" alt="章节列表、多维排序与一键全本下载" />
+  <img src="koreader/aidoku.koplugin/screenshots/library.png" width="32%" alt="书库：精简列表视图" />
+  <img src="koreader/aidoku.koplugin/screenshots/library_list.png" width="32%" alt="书库：列表视图（封面 + 标题）" />
+  <img src="koreader/aidoku.koplugin/screenshots/library_grid.png" width="32%" alt="书库：网格视图（封面墙 + 小字标题）" />
 </p>
 <p align="center">
+  <img src="koreader/aidoku.koplugin/screenshots/global_search.png" width="32%" alt="多书源搜索 Plus" />
+  <img src="koreader/aidoku.koplugin/screenshots/manga_detail.png" width="32%" alt="章节列表、多维排序与一键全本下载" />
   <img src="koreader/aidoku.koplugin/screenshots/downloads.png" width="32%" alt="实时下载管理与队列进度" />
-  <img src="koreader/aidoku.koplugin/screenshots/sources.png" width="32%" alt="已安装书源管理" />
-  <img src="koreader/aidoku.koplugin/screenshots/settings.png" width="32%" alt="插件设置" />
 </p>
 
 ### 相比基础版的核心增强
