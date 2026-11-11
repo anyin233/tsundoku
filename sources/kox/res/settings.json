@@ -1,0 +1,43 @@
+[
+	{
+		"type": "group",
+		"title": "账号登录",
+		"footer": "登录 Kmoe (kzo.moe / kox.moe) 账号后可查看等级与月度配额、下载漫画章节及联动 Koobone 书架。",
+		"items": [
+			{
+				"type": "login",
+				"key": "login",
+				"title": "登录 Kox.moe",
+				"logoutTitle": "退出登录",
+				"method": "basic",
+				"useEmail": true,
+				"notification": "login",
+				"refreshes": ["settings", "listings", "content"]
+			}
+		]
+	},
+	{
+		"type": "group",
+		"title": "章节与下载偏好",
+		"footer": "VIP 线路仅对 VIP 用户生效；非 VIP 账号会自动使用普通下载线路。",
+		"items": [
+			{
+				"type": "select",
+				"key": "chapter_filter",
+				"title": "章节类型显示",
+				"values": ["all", "vol", "ch"],
+				"titles": ["全部（单行本 + 连载话 + 番外）", "优先单行本", "优先连载话"],
+				"default": "all",
+				"refreshes": ["content"]
+			},
+			{
+				"type": "select",
+				"key": "download_line",
+				"title": "下载线路",
+				"values": ["0", "1"],
+				"titles": ["线路一（默认）", "VIP 线路二"],
+				"default": "0"
+			}
+		]
+	}
+]

@@ -9,6 +9,11 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 plugin_dir="$repo_root/koreader/aidoku.koplugin"
 
+if command -v cargo >/dev/null 2>&1 && [[ -x "$repo_root/sources/kox/package.sh" ]]; then
+    echo "packaging built-in Aidoku source 'kox'..."
+    "$repo_root/sources/kox/package.sh"
+fi
+
 # bin_arch:GOARCH:GOARM
 targets=(
     "armv6:arm:6"

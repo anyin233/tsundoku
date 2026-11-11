@@ -1,0 +1,22 @@
+{
+	"info": {
+		"id": "kox",
+		"name": "Kox.moe",
+		"altNames": ["Kmoe", "kzo.moe", "kxx.moe", "kzz.moe", "koz.moe"],
+		"version": 1,
+		"urls": [
+			"https://kzo.moe",
+			"https://kxx.moe",
+			"https://kzz.moe",
+			"https://koz.moe"
+		],
+		"contentRating": 1,
+		"languages": ["zh"],
+		"minAppVersion": "0.7"
+	},
+	"config": {
+		"allowsBaseUrlSelect": true,
+		"supportsAuthorSearch": true,
+		"supportsTagSearch": true
+	}
+}
