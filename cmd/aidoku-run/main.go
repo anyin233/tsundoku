@@ -135,6 +135,10 @@ func run(dir, command string, args []string) (err error) {
 	switch command {
 	case "download", "redownload", "download-payload", "update":
 		timeout = longCommandTimeout
+	case "koobone":
+		if len(args) > 0 && args[0] == "download-payload" {
+			timeout = longCommandTimeout
+		}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -183,6 +187,12 @@ func run(dir, command string, args []string) (err error) {
 	}
 	if command == "update" {
 		return handleUpdate(ctx, args)
+	}
+	if command == "kox" {
+		return handleKox(ctx, settings, args)
+	}
+	if command == "koobone" {
+		return handleKoobone(ctx, settings, args)
 	}
 
 	// Every aidoku-run is a fresh process, so only an on-disk cache saves
@@ -292,11 +302,36 @@ func run(dir, command string, args []string) (err error) {
 		return printJSON(result)
 
 	case "listings":
-		result, err := src.GetListings(ctx)
-		if err != nil {
-			return err
+		if len(args) == 0 {
+			result, err := src.GetListings(ctx)
+			if err != nil {
+				return err
+			}
+			return printJSON(result)
 		}
-		return printJSON(result)
+		if args[0] == "get" {
+			if len(args) < 2 {
+				return fmt.Errorf("usage: listings get <listing-id> [page] [listing-name]")
+			}
+			page := 1
+			if len(args) > 2 && args[2] != "" {
+				p, err := strconv.Atoi(args[2])
+				if err != nil {
+					return fmt.Errorf("invalid page %q: %w", args[2], err)
+				}
+				page = p
+			}
+			name := args[1]
+			if len(args) > 3 && args[3] != "" {
+				name = args[3]
+			}
+			result, err := src.GetMangaList(ctx, models.Listing{ID: args[1], Name: name}, page)
+			if err != nil {
+				return err
+			}
+			return printJSON(result)
+		}
+		return fmt.Errorf("unknown listings subcommand %q", args[0])
 
 	case "filters":
 		result, err := src.GetSearchFilters(ctx)
@@ -346,6 +381,12 @@ func run(dir, command string, args []string) (err error) {
 			}
 			if err := settings.SetValue(key, value); err != nil {
 				return fmt.Errorf("setting value: %w", err)
+			}
+			// Notify guest if this setting declares a notification trigger
+			if allSettings, serr := src.GetSettings(ctx); serr == nil {
+				if notif := findSettingNotification(allSettings, args[1]); notif != "" {
+					_ = src.HandleNotification(ctx, notif)
+				}
 			}
 			// Every other successful command prints something to stdout
 			// (a JSON body, or at least a path), which is how
@@ -444,6 +485,45 @@ func run(dir, command string, args []string) (err error) {
 			return fmt.Errorf("download payload requires manga.Key and chapter.Key")
 		}
 		return executeDownload(ctx, src, dir, p.Manga, p.Chapter, p.OutputPath, p.DownloadsDir, p.MangaDirName, p.Redownload, true)
+
+	case "login":
+		if len(args) < 3 {
+			return fmt.Errorf("usage: login <key> <username> <password>")
+		}
+		key, username, password := args[0], args[1], args[2]
+		ok, err := src.HandleBasicLogin(ctx, key, username, password)
+		if err != nil {
+			return err
+		}
+		if ok {
+			_ = settings.SetValue(src.Key+"."+key+".username", username)
+			_ = settings.SetValue(src.Key+"."+key+".password", password)
+			_ = src.HandleNotification(ctx, key)
+		}
+		return printJSON(map[string]any{"ok": ok})
+
+	case "logout":
+		if len(args) < 1 {
+			return fmt.Errorf("usage: logout <key> [notification]")
+		}
+		key := args[0]
+		notif := key
+		if len(args) > 1 && args[1] != "" {
+			notif = args[1]
+		}
+		_ = settings.SetValue(src.Key+"."+key+".username", nil)
+		_ = settings.SetValue(src.Key+"."+key+".password", nil)
+		_ = src.HandleNotification(ctx, notif)
+		return printJSON(map[string]any{"ok": true})
+
+	case "notify":
+		if len(args) < 1 {
+			return fmt.Errorf("usage: notify <notification>")
+		}
+		if err := src.HandleNotification(ctx, args[0]); err != nil {
+			return err
+		}
+		return printJSON(map[string]any{"ok": true})
 
 	default:
 		usage()
@@ -560,6 +640,25 @@ func executeDownload(ctx context.Context, src *source.Source, dir string, manga 
 	}
 	fmt.Println(entry.Path)
 	return nil
+}
+
+func findSettingNotification(settings []models.Setting, key string) string {
+	for _, s := range settings {
+		if s.Key == key && s.Notification != nil && *s.Notification != "" {
+			return *s.Notification
+		}
+		if s.Group != nil {
+			if n := findSettingNotification(s.Group.Items, key); n != "" {
+				return n
+			}
+		}
+		if s.Page != nil {
+			if n := findSettingNotification(s.Page.Items, key); n != "" {
+				return n
+			}
+		}
+	}
+	return ""
 }
 
 func printDownloadProgress(current, total int) {
