@@ -97,6 +97,7 @@ function Aidoku:init()
     -- Must run after self.store exists -- see refreshDownloadsDir()'s own doc
     -- comment for why this isn't just done once here.
     self:refreshDownloadsDir()
+    self:ensureBuiltinSources()
 
     self:onDispatcherRegisterActions()
     self.ui.menu:registerToMainMenu(self)
@@ -125,6 +126,60 @@ function Aidoku:refreshDownloadsDir()
         downloads_engine = self.downloads_engine,
         downloads_dir = self.downloads_dir,
     })
+end
+
+-- ensureBuiltinSources copies bundled first-party Aidoku sources (such as
+-- `kox-v1.aix`) from `<plugin>/builtin_sources/` into `<data_dir>/aidoku/sources/`
+-- when not yet installed or when a newer built-in version ships with an update.
+function Aidoku:ensureBuiltinSources()
+    local lfs = require("libs/libkoreader-lfs")
+    local builtin_dir = self.path .. "/builtin_sources"
+    if lfs.attributes(builtin_dir, "mode") ~= "directory" then
+        return
+    end
+    for entry in lfs.dir(builtin_dir) do
+        local id, ver_str = entry:match("^(.+)%-v(%d+)%.aix$")
+        if id and ver_str then
+            local builtin_ver = tonumber(ver_str) or 1
+            local installed_max = 0
+            local older_files = {}
+            for cur in lfs.dir(self.sources_dir) do
+                local cid, cver_str = cur:match("^(.+)%-v(%d+)%.aix$")
+                if cid == id then
+                    local cver = tonumber(cver_str) or 0
+                    if cver > installed_max then
+                        installed_max = cver
+                    end
+                    if cver < builtin_ver then
+                        table.insert(older_files, self.sources_dir .. "/" .. cur)
+                    end
+                end
+            end
+            if installed_max < builtin_ver then
+                local src_f = io.open(builtin_dir .. "/" .. entry, "rb")
+                if src_f then
+                    local data = src_f:read("*a")
+                    src_f:close()
+                    local dst_path = self.sources_dir .. "/" .. entry
+                    local tmp_path = dst_path .. ".tmp"
+                    local dst_f = io.open(tmp_path, "wb")
+                    if dst_f then
+                        local ok = dst_f:write(data)
+                        ok = dst_f:close() and ok
+                        if ok and os.rename(tmp_path, dst_path) then
+                            for _i, old_p in ipairs(older_files) do
+                                os.remove(old_p)
+                            end
+                            local InstalledSources = require("installedsources")
+                            InstalledSources.invalidateCache()
+                        else
+                            os.remove(tmp_path)
+                        end
+                    end
+                end
+            end
+        end
+    end
 end
 
 -- markCurrentChapterRead flags self.document's chapter as read (see
@@ -285,6 +340,7 @@ function Aidoku:onAidokuBrowseSources()
         downloads_engine = self.downloads_engine,
         ui = self.ui,
         sources_dir = self.sources_dir,
+        settings_dir = self.settings_dir,
         covers_dir = self.covers_dir,
         downloads_dir = self.downloads_dir,
         is_popout = false,

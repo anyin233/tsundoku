@@ -43,6 +43,7 @@ end
 function SourcesBrowser:genItemTable()
     local item_table = {}
     table.insert(item_table, { text = _("Download Manager"), is_downloads_entry = true })
+    table.insert(item_table, { text = _("Koobone Bookshelf (Kox.moe)"), mandatory = ">", is_koobone_entry = true })
     for _idx, source in ipairs(InstalledSources.list(self.sources_dir, self.engine)) do
         table.insert(item_table, source)
     end
@@ -96,6 +97,20 @@ function SourcesBrowser:onMenuSelect(item)
             is_borderless = true,
             title_bar_fm_style = true,
         })
+    elseif item.is_koobone_entry then
+        local KooboneBrowser = require("koobonebrowser")
+        UIManager:show(KooboneBrowser:new{
+            engine = self.engine,
+            store = self.store,
+            downloads_engine = self.downloads_engine,
+            ui = self.ui,
+            sources_dir = self.sources_dir,
+            downloads_dir = self.downloads_dir,
+            is_popout = false,
+            is_borderless = true,
+            title_bar_fm_style = true,
+            refresh_callback = self.refresh_callback,
+        })
     elseif not item.key then
         UIManager:show(require("ui/widget/infomessage"):new{
             text = _("Couldn't read this source. Try again, or reinstall it."),
@@ -107,6 +122,7 @@ function SourcesBrowser:onMenuSelect(item)
             store = self.store,
             downloads_engine = self.downloads_engine,
             ui = self.ui,
+            sources_dir = self.sources_dir,
             source_path = item.path,
             source_key = item.key,
             source_name = item.name,
@@ -122,43 +138,73 @@ function SourcesBrowser:onMenuSelect(item)
 end
 
 function SourcesBrowser:onMenuHold(item)
-    if item.is_downloads_entry then
+    if item.is_downloads_entry or item.is_koobone_entry then
         return true
     end
     local dialog
+    local buttons = {
+        {{
+            text = _("Source settings"),
+            callback = function()
+                UIManager:close(dialog)
+                local SourceSettingsBrowser = require("sourcesettingsbrowser")
+                UIManager:show(SourceSettingsBrowser:new{
+                    engine = self.engine,
+                    store = self.store,
+                    downloads_engine = self.downloads_engine,
+                    ui = self.ui,
+                    sources_dir = self.sources_dir,
+                    downloads_dir = self.downloads_dir,
+                    source_path = item.path,
+                    source_key = item.key,
+                    source_text = item.text,
+                    is_popout = false,
+                    is_borderless = true,
+                    title_bar_fm_style = true,
+                    refresh_callback = self.refresh_callback,
+                })
+            end,
+        }},
+    }
+    if item.key == "kox" then
+        table.insert(buttons, {{
+            text = _("Koobone Bookshelf"),
+            callback = function()
+                UIManager:close(dialog)
+                local KooboneBrowser = require("koobonebrowser")
+                UIManager:show(KooboneBrowser:new{
+                    engine = self.engine,
+                    store = self.store,
+                    downloads_engine = self.downloads_engine,
+                    ui = self.ui,
+                    sources_dir = self.sources_dir,
+                    downloads_dir = self.downloads_dir,
+                    source_path = item.path,
+                    is_popout = false,
+                    is_borderless = true,
+                    title_bar_fm_style = true,
+                    refresh_callback = self.refresh_callback,
+                })
+            end,
+        }})
+    end
+    table.insert(buttons, {{
+        text = _("Remove installed source"),
+        callback = function()
+            UIManager:close(dialog)
+            UIManager:show(ConfirmBox:new{
+                text = T(_("Remove source '%1'?"), item.text),
+                ok_text = _("Remove"),
+                ok_callback = function()
+                    os.remove(item.path)
+                    self:reload()
+                end,
+            })
+        end,
+    }})
     dialog = ButtonDialog:new{
         title = item.text,
-        buttons = {
-            {{
-                text = _("Source settings"),
-                callback = function()
-                    UIManager:close(dialog)
-                    local SourceSettingsBrowser = require("sourcesettingsbrowser")
-                    UIManager:show(SourceSettingsBrowser:new{
-                        engine = self.engine,
-                        source_path = item.path,
-                        source_text = item.text,
-                        is_popout = false,
-                        is_borderless = true,
-                        title_bar_fm_style = true,
-                    })
-                end,
-            }},
-            {{
-                text = _("Remove installed source"),
-                callback = function()
-                    UIManager:close(dialog)
-                    UIManager:show(ConfirmBox:new{
-                        text = T(_("Remove source '%1'?"), item.text),
-                        ok_text = _("Remove"),
-                        ok_callback = function()
-                            os.remove(item.path)
-                            self:reload()
-                        end,
-                    })
-                end,
-            }},
-        },
+        buttons = buttons,
     }
     UIManager:show(dialog)
     return true

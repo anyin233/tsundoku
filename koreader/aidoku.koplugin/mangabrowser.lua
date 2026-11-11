@@ -279,6 +279,16 @@ function MangaBrowser:onLeftButtonTap()
         end,
     }})
 
+    if self.source_key == "kox" and not tostring(self.manga and self.manga.Key or ""):match("^koob:") then
+        table.insert(buttons, {{
+            text = _("Push all chapters to Koobone…"),
+            callback = function()
+                UIManager:close(dialog)
+                self:promptPushAllToKoobone()
+            end,
+        }})
+    end
+
     table.insert(buttons, {{
         text = is_bm and _("Remove from library") or _("Add to library"),
         callback = function()
@@ -312,6 +322,60 @@ function MangaBrowser:promptResetProgress()
             self.store:resetReadChapters(self.source_key, self.manga.Key)
             self.downloads_engine:resetProgress(self.source_key, self.manga.Key)
             self:refresh()
+        end,
+    })
+end
+
+local function parseKoxBookAndVol(chapter_key)
+    if type(chapter_key) ~= "string" then
+        return nil, nil
+    end
+    local bid, vid = chapter_key:match("^([^:]+):([^:]+)")
+    if bid and vid and bid ~= "koobvol" then
+        return bid, vid
+    end
+    return nil, nil
+end
+
+function MangaBrowser:pushChaptersToKoobone(chapters_list)
+    local book_id
+    local vol_ids = {}
+    for _idx, c in ipairs(chapters_list or {}) do
+        local bid, vid = parseKoxBookAndVol(c.Key)
+        if bid and vid then
+            book_id = book_id or bid
+            table.insert(vol_ids, vid)
+        end
+    end
+    if not book_id or #vol_ids == 0 then
+        UIManager:show(InfoMessage:new{ text = _("No pushable Kox volumes found."), timeout = 2 })
+        return
+    end
+    NetworkMgr:runWhenConnected(function()
+        Trapper:wrap(function()
+            local res, err = self.engine:koxPushKoobone(book_id, table.concat(vol_ids, ","))
+            if not res then
+                UIManager:show(InfoMessage:new{ text = T(_("Push to Koobone failed:\n%1"), err or "") })
+                return
+            end
+            UIManager:show(InfoMessage:new{
+                text = tostring(res.message or _("Pushed to Koobone.")),
+                timeout = 2.5,
+            })
+        end)
+    end)
+end
+
+function MangaBrowser:promptPushAllToKoobone()
+    if #self.chapters == 0 then
+        return
+    end
+    local ordered = ChapterOrder.orderedByReading(self.chapters)
+    UIManager:show(ConfirmBox:new{
+        text = T(_("Push all %1 volume(s) of '%2' to Koobone?"), #ordered, mangaLabel(self.manga)),
+        ok_text = _("Push to Koobone"),
+        ok_callback = function()
+            self:pushChaptersToKoobone(ordered)
         end,
     })
 end
@@ -832,6 +896,19 @@ function MangaBrowser:onMenuHold(item)
                 self:enqueueChaptersList(slice)
             end,
         }})
+    end
+
+    if self.source_key == "kox" then
+        local bid, vid = parseKoxBookAndVol(chapter_key)
+        if bid and vid then
+            table.insert(buttons, {{
+                text = _("Push to Koobone"),
+                callback = function()
+                    UIManager:close(dialog)
+                    self:pushChaptersToKoobone({ chapter })
+                end,
+            }})
+        end
     end
 
     if is_downloaded then

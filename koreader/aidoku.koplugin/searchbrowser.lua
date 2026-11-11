@@ -3,6 +3,7 @@ Prompts for a search query against one installed source and lists the
 results, annotating both bookmarked (★) and already-downloaded (✓) manga.
 ]]
 
+local ButtonDialog = require("ui/widget/buttondialog")
 local DownloadsEngine = require("downloadsengine")
 local InfoMessage = require("ui/widget/infomessage")
 local InputDialog = require("ui/widget/inputdialog")
@@ -14,7 +15,9 @@ local UIManager = require("ui/uimanager")
 local T = require("ffi/util").template
 local _ = require("aidoku_l10n")
 
-local SearchBrowser = Menu:extend{}
+local SearchBrowser = Menu:extend{
+    title_bar_left_icon = "appbar.menu",
+}
 
 local function mangaLabel(manga)
     if type(manga.Title) == "string" and manga.Title ~= "" then
@@ -32,8 +35,12 @@ function SearchBrowser:init()
     self.item_table = {}
     self.raw_entries = {}
     self.page = 1
+    self.search_page = 1
+    self.has_next_page = false
     self.query = nil
+    self.active_listing = nil
     self.available_filters = nil
+    self.available_listings = nil
     self.filter_values = {}
     Menu.init(self)
     OpenWidgets.push(self)
@@ -42,6 +49,143 @@ function SearchBrowser:init()
         Trapper:wrap(function()
             self:reloadFilters()
             self:promptQuery()
+        end)
+    end)
+end
+
+function SearchBrowser:onLeftButtonTap()
+    local dialog
+    local buttons = {
+        {{
+            text = _("New search…"),
+            callback = function()
+                UIManager:close(dialog)
+                self:promptQuery()
+            end,
+        }},
+    }
+    if self.available_filters and #self.available_filters > 0 then
+        table.insert(buttons, {{
+            text = _("Search filters…"),
+            callback = function()
+                UIManager:close(dialog)
+                self:openFilters()
+            end,
+        }})
+    end
+    table.insert(buttons, {{
+        text = _("Browse source listings…"),
+        callback = function()
+            UIManager:close(dialog)
+            self:promptListings()
+        end,
+    }})
+    if self.source_key == "kox" then
+        table.insert(buttons, {{
+            text = _("Koobone Bookshelf…"),
+            callback = function()
+                UIManager:close(dialog)
+                local KooboneBrowser = require("koobonebrowser")
+                UIManager:show(KooboneBrowser:new{
+                    engine = self.engine,
+                    store = self.store,
+                    downloads_engine = self.downloads_engine,
+                    ui = self.ui,
+                    sources_dir = self.sources_dir,
+                    downloads_dir = self.downloads_dir,
+                    source_path = self.source_path,
+                    is_popout = false,
+                    is_borderless = true,
+                    title_bar_fm_style = true,
+                    refresh_callback = self.refresh_callback,
+                })
+            end,
+        }})
+    end
+    table.insert(buttons, {{
+        text = _("Source settings…"),
+        callback = function()
+            UIManager:close(dialog)
+            local SourceSettingsBrowser = require("sourcesettingsbrowser")
+            UIManager:show(SourceSettingsBrowser:new{
+                engine = self.engine,
+                store = self.store,
+                downloads_engine = self.downloads_engine,
+                ui = self.ui,
+                sources_dir = self.sources_dir,
+                downloads_dir = self.downloads_dir,
+                source_path = self.source_path,
+                source_key = self.source_key,
+                source_text = self.source_name or self.title,
+                is_popout = false,
+                is_borderless = true,
+                title_bar_fm_style = true,
+                refresh_callback = self.refresh_callback,
+            })
+        end,
+    }})
+    dialog = ButtonDialog:new{
+        shrink_unneeded_width = true,
+        anchor = function() return self.title_bar.left_button.image.dimen end,
+        buttons = buttons,
+    }
+    UIManager:show(dialog)
+end
+
+function SearchBrowser:promptListings()
+    NetworkMgr:runWhenConnected(function()
+        Trapper:wrap(function()
+            local list = self.engine:listings(self.source_path)
+            if type(list) ~= "table" or #list == 0 then
+                UIManager:show(InfoMessage:new{ text = _("This source has no listings."), timeout = 2 })
+                return
+            end
+            local dialog
+            local buttons = {}
+            for _idx, l in ipairs(list) do
+                local lid = l.ID or l.id or ""
+                local lname = l.Name or l.name or lid
+                if lid ~= "" then
+                    table.insert(buttons, {{
+                        text = lname,
+                        callback = function()
+                            UIManager:close(dialog)
+                            self:runListing({ id = lid, name = lname }, 1)
+                        end,
+                    }})
+                end
+            end
+            dialog = ButtonDialog:new{
+                title = _("Browse listings"),
+                buttons = buttons,
+            }
+            UIManager:show(dialog)
+        end)
+    end)
+end
+
+function SearchBrowser:runListing(listing, page_num)
+    self.active_listing = listing
+    self.query = nil
+    self.search_page = page_num or 1
+    NetworkMgr:runWhenConnected(function()
+        Trapper:wrap(function()
+            local result, err = self.engine:listingGet(self.source_path, listing.id, self.search_page, listing.name)
+            if not result then
+                UIManager:show(InfoMessage:new{ text = T(_("Could not load listing:\n%1"), err) })
+                return
+            end
+            local entries = type(result.Entries) == "table" and result.Entries or {}
+            if self.search_page == 1 then
+                self.raw_entries = entries
+                self.page = 1
+            else
+                for _i, m in ipairs(entries) do
+                    table.insert(self.raw_entries, m)
+                end
+            end
+            self.has_next_page = (result.HasNextPage == true)
+            self:rebuildList()
         end)
     end)
 end
@@ -66,9 +210,7 @@ function SearchBrowser:openFilters()
         title_bar_fm_style = true,
         on_apply = function(values)
             self.filter_values = values
-            if self.query then
-                self:runSearch(self.query)
-            end
+            self:runSearch(self.query or "", 1)
         end,
     })
 end
@@ -80,6 +222,13 @@ function SearchBrowser:promptQuery()
         input_hint = _("Title…"),
         buttons = {{
             {
+                text = _("Browse"),
+                callback = function()
+                    UIManager:close(dialog)
+                    self:runSearch("", 1)
+                end,
+            },
+            {
                 text = _("Cancel"),
                 id = "close",
                 callback = function() UIManager:close(dialog) end,
@@ -90,9 +239,7 @@ function SearchBrowser:promptQuery()
                 callback = function()
                     local query = dialog:getInputText()
                     UIManager:close(dialog)
-                    if query and query ~= "" then
-                        self:runSearch(query)
-                    end
+                    self:runSearch(query or "", 1)
                 end,
             },
         }},
@@ -139,29 +286,47 @@ function SearchBrowser:rebuildList()
         })
     end
 
+    if self.has_next_page then
+        table.insert(item_table, {
+            text = T(_("» Load next page (Page %1)…"), (self.search_page or 1) + 1),
+            bold = true,
+            is_next_page_entry = true,
+        })
+    end
+
     local saved_page = self.page
     self.item_table = item_table
     self:updateItems(saved_page)
 end
 
-function SearchBrowser:runSearch(query)
-    self.query = query
+function SearchBrowser:runSearch(query, page_num)
+    self.query = query or ""
+    self.active_listing = nil
+    self.search_page = page_num or 1
     NetworkMgr:runWhenConnected(function()
         Trapper:wrap(function()
             local filters = {}
             for _idx, v in pairs(self.filter_values) do
                 table.insert(filters, v)
             end
-            local result, err = self.engine:search(self.source_path, query, self.page, filters)
+            local result, err = self.engine:search(self.source_path, self.query, self.search_page, filters)
             if not result then
                 UIManager:show(InfoMessage:new{ text = T(_("Search failed:\n%1"), err) })
                 return
             end
-            self.raw_entries = type(result.Entries) == "table" and result.Entries or {}
-            if #self.raw_entries == 0 then
-                UIManager:show(InfoMessage:new{ text = _("No results."), timeout = 2 })
+            local entries = type(result.Entries) == "table" and result.Entries or {}
+            if self.search_page == 1 then
+                self.raw_entries = entries
+                if #self.raw_entries == 0 then
+                    UIManager:show(InfoMessage:new{ text = _("No results."), timeout = 2 })
+                end
+                self.page = 1
+            else
+                for _i, m in ipairs(entries) do
+                    table.insert(self.raw_entries, m)
+                end
             end
-            self.page = 1
+            self.has_next_page = (result.HasNextPage == true)
             self:rebuildList()
         end)
     end)
@@ -170,6 +335,13 @@ end
 function SearchBrowser:onMenuSelect(item)
     if item.is_filters_entry then
         self:openFilters()
+        return true
+    elseif item.is_next_page_entry then
+        if self.active_listing then
+            self:runListing(self.active_listing, (self.search_page or 1) + 1)
+        else
+            self:runSearch(self.query or "", (self.search_page or 1) + 1)
+        end
         return true
     end
     local MangaBrowser = require("mangabrowser")
@@ -198,7 +370,7 @@ function SearchBrowser:onMenuSelect(item)
 end
 
 function SearchBrowser:onMenuHold(item)
-    if item.is_filters_entry then
+    if item.is_filters_entry or item.is_next_page_entry then
         return true
     end
     local manga = item.manga

@@ -103,6 +103,7 @@ function DownloadQueue:enqueue(spec)
         existing.source_path = spec.source_path or existing.source_path
         existing.manga = spec.manga or existing.manga
         existing.chapter = spec.chapter or existing.chapter
+        existing.koobone_vol = spec.koobone_vol or existing.koobone_vol
         existing.out_path = spec.out_path or existing.out_path
         existing.downloads_dir = spec.downloads_dir or existing.downloads_dir
         existing.manga_dir_name = spec.manga_dir_name or existing.manga_dir_name
@@ -135,6 +136,7 @@ function DownloadQueue:enqueue(spec)
         chapter_key = spec.chapter_key,
         chapter_title = chapter_label,
         chapter = spec.chapter,
+        koobone_vol = spec.koobone_vol,
         out_path = out_path,
         downloads_dir = downloads_dir,
         manga_dir_name = manga_dir_name,
@@ -197,6 +199,7 @@ function DownloadQueue:enqueueBatch(specs, ctx)
                 chapter_key = spec.chapter_key,
                 chapter_title = chapter_label,
                 chapter = spec.chapter,
+                koobone_vol = spec.koobone_vol,
                 out_path = out_path,
                 downloads_dir = downloads_dir,
                 manga_dir_name = manga_dir_name,

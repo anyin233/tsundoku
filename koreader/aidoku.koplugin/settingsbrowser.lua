@@ -117,6 +117,7 @@ function SettingsBrowser:genItemTable()
     -- carry no state of their own.
     return {
         { text = _("Sources"), mandatory = ">", is_sources_entry = true },
+        { text = _("Koobone Bookshelf"), mandatory = ">", is_koobone_entry = true },
         { text = _("Download Manager"), mandatory = ">", is_downloads_entry = true },
 
         { text = "", dim = true, bold = true, is_placeholder = true },
@@ -578,6 +579,20 @@ function SettingsBrowser:onMenuSelect(item)
     if item.is_sources_entry then
         local SourcesBrowser = require("sourcesbrowser")
         UIManager:show(SourcesBrowser:new{
+            engine = self.engine,
+            store = self.store,
+            downloads_engine = self.downloads_engine,
+            ui = self.ui,
+            sources_dir = self.sources_dir,
+            downloads_dir = self.downloads_dir,
+            is_popout = false,
+            is_borderless = true,
+            title_bar_fm_style = true,
+            refresh_callback = self.refresh_callback,
+        })
+    elseif item.is_koobone_entry then
+        local KooboneBrowser = require("koobonebrowser")
+        UIManager:show(KooboneBrowser:new{
             engine = self.engine,
             store = self.store,
             downloads_engine = self.downloads_engine,

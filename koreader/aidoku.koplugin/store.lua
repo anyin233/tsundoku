@@ -597,4 +597,24 @@ function Store:setRepoURL(url)
     self.settings:flush()
 end
 
+-- ===== Koobone Integration Preferences =====
+
+function Store:kooboneAutoSync()
+    return self.settings:readSetting("koobone_auto_sync", true)
+end
+
+function Store:setKooboneAutoSync(enabled)
+    self.settings:saveSetting("koobone_auto_sync", enabled and true or false)
+    self.settings:flush()
+end
+
+function Store:kooboneAutoBookmark()
+    return self.settings:readSetting("koobone_auto_bookmark", true)
+end
+
+function Store:setKooboneAutoBookmark(enabled)
+    self.settings:saveSetting("koobone_auto_bookmark", enabled and true or false)
+    self.settings:flush()
+end
+
 return Store

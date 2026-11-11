@@ -157,6 +157,95 @@ function Engine:settingsSet(source_path, key, setting_type, values)
     return self.runner:exec(args, nil, self:sourceEnv())
 end
 
+function Engine:sourceLogin(source_path, key, username, password)
+    return self.runner:execJSON({ source_path, "login", key, username, password }, _("Logging in…"), self:sourceEnv())
+end
+
+function Engine:sourceLogout(source_path, key, notification)
+    local args = { source_path, "logout", key }
+    if notification and notification ~= "" then
+        table.insert(args, notification)
+    end
+    return self.runner:execJSON(args, _("Logging out…"), self:sourceEnv())
+end
+
+function Engine:sourceNotify(source_path, notification)
+    return self.runner:execJSON({ source_path, "notify", notification }, _("Updating…"), self:sourceEnv())
+end
+
+function Engine:listings(source_path)
+    return self.runner:execJSON({ source_path, "listings" }, _("Loading listings…"), self:sourceEnv())
+end
+
+function Engine:listingGet(source_path, listing_id, page, listing_name)
+    return self.runner:execJSON({
+        source_path, "listings", "get", listing_id, tostring(page or 1), listing_name or listing_id,
+    }, _("Loading…"), self:sourceEnv())
+end
+
+-- ===== Native Kox.moe & Koobone Integration =====
+
+function Engine:koxLogin(email, password)
+    return self.runner:execJSON({ "-", "kox", "login", email, password }, _("Signing in to Kox.moe…"), self:sourceEnv())
+end
+
+function Engine:koxLogout()
+    return self.runner:execJSON({ "-", "kox", "logout" }, _("Signing out…"), self:sourceEnv())
+end
+
+function Engine:koxStatus(cached_only)
+    local args = { "-", "kox", "status" }
+    if cached_only then
+        table.insert(args, "cached")
+    end
+    return self.runner:execJSON(args, cached_only and nil or _("Refreshing account status…"), self:sourceEnv())
+end
+
+function Engine:koxPushKoobone(book_id, vol_ids_csv)
+    return self.runner:execJSON(
+        { "-", "kox", "push-koobone", tostring(book_id), tostring(vol_ids_csv) },
+        _("Pushing to Koobone…"),
+        self:sourceEnv()
+    )
+end
+
+function Engine:kooboneSeries(page)
+    return self.runner:execJSON({ "-", "koobone", "series", tostring(page or 1) }, _("Loading Koobone bookshelf…"), self:sourceEnv())
+end
+
+function Engine:kooboneVolumes(page, series_id, series_name, search_query, liked_only)
+    return self.runner:execJSON({
+        "-", "koobone", "vols",
+        tostring(page or 1),
+        series_id or "",
+        series_name or "",
+        search_query or "",
+        liked_only and "1" or "0",
+    }, _("Loading Koobone volumes…"), self:sourceEnv())
+end
+
+function Engine:kooboneAllVolumes(series_id, series_name, liked_only, silent)
+    local args = {
+        "-", "koobone", "all-vols",
+        series_id or "",
+        series_name or "",
+        liked_only and "1" or "0",
+    }
+    if silent then
+        local out, err = self.runner:exec(args, nil, self:sourceEnv(), true)
+        if not out then
+            return nil, err
+        end
+        local ok, decoded = pcall(json.decode, out)
+        return ok and decoded or nil, not ok and tostring(decoded) or nil
+    end
+    return self.runner:execJSON(args, _("Syncing Koobone bookshelf…"), self:sourceEnv())
+end
+
+function Engine:spawnKooboneSyncCheck()
+    return self.runner:spawnAsync({ "-", "koobone", "all-vols", "", "", "0" }, self:sourceEnv(), true)
+end
+
 function Engine:mangaUpdate(source_path, manga_key)
     return self.runner:execJSON({ source_path, "manga", manga_key }, _("Loading chapters…"), self:sourceEnv())
 end
@@ -165,7 +254,31 @@ end
 -- downloading one chapter. When manga_obj and chapter_obj are provided, uses
 -- `download-payload` so aidoku-run skips a redundant network GetMangaUpdate
 -- call per chapter during batch downloads.
-function Engine:prepareDownloadArgs(source_path, manga_key, chapter_key, out_path, downloads_dir, manga_dir_name, redownload, manga_obj, chapter_obj)
+function Engine:prepareDownloadArgs(source_path, manga_key, chapter_key, out_path, downloads_dir, manga_dir_name, redownload, manga_obj, chapter_obj, koobone_vol)
+    if type(koobone_vol) == "table" and koobone_vol.file_md5 and koobone_vol.file_md5 ~= "" then
+        local payload = sanitizeForJSON({
+            volume = koobone_vol,
+            sourcePath = source_path or "",
+            outputPath = out_path or "",
+            downloadsDir = downloads_dir or "",
+            mangaDirName = manga_dir_name or "",
+            redownload = redownload and true or false,
+        })
+        local ok_enc, encoded = pcall(json.encode, payload)
+        if ok_enc and encoded then
+            local payload_path = os.tmpname()
+            local f = io.open(payload_path, "w")
+            local ok_write = f and f:write(encoded)
+            if f then
+                ok_write = f:close() and ok_write
+            end
+            if ok_write then
+                return { "-", "koobone", "download-payload", payload_path }, { payload_path }
+            end
+            os.remove(payload_path)
+        end
+    end
+
     if type(manga_obj) == "table" and type(chapter_obj) == "table" and manga_obj.Key and chapter_obj.Key then
         local manga_slim = {}
         for k, v in pairs(manga_obj) do
@@ -206,13 +319,13 @@ function Engine:prepareDownloadArgs(source_path, manga_key, chapter_key, out_pat
     return args, nil
 end
 
-function Engine:download(source_path, manga_key, chapter_key, out_path, downloads_dir, silent, progress_text_override, manga_dir_name, redownload, manga_obj, chapter_obj)
+function Engine:download(source_path, manga_key, chapter_key, out_path, downloads_dir, silent, progress_text_override, manga_dir_name, redownload, manga_obj, chapter_obj, koobone_vol)
     local progress_text = progress_text_override or _("Downloading chapter…")
     if silent then
         progress_text = nil
     end
     local args, cleanup = self:prepareDownloadArgs(
-        source_path, manga_key, chapter_key, out_path, downloads_dir, manga_dir_name, redownload, manga_obj, chapter_obj)
+        source_path, manga_key, chapter_key, out_path, downloads_dir, manga_dir_name, redownload, manga_obj, chapter_obj, koobone_vol)
     if silent then
         local out, err = self.runner:exec(args, nil, self:sourceEnv(), true)
         for _idx, p in ipairs(cleanup or {}) do
@@ -235,7 +348,8 @@ function Engine:spawnDownload(opts)
         opts.manga_dir_name,
         opts.redownload,
         opts.manga,
-        opts.chapter
+        opts.chapter,
+        opts.koobone_vol
     )
     return self.runner:spawnAsync(args, self:sourceEnv(), true, cleanup)
 end

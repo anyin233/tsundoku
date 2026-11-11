@@ -575,6 +575,24 @@ function LibraryBrowser:init()
             self:scheduleRefresh()
         end
     end)
+
+    UIManager:nextTick(function()
+        local ok, KooboneSync = pcall(require, "koobonesync")
+        if ok and KooboneSync then
+            KooboneSync:maybeAutoSync({
+                engine = self.engine,
+                store = self.store,
+                downloads_engine = self.downloads_engine,
+                sources_dir = self.sources_dir,
+                settings_dir = self.settings_dir or (self.aidoku and self.aidoku.settings_dir),
+                downloads_dir = self.downloads_dir,
+            }, function(sync_stats)
+                if not self.closed and sync_stats and (sync_stats.newly_queued > 0 or sync_stats.bookmarked > 0) then
+                    self:scheduleRefresh()
+                end
+            end)
+        end
+    end)
 end
 
 function LibraryBrowser:onCloseWidget()
@@ -1070,6 +1088,25 @@ function LibraryBrowser:onLeftButtonTap()
                     UIManager:close(dialog)
                     local GlobalSearchBrowser = require("globalsearchbrowser")
                     UIManager:show(GlobalSearchBrowser:new{
+                        engine = self.engine,
+                        store = self.store,
+                        downloads_engine = self.downloads_engine,
+                        ui = self.ui,
+                        sources_dir = self.sources_dir,
+                        downloads_dir = self.downloads_dir,
+                        is_popout = false,
+                        is_borderless = true,
+                        title_bar_fm_style = true,
+                        refresh_callback = function() self:refresh() end,
+                    })
+                end,
+            }},
+            {{
+                text = _("Koobone Bookshelf…"),
+                callback = function()
+                    UIManager:close(dialog)
+                    local KooboneBrowser = require("koobonebrowser")
+                    UIManager:show(KooboneBrowser:new{
                         engine = self.engine,
                         store = self.store,
                         downloads_engine = self.downloads_engine,
