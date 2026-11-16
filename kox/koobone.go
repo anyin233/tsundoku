@@ -337,28 +337,49 @@ func (c *Client) DownloadKooboneVolumeCBZ(
 			_ = os.MkdirAll(downloadsDir, 0o755)
 			tmpDir = downloadsDir
 		}
-		tmpEpub, err := os.CreateTemp(tmpDir, ".koobone-*.epub.tmp")
-		if err != nil {
-			return "", fmt.Errorf("koobone: creating temp epub: %w", err)
-		}
-		tmpEpubPath := tmpEpub.Name()
-		defer func() {
+		downloadToTemp := func(srcURL string) (string, error) {
+			tmpEpub, err := os.CreateTemp(tmpDir, ".koobone-*.epub.tmp")
+			if err != nil {
+				return "", fmt.Errorf("koobone: creating temp epub: %w", err)
+			}
+			tmpEpubPath := tmpEpub.Name()
+			cleanupTmp := func() {
+				tmpEpub.Close()
+				_ = os.Remove(tmpEpubPath)
+			}
+
+			rc, _, err := c.DownloadStream(ctx, srcURL)
+			if err != nil {
+				cleanupTmp()
+				return "", err
+			}
+			_, copyErr := io.Copy(tmpEpub, io.LimitReader(rc, host.MaxResponseBytes*4))
+			rc.Close()
+			if copyErr != nil {
+				cleanupTmp()
+				return "", fmt.Errorf("koobone: downloading epub stream: %w", copyErr)
+			}
+			if err := tmpEpub.Sync(); err != nil {
+				cleanupTmp()
+				return "", err
+			}
 			tmpEpub.Close()
+			return tmpEpubPath, nil
+		}
+
+		tmpEpubPath, err := downloadToTemp(vol.FileURL)
+		if err != nil && vol.CDNURL != "" && vol.CDNURL != vol.FileURL && ctx.Err() == nil {
+			if cdnPath, cdnErr := downloadToTemp(vol.CDNURL); cdnErr == nil {
+				tmpEpubPath = cdnPath
+				err = nil
+			}
+		}
+		if err != nil {
+			return "", err
+		}
+		defer func() {
 			_ = os.Remove(tmpEpubPath)
 		}()
-
-		rc, _, err := c.DownloadStream(ctx, vol.FileURL)
-		if err != nil {
-			return "", err
-		}
-		_, copyErr := io.Copy(tmpEpub, io.LimitReader(rc, host.MaxResponseBytes*4))
-		rc.Close()
-		if copyErr != nil {
-			return "", fmt.Errorf("koobone: downloading epub stream: %w", copyErr)
-		}
-		if err := tmpEpub.Sync(); err != nil {
-			return "", err
-		}
 
 		return ConvertEPUBFileToCBZ(tmpEpubPath, manga, chapter, targetOut, mDir, onProgress)
 	}

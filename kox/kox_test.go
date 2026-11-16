@@ -2,6 +2,9 @@ package kox
 
 import (
 	"archive/zip"
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -161,5 +164,102 @@ func TestConvertEPUBFileToCBZ(t *testing.T) {
 	// Expect ComicInfo.xml + 2 pages (excluding trailing theendinfo.png)
 	if len(zr.File) != 3 {
 		t.Fatalf("cbz entry count = %d, want 3", len(zr.File))
+	}
+}
+
+func TestDownloadKooboneVolumeCBZ_CDNFallback(t *testing.T) {
+	tmpDir := t.TempDir()
+	epubPath := filepath.Join(tmpDir, "sample.epub")
+
+	f, err := os.Create(epubPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	zw := zip.NewWriter(f)
+	writeEntry := func(name, content string) {
+		w, err := zw.Create(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.Write([]byte(content)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeBytes := func(name string, b []byte) {
+		w, err := zw.Create(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.Write(b); err != nil {
+			t.Fatal(err)
+		}
+	}
+	png1x1 := []byte{
+		0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D,
+		0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+		0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4, 0x89, 0x00, 0x00, 0x00,
+		0x0A, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00,
+		0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49,
+		0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+	}
+	writeEntry("META-INF/container.xml", `<?xml version="1.0"?><container><rootfiles><rootfile full-path="vol.opf"/></rootfiles></container>`)
+	writeEntry("vol.opf", `<?xml version="1.0"?><package><manifest><item id="p1" href="html/p1.html" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="p1"/></spine></package>`)
+	writeEntry("html/p1.html", `<html><body><img src="../image/moe-001.png"/></body></html>`)
+	writeBytes("image/moe-001.png", png1x1)
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	epubBytes, err := os.ReadFile(epubPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/primary" {
+			http.Error(w, "primary unavailable", http.StatusBadGateway)
+			return
+		}
+		if r.URL.Path == "/cdn" {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(epubBytes)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	client := NewClient(nil)
+	client.HTTPClient = srv.Client()
+
+	outCBZ := filepath.Join(tmpDir, "fallback.cbz")
+	got, err := client.DownloadKooboneVolumeCBZ(
+		context.Background(),
+		KooboneVolume{
+			FileMD5:    "abc123",
+			VolSeries:  "Test Series",
+			VolSNumber: "卷01",
+			FileURL:    srv.URL + "/primary",
+			CDNURL:     srv.URL + "/cdn",
+		},
+		"",
+		outCBZ,
+		"",
+		"",
+		false,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("DownloadKooboneVolumeCBZ fallback failed: %v", err)
+	}
+	zr, err := zip.OpenReader(got)
+	if err != nil {
+		t.Fatalf("open cbz: %v", err)
+	}
+	defer zr.Close()
+	if len(zr.File) != 2 {
+		t.Fatalf("cbz entry count = %d, want 2", len(zr.File))
 	}
 }

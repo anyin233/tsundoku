@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io"
 	"mime/multipart"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -88,6 +89,38 @@ type Client struct {
 	KooboneURL string
 }
 
+// newKooboneTransport configures an HTTP transport that falls back to IPv4
+// ("tcp4") when dual-stack dialing fails on IPv4-only e-reader networks.
+func newKooboneTransport() http.RoundTripper {
+	dialer := &net.Dialer{
+		Timeout:   20 * time.Second,
+		KeepAlive: 30 * time.Second,
+	}
+	base, ok := http.DefaultTransport.(*http.Transport)
+	var tr *http.Transport
+	if ok && base != nil {
+		tr = base.Clone()
+	} else {
+		tr = &http.Transport{
+			Proxy:                 http.ProxyFromEnvironment,
+			MaxIdleConns:          100,
+			IdleConnTimeout:       90 * time.Second,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+		}
+	}
+	tr.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+		conn, err := dialer.DialContext(ctx, network, addr)
+		if err != nil && network == "tcp" && ctx.Err() == nil {
+			if conn4, err4 := dialer.DialContext(ctx, "tcp4", addr); err4 == nil {
+				return conn4, nil
+			}
+		}
+		return conn, err
+	}
+	return tr
+}
+
 // NewClient constructs a Client backed by settings.
 func NewClient(settings *settingsstore.Store) *Client {
 	base := DefaultBaseURL
@@ -97,8 +130,11 @@ func NewClient(settings *settingsstore.Store) *Client {
 		}
 	}
 	return &Client{
-		Settings:   settings,
-		HTTPClient: &http.Client{Timeout: 90 * time.Second},
+		Settings: settings,
+		HTTPClient: &http.Client{
+			Timeout:   90 * time.Second,
+			Transport: newKooboneTransport(),
+		},
 		BaseURL:    base,
 		KooboneURL: KooboneBaseURL,
 	}
