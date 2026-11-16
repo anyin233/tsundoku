@@ -12,6 +12,7 @@ Workflow:
    zero-overhead uncompressed `.cbz` with `ComicInfo.xml` registered in `index.db`.
 ]]
 
+local CoverCache = require("covercache")
 local DownloadQueue = require("downloadqueue")
 local InstalledSources = require("installedsources")
 local NetworkMgr = require("ui/network/manager")
@@ -23,9 +24,29 @@ local KooboneSync = {
     running_handle = nil,
     poll_scheduled = false,
     last_auto_sync_at = 0,
+    pending_callbacks = {},
 }
 
 local AUTO_SYNC_COOLDOWN_SEC = 45
+
+function KooboneSync.hasCredentials(settings_dir)
+    local settings_json = settings_dir and (settings_dir .. "/settings.json") or nil
+    if not settings_json then
+        return true
+    end
+    if lfs.attributes(settings_json, "mode") ~= "file" then
+        return false
+    end
+    local f = io.open(settings_json, "r")
+    if not f then
+        return false
+    end
+    local content = f:read("*a") or ""
+    f:close()
+    return content:find("kox.login.username", 1, true) ~= nil
+        or content:find("kox.auth.cookie", 1, true) ~= nil
+        or content:find("kox.koob.skey", 1, true) ~= nil
+end
 
 function KooboneSync.buildSpecFromVolume(vol, kox_source_path, downloads_dir)
     local manga_key = (type(vol.manga_key) == "string" and vol.manga_key ~= "") and vol.manga_key or "koob:uploads"
@@ -122,6 +143,29 @@ function KooboneSync.processVolumes(vols, ctx)
         end
     end
 
+    if ctx.covers_dir and ctx.covers_dir ~= "" and ctx.engine then
+        local cover_reqs = {}
+        for mkey, meta in pairs(series_meta) do
+            if not CoverCache:hasDiskCover(ctx.covers_dir, "kox", mkey) then
+                table.insert(cover_reqs, {
+                    source_key = "kox",
+                    source_path = kox_path,
+                    manga_key = mkey,
+                    cover_url = meta.cover or "",
+                    on_ready = ctx.on_cover_ready,
+                })
+            end
+        end
+        if #cover_reqs > 0 then
+            CoverCache:requestBatch(cover_reqs, {
+                engine = ctx.engine,
+                store = ctx.store,
+                sources_dir = ctx.sources_dir,
+                covers_dir = ctx.covers_dir,
+            })
+        end
+    end
+
     if #specs > 0 then
         stats.newly_queued = DownloadQueue:enqueueBatch(specs, {
             engine = ctx.engine,
@@ -132,6 +176,24 @@ function KooboneSync.processVolumes(vols, ctx)
     end
 
     return stats
+end
+
+function KooboneSync:isRunning()
+    return self.running_handle ~= nil
+end
+
+function KooboneSync:enqueueCallback(fn)
+    if type(fn) == "function" then
+        table.insert(self.pending_callbacks, fn)
+    end
+end
+
+function KooboneSync:flushCallbacks(stats, err)
+    local cbs = self.pending_callbacks
+    self.pending_callbacks = {}
+    for _idx, fn in ipairs(cbs) do
+        pcall(fn, stats, err)
+    end
 end
 
 -- maybeAutoSync runs a non-blocking background check of Koobone's bookshelf
@@ -152,24 +214,8 @@ function KooboneSync:maybeAutoSync(ctx, on_complete)
         return
     end
 
-    -- Fast local check (~0ms if settings.json lacks kox login): avoid spawning
-    -- network sync if the user hasn't configured a Kox account yet.
-    local settings_json = ctx.settings_dir and (ctx.settings_dir .. "/settings.json") or nil
-    if settings_json then
-        if lfs.attributes(settings_json, "mode") ~= "file" then
-            return
-        end
-        local f = io.open(settings_json, "r")
-        if f then
-            local content = f:read("*a") or ""
-            f:close()
-            if not content:find("kox.login.username", 1, true)
-                and not content:find("kox.auth.cookie", 1, true)
-                and not content:find("kox.koob.skey", 1, true)
-            then
-                return
-            end
-        end
+    if not KooboneSync.hasCredentials(ctx.settings_dir) then
+        return
     end
 
     self.last_auto_sync_at = now
@@ -178,10 +224,64 @@ function KooboneSync:maybeAutoSync(ctx, on_complete)
         return
     end
     self.running_handle = handle
-    self:pollHandle(ctx, on_complete)
+    self:enqueueCallback(on_complete)
+    self:pollHandle(ctx)
 end
 
-function KooboneSync:pollHandle(ctx, on_complete)
+-- manualSync triggers an immediate non-blocking Koobone subscription refresh
+-- regardless of cooldown or the auto-sync toggle.
+function KooboneSync:manualSync(ctx, opts)
+    opts = opts or {}
+    if not ctx or not ctx.engine or not ctx.store or not ctx.downloads_engine then
+        if type(opts.on_complete) == "function" then
+            pcall(opts.on_complete, nil, "not_ready")
+        end
+        return
+    end
+    if not KooboneSync.hasCredentials(ctx.settings_dir) then
+        if type(opts.on_complete) == "function" then
+            pcall(opts.on_complete, nil, "no_credentials")
+        end
+        return
+    end
+    if self.running_handle then
+        self:enqueueCallback(opts.on_complete)
+        if type(opts.on_already_running) == "function" then
+            pcall(opts.on_already_running)
+        elseif type(opts.on_start) == "function" then
+            pcall(opts.on_start)
+        end
+        self:pollHandle(ctx)
+        return
+    end
+
+    NetworkMgr:runWhenConnected(function()
+        if self.running_handle then
+            self:enqueueCallback(opts.on_complete)
+            if type(opts.on_start) == "function" then
+                pcall(opts.on_start)
+            end
+            self:pollHandle(ctx)
+            return
+        end
+        self.last_auto_sync_at = os.time()
+        local handle, spawn_err = ctx.engine:spawnKooboneSyncCheck()
+        if not handle then
+            if type(opts.on_complete) == "function" then
+                pcall(opts.on_complete, nil, spawn_err or "spawn_failed")
+            end
+            return
+        end
+        self.running_handle = handle
+        self:enqueueCallback(opts.on_complete)
+        if type(opts.on_start) == "function" then
+            pcall(opts.on_start)
+        end
+        self:pollHandle(ctx)
+    end)
+end
+
+function KooboneSync:pollHandle(ctx)
     if self.poll_scheduled or not self.running_handle then
         return
     end
@@ -192,9 +292,9 @@ function KooboneSync:pollHandle(ctx, on_complete)
         if not h then
             return
         end
-        local state, stdout_text = h:poll()
+        local state, stdout_text, poll_err = h:poll()
         if state == "running" then
-            self:pollHandle(ctx, on_complete)
+            self:pollHandle(ctx)
             return
         end
         self.running_handle = nil
@@ -203,11 +303,14 @@ function KooboneSync:pollHandle(ctx, on_complete)
             local ok, decoded = pcall(json.decode, stdout_text)
             if ok and type(decoded) == "table" and type(decoded.data) == "table" then
                 local stats = KooboneSync.processVolumes(decoded.data, ctx)
-                if on_complete then
-                    pcall(on_complete, stats)
-                end
+                self:flushCallbacks(stats, nil)
+                return
             end
+            local api_err = (ok and type(decoded) == "table" and type(decoded.error) == "string") and decoded.error or "invalid_response"
+            self:flushCallbacks(nil, api_err)
+            return
         end
+        self:flushCallbacks(nil, poll_err or "sync_failed")
     end)
 end
 

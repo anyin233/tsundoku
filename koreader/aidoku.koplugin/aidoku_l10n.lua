@@ -172,6 +172,23 @@ function L10n.getResolvedLanguage()
     return active_resolved_lang
 end
 
+-- Uses Japanese Kanji "積読" (U+7A4D U+8AAD) for Chinese and Japanese locales,
+-- and "Tsundoku" for English and all other locales.
+function L10n.isKanjiBrandLanguage(lang)
+    if type(lang) ~= "string" then
+        return false
+    end
+    return lang:match("^zh") ~= nil or lang:match("^ja") ~= nil
+end
+
+function L10n.brandName()
+    local lang = L10n.effectiveLanguage()
+    if L10n.isKanjiBrandLanguage(lang) then
+        return "積読"
+    end
+    return "Tsundoku"
+end
+
 -- Initialize against KOReader's current language on module load; main.lua's
 -- Aidoku:init() immediately syncs this with store:language() once Store opens.
 L10n.setLanguage("auto")

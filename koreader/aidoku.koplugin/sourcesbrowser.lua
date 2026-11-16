@@ -17,11 +17,12 @@ local T = require("ffi/util").template
 local _ = require("aidoku_l10n")
 
 local SourcesBrowser = Menu:extend{
+    name = "tsundoku_sources",
     title_bar_left_icon = "plus",
 }
 
 function SourcesBrowser:init()
-    self.title = _("Aidoku sources")
+    self.title = _("Manga sources")
     self.item_table = {}
     Menu.init(self)
     OpenWidgets.push(self)

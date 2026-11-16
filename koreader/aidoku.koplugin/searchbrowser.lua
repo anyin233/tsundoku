@@ -16,6 +16,7 @@ local T = require("ffi/util").template
 local _ = require("aidoku_l10n")
 
 local SearchBrowser = Menu:extend{
+    name = "tsundoku_single_search",
     title_bar_left_icon = "appbar.menu",
 }
 

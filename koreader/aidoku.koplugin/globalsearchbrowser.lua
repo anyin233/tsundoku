@@ -23,6 +23,7 @@ local T = require("ffi/util").template
 local _ = require("aidoku_l10n")
 
 local GlobalSearchBrowser = Menu:extend{
+    name = "tsundoku_search",
     title_bar_left_icon = "appbar.menu",
 }
 
@@ -99,6 +100,14 @@ function GlobalSearchBrowser:loadSourcesAndShowSelector()
             end
         end
         self:showSourceSelector()
+        if self.prompt_immediately and self:selectedCount() > 0 then
+            self.prompt_immediately = false
+            UIManager:nextTick(function()
+                if not self.closed then
+                    self:promptQuery()
+                end
+            end)
+        end
     end)
 end
 

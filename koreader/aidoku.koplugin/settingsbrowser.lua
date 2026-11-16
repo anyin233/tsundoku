@@ -32,7 +32,9 @@ local function showInvalid(text)
     UIManager:show(InfoMessage:new{ text = text })
 end
 
-local SettingsBrowser = Menu:extend{}
+local SettingsBrowser = Menu:extend{
+    name = "tsundoku_settings",
+}
 
 local MB = 1024 * 1024
 
@@ -115,7 +117,7 @@ function SettingsBrowser:genItemTable()
     -- Section header rows are dim + is_placeholder (unselectable, see
     -- onMenuSelect) purely to visually group the settings below -- they
     -- carry no state of their own.
-    return {
+    local items = {
         { text = _("Sources"), mandatory = ">", is_sources_entry = true },
         { text = _("Koobone Bookshelf"), mandatory = ">", is_koobone_entry = true },
         { text = _("Download Manager"), mandatory = ">", is_downloads_entry = true },
@@ -143,29 +145,37 @@ function SettingsBrowser:genItemTable()
             mandatory = modeLabel(self.store:nextChapterMode()),
             is_next_chapter_entry = true,
         },
-
-        { text = _("Storage limit"), mandatory = storage_text, is_storage_limit_entry = true },
-
-        -- Network/source configuration, roughly least to most obscure.
-        { text = _("Source repository URL"), mandatory = repo_url_text, is_repo_url_entry = true },
-        { text = _("Network concurrency"), mandatory = concurrency_text, is_network_concurrency_entry = true },
-        
-        -- Advanced settings that *most users* don't need to touch.
-        { text = "", dim = true, bold = true, is_placeholder = true },
-        {
-            text = _("Ephemeral Mode"),
-            mandatory = self.store:isEphemeralMode() and _("On") or _("Off"),
-            is_ephemeral_mode_entry = true,
-        },
-        {
-            text = _("Ephemeral storage path"),
-            mandatory = self.store:ephemeralPath(),
-            is_ephemeral_path_entry = true,
-        },
-        { text = _("FlareSolverr host"), mandatory = flaresolverr_text, is_flaresolverr_entry = true },
-        { text = _("Import cookies"), is_import_cookies_entry = true },
-        { text = _("Clear stored cookies"), is_clear_cookies_entry = true },
     }
+
+    if self.aidoku and self.aidoku.simpleui_active then
+        local tap_mode = self.store:suiSeriesTapMode()
+        table.insert(items, {
+            text = _("Home screen series tap"),
+            mandatory = tap_mode == "resume" and _("Resume reading") or _("Series chapters"),
+            is_sui_tap_mode_entry = true,
+        })
+    end
+
+    table.insert(items, { text = _("Storage limit"), mandatory = storage_text, is_storage_limit_entry = true })
+    table.insert(items, { text = _("Source repository URL"), mandatory = repo_url_text, is_repo_url_entry = true })
+    table.insert(items, { text = _("Network concurrency"), mandatory = concurrency_text, is_network_concurrency_entry = true })
+
+    -- Advanced settings that *most users* don't need to touch.
+    table.insert(items, { text = "", dim = true, bold = true, is_placeholder = true })
+    table.insert(items, {
+        text = _("Ephemeral Mode"),
+        mandatory = self.store:isEphemeralMode() and _("On") or _("Off"),
+        is_ephemeral_mode_entry = true,
+    })
+    table.insert(items, {
+        text = _("Ephemeral storage path"),
+        mandatory = self.store:ephemeralPath(),
+        is_ephemeral_path_entry = true,
+    })
+    table.insert(items, { text = _("FlareSolverr host"), mandatory = flaresolverr_text, is_flaresolverr_entry = true })
+    table.insert(items, { text = _("Import cookies"), is_import_cookies_entry = true })
+    table.insert(items, { text = _("Clear stored cookies"), is_clear_cookies_entry = true })
+    return items
 end
 
 function SettingsBrowser:refresh()
@@ -631,6 +641,10 @@ function SettingsBrowser:onMenuSelect(item)
         end
     elseif item.is_next_chapter_entry then
         self:cycleNextChapterMode()
+    elseif item.is_sui_tap_mode_entry then
+        local cur = self.store:suiSeriesTapMode()
+        self.store:setSuiSeriesTapMode(cur == "resume" and "series_view" or "resume")
+        self:refresh()
     elseif item.is_storage_limit_entry then
         if self.store:isEphemeralMode() then
             UIManager:show(InfoMessage:new{

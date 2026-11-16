@@ -63,6 +63,7 @@ local function formatChapterRowTitle(manga_title, chapter_title, max_manga_chars
 end
 
 local DownloadsBrowser = Menu:extend{
+    name = "tsundoku_downloads",
     title_bar_left_icon = "appbar.menu",
 }
 
@@ -508,6 +509,7 @@ function DownloadsBrowser:openChapterFile(source_key, manga_key, path)
         return
     end
     self.store:markLastRead(source_key, manga_key)
+    require("pendinglibrary").from_tsundoku = true
     if self.ui.document then
         self.ui:switchDocument(path)
     else
@@ -547,6 +549,7 @@ function DownloadsBrowser:openMangaGroupChapters(group)
 
     local sub_menu
     sub_menu = Menu:new{
+        name = "tsundoku_downloads_manga",
         title = group.mangaTitle,
         subtitle = T(_("%1 downloaded chapters (%2)"), group.count, formatSize(group.sizeBytes)),
         item_table = rows,

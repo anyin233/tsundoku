@@ -29,7 +29,9 @@ local util = require("util")
 local T = require("ffi/util").template
 local _ = require("aidoku_l10n")
 
-local MangaBrowser = Menu:extend{}
+local MangaBrowser = Menu:extend{
+    name = "tsundoku_manga",
+}
 
 local mangaLabel = Prefetch.mangaLabel
 local chapterLabel = Prefetch.chapterLabel
@@ -246,6 +248,18 @@ function MangaBrowser:onLeftButtonTap()
         }},
     }
 
+    if self.offline_mode_active and not tostring(self.manga and self.manga.Key or ""):match("^koob:") then
+        table.insert(buttons, {{
+            text = _("Check online chapters"),
+            callback = function()
+                UIManager:close(dialog)
+                self.offline_first = false
+                self.offline_mode_active = false
+                self:reload()
+            end,
+        }})
+    end
+
     if not self.store:isEphemeralMode() then
         local dl_count = self:downloadedCount()
         local total_count = #self.chapters
@@ -403,6 +417,17 @@ function MangaBrowser:genItemTable()
     local is_date_sort = (sort_mode == "date_desc" or sort_mode == "date_asc")
 
     if #ordered > 0 then
+        local resume_ch = self:resumeLocalChapter()
+        if resume_ch then
+            table.insert(item_table, {
+                text = T(_("▶ Continue: %1"), chapterLabel(resume_ch)),
+                mandatory = _("Read >"),
+                bold = true,
+                chapter = resume_ch,
+                is_resume_row = true,
+            })
+        end
+
         local dl = self:downloadedCount()
         local active, queued = DownloadQueue:getMangaTaskStats(self.source_key, self.initial_manga_key, self.manga.Key)
         local left_action
@@ -421,6 +446,14 @@ function MangaBrowser:genItemTable()
             bold = true,
             is_toolbar_row = true,
         })
+
+        if self.offline_mode_active and not tostring(self.manga and self.manga.Key or ""):match("^koob:") then
+            table.insert(item_table, {
+                text = _("↻ Check online chapters"),
+                mandatory = _("Sync >"),
+                is_check_online_row = true,
+            })
+        end
     end
 
     for _idx, chapter in ipairs(ordered) do
@@ -492,6 +525,12 @@ function MangaBrowser:reload()
         if #self.chapters == 0 then
             self.chapters = ChapterOrder.fromEntries(all, self.source_key, self.manga.Key)
         end
+        if #self.chapters > 0 and (self.offline_first or tostring(self.manga and self.manga.Key or ""):match("^koob:")) then
+            self.offline_mode_active = true
+            self:refresh()
+            return
+        end
+        self.offline_mode_active = false
         self:refresh()
 
         local updated = ChapterCache.get(self.source_key, self.manga.Key)
@@ -537,6 +576,33 @@ function MangaBrowser:reload()
         end
         self:promptResume()
     end)
+end
+
+function MangaBrowser:resumeLocalChapter()
+    local ordered = ChapterOrder.orderedByReading(self.chapters)
+    if #ordered == 0 then
+        return nil
+    end
+    local last_key = self:findLastReadChapter(ordered)
+    if last_key then
+        local upcoming = ChapterOrder.after(self.chapters, last_key, 1, function(c)
+            return self:downloadedPath(c.Key) ~= ""
+        end)
+        if upcoming[1] then
+            return upcoming[1]
+        end
+    end
+    for _idx, c in ipairs(ordered) do
+        if self:downloadedPath(c.Key) ~= "" and not self.store:isChapterRead(self.source_key, self.manga.Key, c.Key) then
+            return c
+        end
+    end
+    for _idx, c in ipairs(ordered) do
+        if self:downloadedPath(c.Key) ~= "" then
+            return c
+        end
+    end
+    return nil
 end
 
 function MangaBrowser:resumeChapter()
@@ -758,6 +824,7 @@ end
 
 function MangaBrowser:openLocal(path)
     self.store:markLastRead(self.source_key, self.manga.Key)
+    require("pendinglibrary").from_tsundoku = true
     UIManager:close(self)
     if self.ui.document then
         self.ui:switchDocument(path)
@@ -787,7 +854,19 @@ function MangaBrowser:downloadAndOpen(chapter, redownload)
                 return
             end
             self.downloaded_keys[chapter.Key] = path
-            if not self.store:isEphemeralMode() then
+            if self.offline_mode_active and not tostring(self.manga and self.manga.Key or ""):match("^koob:") then
+        table.insert(buttons, {{
+            text = _("Check online chapters"),
+            callback = function()
+                UIManager:close(dialog)
+                self.offline_first = false
+                self.offline_mode_active = false
+                self:reload()
+            end,
+        }})
+    end
+
+    if not self.store:isEphemeralMode() then
                 self.downloads_engine:prune(self.store:downloadLimitBytes(), path)
             end
             if self.refresh_callback then
@@ -808,6 +887,12 @@ function MangaBrowser:onMenuSelect(item)
         self:onLeftButtonTap()
         return true
     end
+    if item.is_check_online_row then
+        self.offline_first = false
+        self.offline_mode_active = false
+        self:reload()
+        return true
+    end
     local existing = self:downloadedPath(item.chapter.Key)
     if existing ~= "" then
         self:openLocal(existing)
@@ -823,7 +908,7 @@ function MangaBrowser:onMenuSelect(item)
 end
 
 function MangaBrowser:onMenuHold(item)
-    if item.is_toolbar_row then
+    if item.is_toolbar_row or item.is_check_online_row then
         self:promptSortMenu()
         return true
     end
@@ -848,6 +933,18 @@ function MangaBrowser:onMenuHold(item)
             end,
         }},
     }
+
+    if self.offline_mode_active and not tostring(self.manga and self.manga.Key or ""):match("^koob:") then
+        table.insert(buttons, {{
+            text = _("Check online chapters"),
+            callback = function()
+                UIManager:close(dialog)
+                self.offline_first = false
+                self.offline_mode_active = false
+                self:reload()
+            end,
+        }})
+    end
 
     if not self.store:isEphemeralMode() then
         if task and (task.status == "downloading" or task.status == "queued") then

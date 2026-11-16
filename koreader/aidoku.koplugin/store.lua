@@ -617,4 +617,35 @@ function Store:setKooboneAutoBookmark(enabled)
     self.settings:flush()
 end
 
+-- ===== SimpleUI Integration Preferences =====
+
+function Store:suiHubSeeded()
+    return self.settings:readSetting("tsundoku_sui_hub_seeded_v1", false) == true
+end
+
+function Store:setSuiHubSeeded(seeded)
+    self.settings:saveSetting("tsundoku_sui_hub_seeded_v1", seeded and true or false)
+    self.settings:flush()
+end
+
+-- Controls what tapping a Tsundoku series card on SimpleUI Home Screen grids
+-- ("Recent Books", "New Books", "Cover Deck") does:
+--   "series_view" (default): opens the manga's series/chapter browser (instant offline-first)
+--   "resume": directly resumes the active/next unread chapter in ReaderUI
+function Store:suiSeriesTapMode()
+    local mode = self.settings:readSetting("sui_series_tap_mode", "series_view")
+    if mode == "resume" or mode == "series_view" then
+        return mode
+    end
+    return "series_view"
+end
+
+function Store:setSuiSeriesTapMode(mode)
+    if mode ~= "resume" then
+        mode = "series_view"
+    end
+    self.settings:saveSetting("sui_series_tap_mode", mode)
+    self.settings:flush()
+end
+
 return Store

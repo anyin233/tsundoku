@@ -554,11 +554,12 @@ end
 -- ===== LibraryBrowser =====
 
 local LibraryBrowser = Menu:extend{
+    name = "tsundoku_library",
     title_bar_left_icon = "appbar.menu",
 }
 
 function LibraryBrowser:init()
-    self.title = _("Library")
+    self.title = _.brandName() .. " · " .. _("Manga Library")
     self.refresh_pending = false
     CoverCache:resetFailures()
     self.item_table = self:genItemTable()
@@ -1001,7 +1002,7 @@ function LibraryBrowser:refresh()
     self._layout_metrics = nil
     self:updateItems(saved_page)
     if self.title_bar then
-        self.title_bar:setTitle(_("Library"))
+        self.title_bar:setTitle(_.brandName() .. " · " .. _("Manga Library"))
         self.title_bar:setSubTitle(self:computeSubtitle(), true)
     end
 end

@@ -7,4 +7,7 @@ communicates across the teardown/recreate boundary between those two
 plugin instances -- see Aidoku:hookHome()/Aidoku:openPendingLibrary().
 ]]
 
-return { open = false }
+return {
+    open = false,
+    from_tsundoku = false,
+}

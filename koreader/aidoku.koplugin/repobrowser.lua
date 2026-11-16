@@ -20,7 +20,9 @@ local UIManager = require("ui/uimanager")
 local T = require("ffi/util").template
 local _ = require("aidoku_l10n")
 
-local RepoBrowser = Menu:extend{}
+local RepoBrowser = Menu:extend{
+    name = "tsundoku_repo",
+}
 
 function RepoBrowser:init()
     self.title = _("Source repository")

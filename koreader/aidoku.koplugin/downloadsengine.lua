@@ -5,6 +5,7 @@ canonical/slug-prefix matching so downloaded manga are accurately annotated
 across LibraryBrowser, SearchBrowser, GlobalSearchBrowser, and DownloadsBrowser.
 ]]
 
+local DataStorage = require("datastorage")
 local DocSettings = require("docsettings")
 local SQ3 = require("lua-ljsqlite3/init")
 local ffiUtil = require("ffi/util")
@@ -14,9 +15,77 @@ local _ = require("aidoku_l10n")
 local DownloadsEngine = {}
 DownloadsEngine.__index = DownloadsEngine
 
-function DownloadsEngine.isUnder(file, dir)
+local _full_data_dir_cache = nil
+
+function DownloadsEngine.fullDataDir()
+    if _full_data_dir_cache then
+        return _full_data_dir_cache
+    end
+    local dir
+    if type(DataStorage.getFullDataDir) == "function" then
+        local ok, v = pcall(DataStorage.getFullDataDir, DataStorage)
+        if ok and type(v) == "string" and v ~= "" then
+            dir = v
+        end
+    end
+    if not dir or dir == "" or dir == "." then
+        local dd = DataStorage:getDataDir()
+        if dd == "." or dd == "./" or dd == "" then
+            dir = lfs.currentdir() or "."
+        elseif dd:sub(1, 1) == "/" then
+            dir = dd
+        else
+            local cwd = lfs.currentdir() or "."
+            dir = cwd .. "/" .. dd:gsub("^%./", "")
+        end
+    end
     dir = dir:gsub("/+$", "")
-    return file:sub(1, #dir + 1) == dir .. "/"
+    if dir == "" then
+        dir = "/"
+    end
+    _full_data_dir_cache = dir
+    return dir
+end
+
+function DownloadsEngine.normalizePath(p)
+    if type(p) ~= "string" or p == "" then
+        return ""
+    end
+    p = p:gsub("^%./", "")
+    if p:sub(1, 1) ~= "/" then
+        local base = DownloadsEngine.fullDataDir()
+        if base == "/" then
+            p = "/" .. p
+        else
+            p = base .. "/" .. p
+        end
+    end
+    p = p:gsub("//+", "/")
+    if #p > 1 then
+        p = p:gsub("/+$", "")
+    end
+    return p
+end
+
+function DownloadsEngine.relativeDataPath(p)
+    local norm = DownloadsEngine.normalizePath(p)
+    if norm == "" then
+        return ""
+    end
+    local base = DownloadsEngine.fullDataDir()
+    if base ~= "/" and norm:sub(1, #base + 1) == base .. "/" then
+        return norm:sub(#base + 2)
+    end
+    return ""
+end
+
+function DownloadsEngine.isUnder(file, dir)
+    if type(file) ~= "string" or file == "" or type(dir) ~= "string" or dir == "" then
+        return false
+    end
+    local nf = DownloadsEngine.normalizePath(file)
+    local nd = DownloadsEngine.normalizePath(dir)
+    return nf:sub(1, #nd + 1) == nd .. "/"
 end
 
 local BASE_COLUMNS = "source_key, source_path, manga_key, chapter_key, path, "
@@ -33,7 +102,7 @@ local function rowToEntry(row)
         sourcePath = row[2],
         mangaKey = row[3],
         chapterKey = row[4],
-        path = row[5],
+        path = DownloadsEngine.normalizePath(row[5] or ""),
         mangaTitle = row[6],
         chapterTitle = row[7],
         sizeBytes = tonumber(row[8]) or 0,
@@ -74,6 +143,7 @@ local function firstRow(stmt)
 end
 
 function DownloadsEngine.new(downloads_dir)
+    downloads_dir = DownloadsEngine.normalizePath(downloads_dir)
     local self = setmetatable({
         downloads_dir = downloads_dir,
         conn = nil,
@@ -131,19 +201,27 @@ end
 
 function DownloadsEngine:path(source_key, manga_key, chapter_key)
     local p = self:indexedPath(source_key, manga_key, chapter_key)
-    if p ~= "" and lfs.attributes(p, "mode") ~= "file" then
+    if p == "" then
         return ""
     end
-    return p
+    local norm = DownloadsEngine.normalizePath(p)
+    if lfs.attributes(norm, "mode") ~= "file" then
+        return ""
+    end
+    return norm
 end
 
 function DownloadsEngine:byPath(file_path)
-    if not self:tableExists() then
+    if not self:tableExists() or type(file_path) ~= "string" or file_path == "" then
         return nil
     end
     local cols = self:entryColumns()
+    local norm = DownloadsEngine.normalizePath(file_path)
+    local rel = DownloadsEngine.relativeDataPath(norm)
+    local alt = rel ~= "" and rel or norm
     local row = query(self.conn, nil,
-        "SELECT " .. cols .. " FROM downloads WHERE path=?", { file_path }, firstRow)
+        "SELECT " .. cols .. " FROM downloads WHERE path=? OR path=? OR path=? LIMIT 1",
+        { norm, alt, file_path }, firstRow)
     if not row then
         return nil
     end
@@ -151,12 +229,18 @@ function DownloadsEngine:byPath(file_path)
 end
 
 function DownloadsEngine:remove(source_key, manga_key, chapter_key)
-    local path = self:indexedPath(source_key, manga_key, chapter_key)
-    if path == "" then
+    local raw_path = self:indexedPath(source_key, manga_key, chapter_key)
+    if raw_path == "" then
         return true
     end
+    local path = DownloadsEngine.normalizePath(raw_path)
     if lfs.attributes(path, "mode") == "file" then
         local ok, err = os.remove(path)
+        if not ok then
+            return false, err
+        end
+    elseif lfs.attributes(raw_path, "mode") == "file" then
+        local ok, err = os.remove(raw_path)
         if not ok then
             return false, err
         end

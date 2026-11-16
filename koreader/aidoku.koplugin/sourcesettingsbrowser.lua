@@ -19,7 +19,9 @@ local UIManager = require("ui/uimanager")
 local T = require("ffi/util").template
 local _ = require("aidoku_l10n")
 
-local SourceSettingsBrowser = Menu:extend{}
+local SourceSettingsBrowser = Menu:extend{
+    name = "tsundoku_source_settings",
+}
 
 local SUPPORTED_TYPES = {
     select = true,

@@ -28,6 +28,7 @@ local T = require("ffi/util").template
 local _ = require("aidoku_l10n")
 
 local KooboneBrowser = Menu:extend{
+    name = "tsundoku_koobone",
     title_bar_left_icon = "appbar.menu",
 }
 
@@ -469,6 +470,7 @@ function KooboneBrowser:openOrDownloadVolume(vol, redownload)
         if self.store then
             self.store:markLastRead("kox", vol.manga_key or "")
         end
+        require("pendinglibrary").from_tsundoku = true
         UIManager:close(self)
         if self.ui.document then
             self.ui:switchDocument(existing_path)
@@ -516,6 +518,7 @@ function KooboneBrowser:openOrDownloadVolume(vol, redownload)
             if self.store then
                 self.store:markLastRead("kox", spec.manga_key)
             end
+            require("pendinglibrary").from_tsundoku = true
             UIManager:close(self)
             if self.ui.document then
                 self.ui:switchDocument(path)

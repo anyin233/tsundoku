@@ -6,17 +6,25 @@ parent Go repo), and read them in KOReader.
 
 local DataStorage = require("datastorage")
 local Dispatcher = require("dispatcher") -- luacheck:ignore
+local FileManager = require("apps/filemanager/filemanager")
 local InfoMessage = require("ui/widget/infomessage")
+local Notification = require("ui/widget/notification")
+local Trapper = require("ui/trapper")
 local UIManager = require("ui/uimanager")
 local WidgetContainer = require("ui/widget/container/widgetcontainer")
 local util = require("util")
+local T = require("ffi/util").template
 local _ = require("aidoku_l10n")
 
 local ChapterCache = require("chaptercache")
+local ChapterOrder = require("chapterorder")
 local DownloadQueue = require("downloadqueue")
 local DownloadsEngine = require("downloadsengine")
 local Engine = require("engine")
+local InstalledSources = require("installedsources")
+local KooboneSync = require("koobonesync")
 local OpenWidgets = require("openwidgets")
+local SimpleUIBridge = require("simpleui_bridge")
 local Store = require("store")
 
 local Aidoku = WidgetContainer:extend{
@@ -60,7 +68,11 @@ end
 -- return all no-op with no error). Stripping it here is a no-op for I/O
 -- itself.
 local function dataSubdir(name)
-    return (DataStorage:getDataDir() .. "/aidoku/" .. name):gsub("^%./", "")
+    local base = DownloadsEngine.fullDataDir() .. "/aidoku"
+    if type(name) == "string" and name ~= "" then
+        return base .. "/" .. name
+    end
+    return base
 end
 
 function Aidoku:init()
@@ -101,9 +113,11 @@ function Aidoku:init()
 
     self:onDispatcherRegisterActions()
     self.ui.menu:registerToMainMenu(self)
+    self:registerFileDialogButtons()
     self:hookEndOfBook()
     self:hookShowFileManager()
     self:hookClose()
+    self.simpleui_active = SimpleUIBridge.setup(self)
     self:openPendingLibrary()
 end
 
@@ -197,6 +211,7 @@ function Aidoku:markCurrentChapterRead()
     local entry = self.downloads_engine:byPath(file)
     if entry then
         self.store:markChapterRead(entry.sourceKey, entry.mangaKey, entry.chapterKey)
+        SimpleUIBridge.invalidate()
     end
 end
 
@@ -250,9 +265,15 @@ function Aidoku:hookShowFileManager()
     end
     local original_show_file_manager = self.ui.showFileManager
     self.ui.showFileManager = function(ui_self, file, ...)
+        SimpleUIBridge.invalidate()
         file = file or (self.document and self.document.file)
-        if file and DownloadsEngine.isUnder(file, self.downloads_dir) then
-            require("pendinglibrary").open = true
+        local pending = require("pendinglibrary")
+        local from_tsundoku = pending.from_tsundoku
+        pending.from_tsundoku = false
+        if from_tsundoku and file and DownloadsEngine.isUnder(file, self.downloads_dir) then
+            pending.open = true
+        else
+            pending.open = false
         end
         return original_show_file_manager(ui_self, file, ...)
     end
@@ -270,6 +291,7 @@ end
 function Aidoku:hookClose()
     local original_on_close = self.ui.onClose
     self.ui.onClose = function(ui_self, ...)
+        SimpleUIBridge.invalidate()
         OpenWidgets.closeAll()
         return original_on_close(ui_self, ...)
     end
@@ -282,6 +304,7 @@ function Aidoku:openPendingLibrary()
         return
     end
     local pending = require("pendinglibrary")
+    pending.from_tsundoku = false
     if not pending.open then
         return
     end
@@ -289,26 +312,171 @@ function Aidoku:openPendingLibrary()
     UIManager:nextTick(function() self:onAidokuBrowseSources() end)
 end
 
+function Aidoku:registerFileDialogButtons()
+    if self.document or not self.ui or type(self.ui.addFileDialogButtons) ~= "function" then
+        return
+    end
+    self.ui:addFileDialogButtons("aidoku_open_series", function(file, _is_file)
+        if not DownloadsEngine.isUnder(file, self.downloads_dir) then
+            return nil
+        end
+        return {{
+            {
+                text = _.brandName() .. " · " .. _("Open Manga Series"),
+                callback = function()
+                    local fm = FileManager.instance or self.ui
+                    if fm then
+                        for _idx, comp in ipairs({ fm.file_chooser, fm.filesearcher, fm.history, fm.collections }) do
+                            if comp and comp.file_dialog then
+                                UIManager:close(comp.file_dialog)
+                            end
+                        end
+                    end
+                    self:openSeriesForFile(file, true)
+                end,
+            },
+        }}
+    end)
+end
+
 function Aidoku:onDispatcherRegisterActions()
+    local prefix = _.brandName() .. ": "
     Dispatcher:registerAction("aidoku_browse_sources", {
         category = "none",
         event = "AidokuBrowseSources",
-        title = _("Aidoku"),
-        filemanager = true,
+        title = prefix .. _("Manga Library"),
+        general = true,
     })
+    Dispatcher:registerAction("tsundoku_search", {
+        category = "none",
+        event = "TsundokuSearch",
+        title = prefix .. _("Search Manga"),
+        general = true,
+    })
+    Dispatcher:registerAction("tsundoku_koobone_sync", {
+        category = "none",
+        event = "TsundokuSyncKoobone",
+        title = prefix .. _("Refresh Koobone"),
+        general = true,
+    })
+    Dispatcher:registerAction("tsundoku_koobone", {
+        category = "none",
+        event = "TsundokuKoobone",
+        title = prefix .. _("Koobone Shelf"),
+        general = true,
+    })
+    Dispatcher:registerAction("tsundoku_downloads", {
+        category = "none",
+        event = "TsundokuDownloads",
+        title = prefix .. _("Downloads"),
+        general = true,
+    })
+end
+
+function Aidoku:ensureReady()
+    if not self.engine:isAvailable() then
+        UIManager:show(InfoMessage:new{
+            text = _("aidoku-run binary not found. Rebuild the plugin with koreader/build.sh."),
+        })
+        return false
+    end
+    if not self.downloads_engine:isAvailable() then
+        UIManager:show(InfoMessage:new{
+            text = _("Could not open the downloads database. Is storage writable?"),
+        })
+        return false
+    end
+    return true
+end
+
+function Aidoku:buildMainMenuItems()
+    local items = {}
+    local cur_file = self.document and self.document.file
+    if cur_file and DownloadsEngine.isUnder(cur_file, self.downloads_dir) then
+        local series = SimpleUIBridge.findSeriesByPath(cur_file)
+        local title_label = series and series.title or _("Current Manga")
+        table.insert(items, {
+            text = T(_("Current: %1"), title_label),
+            callback = function()
+                self:openSeriesForFile(cur_file, true)
+            end,
+        })
+        table.insert(items, {
+            text = _("Next Chapter"),
+            callback = function()
+                self:stepCurrentMangaChapter(1)
+            end,
+        })
+        table.insert(items, {
+            text = _("Previous Chapter"),
+            callback = function()
+                self:stepCurrentMangaChapter(-1)
+            end,
+            separator = true,
+        })
+    end
+
+    table.insert(items, {
+        text = _("Manga Library"),
+        callback = function()
+            self:onAidokuBrowseSources()
+        end,
+    })
+    table.insert(items, {
+        text = _("Search Manga"),
+        callback = function()
+            self:onTsundokuSearch(true)
+        end,
+    })
+    table.insert(items, {
+        text = _("Refresh Koobone"),
+        callback = function()
+            self:onTsundokuSyncKoobone()
+        end,
+    })
+    table.insert(items, {
+        text = _("Koobone Shelf"),
+        callback = function()
+            self:onTsundokuKoobone()
+        end,
+        separator = true,
+    })
+    table.insert(items, {
+        text = _("Downloads"),
+        callback = function()
+            self:onTsundokuDownloads()
+        end,
+    })
+    table.insert(items, {
+        text = _("Manga Sources"),
+        callback = function()
+            self:onTsundokuSources()
+        end,
+    })
+    table.insert(items, {
+        text = _("Settings"),
+        callback = function()
+            self:onTsundokuSettings()
+        end,
+    })
+    return items
 end
 
 function Aidoku:addToMainMenu(menu_items)
     menu_items.aidoku = {
-        text = _("AidokuRunner for KOReader"),
+        sorting_hint = "tools",
+        text = _.brandName(),
         text_func = function()
-            return _("AidokuRunner for KOReader")
+            return _.brandName()
         end,
-        sorting_hint = "search",
-        callback = function()
-            self:onAidokuBrowseSources()
+        sub_item_table_func = function()
+            return self:buildMainMenuItems()
         end,
     }
+end
+
+function Aidoku:onShow()
+    return self:onAidokuBrowseSources()
 end
 
 -- Every entry into Library -- a fresh open from the FileManager menu, or
@@ -319,16 +487,7 @@ end
 -- why it stays valid across chapter-to-chapter advances within one session.
 function Aidoku:onAidokuBrowseSources()
     ChapterCache.clear()
-    if not self.engine:isAvailable() then
-        UIManager:show(InfoMessage:new{
-            text = _("aidoku-run binary not found. Rebuild the plugin with koreader/build.sh."),
-        })
-        return
-    end
-    if not self.downloads_engine:isAvailable() then
-        UIManager:show(InfoMessage:new{
-            text = _("Could not open the downloads database. Is storage writable?"),
-        })
+    if not self:ensureReady() then
         return
     end
 
@@ -347,6 +506,287 @@ function Aidoku:onAidokuBrowseSources()
         is_borderless = true,
         title_bar_fm_style = true,
     })
+end
+
+function Aidoku:onTsundokuSearch(prompt_immediately)
+    if not self:ensureReady() then
+        return
+    end
+    local GlobalSearchBrowser = require("globalsearchbrowser")
+    UIManager:show(GlobalSearchBrowser:new{
+        engine = self.engine,
+        store = self.store,
+        downloads_engine = self.downloads_engine,
+        ui = self.ui,
+        sources_dir = self.sources_dir,
+        downloads_dir = self.downloads_dir,
+        prompt_immediately = prompt_immediately ~= false,
+        is_popout = false,
+        is_borderless = true,
+        title_bar_fm_style = true,
+        refresh_callback = function()
+            SimpleUIBridge.invalidate()
+            SimpleUIBridge.refreshSimpleUIScreens(false)
+        end,
+    })
+end
+
+function Aidoku:onTsundokuKoobone()
+    if not self:ensureReady() then
+        return
+    end
+    local KooboneBrowser = require("koobonebrowser")
+    UIManager:show(KooboneBrowser:new{
+        engine = self.engine,
+        store = self.store,
+        downloads_engine = self.downloads_engine,
+        ui = self.ui,
+        sources_dir = self.sources_dir,
+        downloads_dir = self.downloads_dir,
+        is_popout = false,
+        is_borderless = true,
+        title_bar_fm_style = true,
+        refresh_callback = function()
+            SimpleUIBridge.invalidate()
+            SimpleUIBridge.refreshSimpleUIScreens(false)
+        end,
+    })
+end
+
+function Aidoku:onTsundokuSyncKoobone(on_done)
+    if not self:ensureReady() then
+        if type(on_done) == "function" then
+            pcall(on_done, nil, "not_ready")
+        end
+        return
+    end
+    if not KooboneSync.hasCredentials(self.settings_dir) then
+        UIManager:show(Notification:new{
+            text = _("Please log in to Koobone first."),
+            timeout = 2.5,
+        })
+        self:onTsundokuKoobone()
+        if type(on_done) == "function" then
+            pcall(on_done, nil, "no_credentials")
+        end
+        return
+    end
+
+    UIManager:show(Notification:new{
+        text = _("Syncing Koobone subscriptions…"),
+        timeout = 2,
+    })
+
+    KooboneSync:manualSync({
+        engine = self.engine,
+        store = self.store,
+        downloads_engine = self.downloads_engine,
+        downloads_dir = self.downloads_dir,
+        sources_dir = self.sources_dir,
+        settings_dir = self.settings_dir,
+        covers_dir = self.covers_dir,
+        on_cover_ready = function()
+            SimpleUIBridge.invalidate()
+            SimpleUIBridge.refreshSimpleUIScreens(false)
+        end,
+    }, {
+        on_already_running = function()
+            UIManager:show(Notification:new{
+                text = _("Koobone sync is already running…"),
+                timeout = 2,
+            })
+        end,
+        on_complete = function(stats, err)
+            SimpleUIBridge.invalidate()
+            SimpleUIBridge.refreshSimpleUIScreens(false)
+            if err and err ~= "no_credentials" then
+                UIManager:show(Notification:new{
+                    text = T(_("Koobone sync failed: %1"), tostring(err)),
+                    timeout = 3,
+                })
+            elseif stats then
+                local msg
+                if (stats.newly_queued or 0) > 0 then
+                    msg = T(_("Koobone: queued %1 new chapters."), stats.newly_queued)
+                elseif (stats.bookmarked or 0) > 0 then
+                    msg = T(_("Koobone: added %1 series to library."), stats.bookmarked)
+                else
+                    msg = T(_("Koobone is up to date (%1 items)."), stats.total or 0)
+                end
+                UIManager:show(Notification:new{
+                    text = msg,
+                    timeout = 2.5,
+                })
+            end
+            if type(on_done) == "function" then
+                pcall(on_done, stats, err)
+            end
+        end,
+    })
+end
+
+function Aidoku:onTsundokuDownloads()
+    if not self:ensureReady() then
+        return
+    end
+    local DownloadsBrowser = require("downloadsbrowser")
+    UIManager:show(DownloadsBrowser:new{
+        engine = self.engine,
+        store = self.store,
+        downloads_engine = self.downloads_engine,
+        ui = self.ui,
+        sources_dir = self.sources_dir,
+        downloads_dir = self.downloads_dir,
+        is_popout = false,
+        is_borderless = true,
+        title_bar_fm_style = true,
+    })
+end
+
+function Aidoku:onTsundokuSources()
+    if not self:ensureReady() then
+        return
+    end
+    local SourcesBrowser = require("sourcesbrowser")
+    UIManager:show(SourcesBrowser:new{
+        aidoku = self,
+        engine = self.engine,
+        store = self.store,
+        downloads_engine = self.downloads_engine,
+        ui = self.ui,
+        sources_dir = self.sources_dir,
+        downloads_dir = self.downloads_dir,
+        is_popout = false,
+        is_borderless = true,
+        title_bar_fm_style = true,
+    })
+end
+
+function Aidoku:onTsundokuSettings()
+    if not self:ensureReady() then
+        return
+    end
+    local SettingsBrowser = require("settingsbrowser")
+    UIManager:show(SettingsBrowser:new{
+        aidoku = self,
+        engine = self.engine,
+        store = self.store,
+        downloads_engine = self.downloads_engine,
+        ui = self.ui,
+        sources_dir = self.sources_dir,
+        downloads_dir = self.downloads_dir,
+        is_popout = false,
+        is_borderless = true,
+        title_bar_fm_style = true,
+        refresh_callback = function()
+            SimpleUIBridge.invalidate()
+            SimpleUIBridge.refreshSimpleUIScreens(false)
+        end,
+    })
+end
+
+function Aidoku:openSeriesObject(series, offline_first)
+    if not self:ensureReady() then
+        return
+    end
+    if not series then
+        self:onAidokuBrowseSources()
+        return
+    end
+    Trapper:wrap(function()
+        local source_key = series.source_key or ""
+        local source_path = series.source_path or ""
+        local source_name = source_key ~= "" and source_key or _.brandName()
+        if source_key ~= "" then
+            local found = InstalledSources.findByKey(self.sources_dir, self.engine, source_key)
+            if found then
+                source_path = found.path
+                source_name = found.name
+            end
+        end
+        local manga_key = (series.dl_group and type(series.dl_group.mangaKey) == "string" and series.dl_group.mangaKey ~= "")
+            and series.dl_group.mangaKey or (series.manga_key or "")
+        local MangaBrowser = require("mangabrowser")
+        UIManager:show(MangaBrowser:new{
+            engine = self.engine,
+            store = self.store,
+            downloads_engine = self.downloads_engine,
+            ui = self.ui,
+            sources_dir = self.sources_dir,
+            source_path = source_path,
+            source_key = source_key,
+            source_name = source_name,
+            downloads_dir = self.downloads_dir,
+            offline_first = offline_first ~= false,
+            manga = {
+                Key = manga_key,
+                Title = series.title,
+                Cover = series.cover_url ~= "" and series.cover_url or nil,
+            },
+            is_popout = false,
+            is_borderless = true,
+            title_bar_fm_style = true,
+            refresh_callback = function()
+                SimpleUIBridge.invalidate()
+                SimpleUIBridge.refreshSimpleUIScreens(false)
+            end,
+        })
+    end)
+end
+
+function Aidoku:openSeriesForFile(filepath, offline_first)
+    local series = SimpleUIBridge.findSeriesByPath(filepath)
+    if series then
+        self:openSeriesObject(series, offline_first)
+        return
+    end
+    local entry = self.downloads_engine and self.downloads_engine:byPath(filepath)
+    if entry then
+        self:openSeriesObject({
+            source_key = entry.sourceKey,
+            source_path = entry.sourcePath,
+            manga_key = entry.mangaKey,
+            title = entry.mangaTitle,
+            dl_group = { mangaKey = entry.mangaKey },
+        }, offline_first)
+        return
+    end
+    self:onAidokuBrowseSources()
+end
+
+function Aidoku:stepCurrentMangaChapter(delta)
+    if not self.document or not self.document.file then
+        return
+    end
+    local series = SimpleUIBridge.findSeriesByPath(self.document.file)
+    if not series or not series.chapters or #series.chapters == 0 then
+        UIManager:show(InfoMessage:new{ text = _("No adjacent downloaded chapters found."), timeout = 2 })
+        return
+    end
+    local norm_cur = DownloadsEngine.normalizePath(self.document.file)
+    local cur_idx
+    for idx, ch in ipairs(series.chapters) do
+        if DownloadsEngine.normalizePath(ch.path) == norm_cur then
+            cur_idx = idx
+            break
+        end
+    end
+    if not cur_idx then
+        return
+    end
+    local target_idx = cur_idx + (delta or 1)
+    local target = series.chapters[target_idx]
+    if not target or not target.path then
+        UIManager:show(Notification:new{
+            text = (delta or 1) > 0 and _("Already at latest downloaded chapter.") or _("Already at first downloaded chapter."),
+            timeout = 2,
+        })
+        return
+    end
+    if (delta or 1) > 0 then
+        self:markCurrentChapterRead()
+    end
+    self.ui:switchDocument(target.path)
 end
 
 return Aidoku
