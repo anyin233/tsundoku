@@ -24,6 +24,38 @@ local _ = require("aidoku_l10n")
 local Runner = {}
 Runner.__index = Runner
 
+local _shm_checked = false
+local _shm_ok = false
+local _tmp_seq = 0
+
+local function canUseDevShm()
+    if _shm_checked then
+        return _shm_ok
+    end
+    _shm_checked = true
+    if lfs.attributes("/dev/shm", "mode") == "directory" then
+        local probe = string.format("/dev/shm/.aidoku_probe_%d_%d", os.time(), math.random(100000, 999999))
+        local f = io.open(probe, "wb")
+        if f then
+            f:close()
+            os.remove(probe)
+            _shm_ok = true
+        end
+    end
+    return _shm_ok
+end
+
+-- makeTempPath prefers /dev/shm on Kindle/Linux (478 MB tmpfs vs 64 MB /var/tmp
+-- which is often >95% full) and falls back to os.tmpname() elsewhere.
+function Runner.makeTempPath(prefix)
+    if canUseDevShm() then
+        _tmp_seq = _tmp_seq + 1
+        return string.format("/dev/shm/aidoku_%s_%d_%d_%d.tmp",
+            tostring(prefix or "tmp"), os.time(), math.random(10000, 99999), _tmp_seq)
+    end
+    return os.tmpname()
+end
+
 function Runner.new(bin_path)
     return setmetatable({ bin_path = bin_path }, Runner)
 end
@@ -158,9 +190,11 @@ end
 
 -- spawnAsync launches aidoku-run in a forked child process without blocking
 -- KOReader's UI loop. Callers poll handle:poll() via UIManager:scheduleIn()
--- to read incremental page progress ("[download] page N/M") and completion.
-function Runner:spawnAsync(args, env, low_priority, cleanup_files)
-    local stderr_path = os.tmpname()
+-- to read incremental page progress ("[download] page N/M"), NDJSON stream
+-- events (opts.stream_path), and completion.
+function Runner:spawnAsync(args, env, low_priority, cleanup_files, opts)
+    local stderr_path = Runner.makeTempPath("err")
+    local stream_path = opts and opts.stream_path or nil
     local cmd = buildCommand(self.bin_path, stderr_path, args, env, low_priority)
 
     local pid, parent_read_fd = ffiUtil.runInSubProcess(function(_child_pid, child_write_fd)
@@ -175,6 +209,10 @@ function Runner:spawnAsync(args, env, low_priority, cleanup_files)
 
     local function cleanupFiles()
         os.remove(stderr_path)
+        if stream_path then
+            os.remove(stream_path)
+            stream_path = nil
+        end
         for _idx, p in ipairs(cleanup_files or {}) do
             os.remove(p)
         end
@@ -192,6 +230,9 @@ function Runner:spawnAsync(args, env, low_priority, cleanup_files)
         stderr_path = stderr_path,
         stderr_offset = 0,
         stderr_tail = "",
+        stream_path = stream_path,
+        stream_offset = 0,
+        stream_events = {},
         current_page = 0,
         total_pages = 0,
         search_done = 0,
@@ -232,6 +273,45 @@ function Runner:spawnAsync(args, env, low_priority, cleanup_files)
         end
     end
 
+    function handle:readStream()
+        if not self.stream_path then
+            return
+        end
+        local f = io.open(self.stream_path, "rb")
+        if not f then
+            return
+        end
+        if self.stream_offset > 0 then
+            f:seek("set", self.stream_offset)
+        end
+        local chunk = f:read("*a")
+        f:close()
+        if not chunk or chunk == "" then
+            return
+        end
+        local after_nl = chunk:match("^.*\n()")
+        if not after_nl then
+            return
+        end
+        local consumed = after_nl - 1
+        self.stream_offset = self.stream_offset + consumed
+        for line in chunk:sub(1, consumed):gmatch("([^\r\n]+)") do
+            local ok, ev = pcall(json.decode, line)
+            if ok and type(ev) == "table" then
+                table.insert(self.stream_events, ev)
+            end
+        end
+    end
+
+    function handle:drainStreamEvents()
+        if #self.stream_events == 0 then
+            return nil
+        end
+        local out = self.stream_events
+        self.stream_events = {}
+        return out
+    end
+
     function handle:drainReadyCovers()
         if #self.cover_ready == 0 then
             return nil
@@ -246,6 +326,7 @@ function Runner:spawnAsync(args, env, low_priority, cleanup_files)
             return "done"
         end
         self:readProgress()
+        self:readStream()
 
         local done = ffiUtil.isSubProcessDone(self.pid)
         local has_data = self.fd and ffiUtil.getNonBlockingReadSize(self.fd) ~= 0
@@ -262,6 +343,8 @@ function Runner:spawnAsync(args, env, low_priority, cleanup_files)
         if not done then
             scheduleReap(self.pid, nil)
         end
+
+        self:readStream()
 
         local full_stderr = ""
         local sf = io.open(self.stderr_path, "r")
@@ -296,6 +379,7 @@ function Runner:spawnAsync(args, env, low_priority, cleanup_files)
         end
         self.finished = true
         ffiUtil.terminateSubProcess(self.pid)
+        self:readStream()
         local fd = self.fd
         self.fd = nil
         scheduleReap(self.pid, fd)
@@ -306,7 +390,7 @@ function Runner:spawnAsync(args, env, low_priority, cleanup_files)
 end
 
 function Runner:exec(args, progress_text, env, low_priority)
-    local stderr_path = os.tmpname()
+    local stderr_path = Runner.makeTempPath("err")
     local cmd = buildCommand(self.bin_path, stderr_path, args, env, low_priority)
 
     local completed, output = Trapper:dismissablePopen(cmd, progress_text)

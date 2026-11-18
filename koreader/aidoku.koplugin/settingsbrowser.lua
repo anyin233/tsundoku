@@ -27,6 +27,7 @@ local _ = require("aidoku_l10n")
 -- (prefetch) or exhausts RAM (concurrency) on a 256MB device.
 local MAX_PREFETCH = 10
 local MAX_CONCURRENCY = 32
+local MAX_SEARCH_CONCURRENCY = Store.MAX_SEARCH_CONCURRENCY or 6
 
 local function showInvalid(text)
     UIManager:show(InfoMessage:new{ text = text })
@@ -177,8 +178,12 @@ function SettingsBrowser:genItemTable()
         })
     end
 
+    local search_conc = self.store:searchConcurrency()
+    local search_conc_text = search_conc > 0 and tostring(search_conc) or _("Auto")
+
     table.insert(items, { text = _("Storage limit"), mandatory = storage_text, is_storage_limit_entry = true })
     table.insert(items, { text = _("Source repository URL"), mandatory = repo_url_text, is_repo_url_entry = true })
+    table.insert(items, { text = _("Search concurrency"), mandatory = search_conc_text, is_search_concurrency_entry = true })
     table.insert(items, { text = _("Network concurrency"), mandatory = concurrency_text, is_network_concurrency_entry = true })
 
     -- Advanced settings that *most users* don't need to touch.
@@ -305,6 +310,44 @@ function SettingsBrowser:promptRepoURL()
                     UIManager:close(dialog)
                     self.store:setRepoURL(url or "")
                     self:refresh()
+                end,
+            },
+        }},
+    }
+    UIManager:show(dialog)
+    dialog:onShowKeyboard()
+end
+
+function SettingsBrowser:promptSearchConcurrency()
+    local current = self.store:searchConcurrency()
+    local dialog
+    dialog = InputDialog:new{
+        title = _("Search concurrency"),
+        description = _("Parallel sources searched at once. 0 or blank = Auto (2–3 on Kindle, 4 on desktop); 1 = serial."),
+        input = current > 0 and tostring(current) or "",
+        input_type = "number",
+        buttons = {{
+            {
+                text = _("Cancel"),
+                id = "close",
+                callback = function() UIManager:close(dialog) end,
+            },
+            {
+                text = _("Set"),
+                is_enter_default = true,
+                callback = function()
+                    local text = dialog:getInputText()
+                    local n = tonumber(text)
+                    UIManager:close(dialog)
+                    if text == "" then
+                        self.store:setSearchConcurrency(0)
+                        self:refresh()
+                    elseif n and n >= 0 and n <= MAX_SEARCH_CONCURRENCY then
+                        self.store:setSearchConcurrency(math.floor(n))
+                        self:refresh()
+                    else
+                        showInvalid(T(_("Enter a number from 0 to %1."), MAX_SEARCH_CONCURRENCY))
+                    end
                 end,
             },
         }},
@@ -707,6 +750,8 @@ function SettingsBrowser:onMenuSelect(item)
         self:promptEphemeralPath()
     elseif item.is_repo_url_entry then
         self:promptRepoURL()
+    elseif item.is_search_concurrency_entry then
+        self:promptSearchConcurrency()
     elseif item.is_network_concurrency_entry then
         self:promptNetworkConcurrency()
     elseif item.is_flaresolverr_entry then

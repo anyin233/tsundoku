@@ -115,11 +115,11 @@ local function sanitizeForJSON(val)
     return out
 end
 
-function Engine:search(source_path, query, page, filter_values, progress_text)
-    local args = { source_path, "search", query, tostring(page or 1) }
-    local filters_path
+function Engine:prepareSearchArgs(source_path, query, page, filter_values)
+    local args = { source_path, "search", query or "", tostring(page or 1) }
+    local cleanup
     if filter_values and #filter_values > 0 then
-        filters_path = os.tmpname()
+        local filters_path = Runner.makeTempPath("flt")
         local f = io.open(filters_path, "w")
         local ok = f and f:write(encodeFilterValues(filter_values))
         if f then
@@ -127,19 +127,40 @@ function Engine:search(source_path, query, page, filter_values, progress_text)
         end
         if not ok then
             os.remove(filters_path)
-            return nil, _("Could not write search filters")
+            return nil, nil, _("Could not write search filters")
         end
         table.insert(args, filters_path)
+        cleanup = { filters_path }
+    end
+    return args, cleanup
+end
+
+function Engine:search(source_path, query, page, filter_values, progress_text)
+    local args, cleanup, prep_err = self:prepareSearchArgs(source_path, query, page, filter_values)
+    if not args then
+        return nil, prep_err
     end
     local result, err = self.runner:execJSON(args, progress_text or _("Searching…"), self:sourceEnv())
-    if filters_path then
-        os.remove(filters_path)
+    for _idx, p in ipairs(cleanup or {}) do
+        os.remove(p)
     end
     return result, err
 end
 
+function Engine:spawnSearch(source_path, query, page, filter_values)
+    local args, cleanup, prep_err = self:prepareSearchArgs(source_path, query, page, filter_values)
+    if not args then
+        return nil, prep_err
+    end
+    return self.runner:spawnAsync(args, self:sourceEnv(), false, cleanup)
+end
+
 function Engine:filters(source_path)
     return self.runner:execJSON({ source_path, "filters" }, _("Loading filters…"), self:sourceEnv())
+end
+
+function Engine:spawnFilters(source_path)
+    return self.runner:spawnAsync({ source_path, "filters" }, self:sourceEnv(), true)
 end
 
 function Engine:settingsList(source_path)
@@ -189,6 +210,12 @@ function Engine:listingGet(source_path, listing_id, page, listing_name)
     return self.runner:execJSON({
         source_path, "listings", "get", listing_id, tostring(page or 1), listing_name or listing_id,
     }, _("Loading…"), self:sourceEnv())
+end
+
+function Engine:spawnListingGet(source_path, listing_id, page, listing_name)
+    return self.runner:spawnAsync({
+        source_path, "listings", "get", listing_id, tostring(page or 1), listing_name or listing_id,
+    }, self:sourceEnv(), false)
 end
 
 -- ===== Native Kox.moe & Koobone Integration =====
@@ -281,7 +308,7 @@ local function writeJSONPayload(payload)
     if not ok_enc or not encoded then
         return nil, _("Could not encode request payload")
     end
-    local payload_path = os.tmpname()
+    local payload_path = Runner.makeTempPath("payload")
     local f = io.open(payload_path, "w")
     local ok_write = f and f:write(encoded)
     if f then
@@ -416,15 +443,24 @@ function Engine:batchDownload(opts)
     return out, exec_err
 end
 
-function Engine:searchBatch(target_sources, query, page)
+local function buildSearchBatchSpecs(target_sources)
     local specs = {}
     for _idx, src in ipairs(target_sources or {}) do
-        table.insert(specs, {
+        local spec = {
             key = src.key or "",
             name = src.name or src.text or src.key or "",
             path = src.path or "",
-        })
+        }
+        if type(src.filters) == "table" and #src.filters > 0 then
+            spec.filters = src.filters
+        end
+        table.insert(specs, spec)
     end
+    return specs
+end
+
+function Engine:searchBatch(target_sources, query, page)
+    local specs = buildSearchBatchSpecs(target_sources)
     local payload_path, err = writeJSONPayload({
         query = query or "",
         page = page or 1,
@@ -452,6 +488,30 @@ function Engine:searchBatch(target_sources, query, page)
         return nil, _("Invalid response from aidoku-run")
     end
     return decoded
+end
+
+function Engine:spawnSearchBatch(target_sources, query, page, opts)
+    local specs = buildSearchBatchSpecs(target_sources)
+    local stream_path = Runner.makeTempPath("sbatch")
+    local payload_path, err = writeJSONPayload({
+        query = query or "",
+        page = page or 1,
+        workers = opts and opts.workers or 0,
+        timeoutSec = opts and opts.timeout_sec or 0,
+        streamPath = stream_path,
+        sources = specs,
+    })
+    if not payload_path then
+        os.remove(stream_path)
+        return nil, err
+    end
+    return self.runner:spawnAsync(
+        { "-", "search-batch", payload_path },
+        self:sourceEnv(),
+        false,
+        { payload_path, stream_path },
+        { stream_path = stream_path }
+    )
 end
 
 function Engine:spawnBatchDownload(opts)

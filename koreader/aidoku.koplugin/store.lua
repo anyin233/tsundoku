@@ -746,7 +746,7 @@ end
 -- Legacy sortOrder accessor kept for backward compatibility; backed by chapterSortMode.
 function Store:sortOrder()
     local m = self:chapterSortMode()
-    if m == "source_asc" or m == "name_asc" or m == "date_asc" then
+    if m == "source_asc" or m == "toc_asc" or m == "name_asc" or m == "date_asc" then
         return "asc"
     end
     return "desc"
@@ -769,6 +769,21 @@ end
 
 function Store:setChapterSortMode(mode)
     self.settings:saveSetting("chapter_sort_mode", mode)
+    self.settings:flush()
+end
+
+-- Isolated sort mode for web novels so manga global sorting (e.g. name_asc)
+-- never interleaves multi-volume or re-numbered novel chapters.
+function Store:novelChapterSortMode()
+    local mode = self.settings:readSetting("novel_chapter_sort_mode", nil)
+    if mode and mode ~= "" then
+        return mode
+    end
+    return "toc_asc"
+end
+
+function Store:setNovelChapterSortMode(mode)
+    self.settings:saveSetting("novel_chapter_sort_mode", mode)
     self.settings:flush()
 end
 
@@ -819,6 +834,30 @@ end
 
 function Store:setFlareSolverrHost(host)
     self.settings:saveSetting("flaresolverr_host", host)
+    self.settings:flush()
+end
+
+Store.MAX_SEARCH_CONCURRENCY = 6
+
+function Store:searchConcurrency()
+    local n = tonumber(self.settings:readSetting("search_concurrency", 0)) or 0
+    n = math.floor(n)
+    if n < 0 then
+        return 0
+    elseif n > Store.MAX_SEARCH_CONCURRENCY then
+        return Store.MAX_SEARCH_CONCURRENCY
+    end
+    return n
+end
+
+function Store:setSearchConcurrency(n)
+    local val = math.floor(tonumber(n) or 0)
+    if val < 0 then
+        val = 0
+    elseif val > Store.MAX_SEARCH_CONCURRENCY then
+        val = Store.MAX_SEARCH_CONCURRENCY
+    end
+    self.settings:saveSetting("search_concurrency", val)
     self.settings:flush()
 end
 

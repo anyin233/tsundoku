@@ -1,26 +1,32 @@
 --[[--
 GlobalSearchBrowser (Multi-source Search Plus / 多书源搜索 Plus):
 1. Source Selection step first: lets the user pick which installed sources to
-   include in the upcoming batch search (with Select All / Deselect All / Invert
+   include in the upcoming search (with Select All / Deselect All / Invert
    and persistent selection across sessions).
-2. Batch Search step: searches ONLY the user-selected sources, showing per-source
-   progress ("Searching (2/5): <source>…"), annotating both bookmarked (★) and
-   already-downloaded (✓) manga, with quick menu access to re-query or adjust
-   selected sources anytime.
+2. Non-blocking Parallel Streaming Search: queries selected sources via a
+   hardware-bounded worker pool in aidoku-run, streaming each source's results
+   into the live list as soon as it responds, displaying real-time progress and
+   active sources, allowing 1-tap interruption while keeping found results (with
+   Continue / Retry failed recovery), and supporting dynamic Page 2+ loading.
 ]]
 
 local ButtonDialog = require("ui/widget/buttondialog")
+local DownloadQueue = require("downloadqueue")
 local DownloadsEngine = require("downloadsengine")
 local InfoMessage = require("ui/widget/infomessage")
 local InputDialog = require("ui/widget/inputdialog")
 local InstalledSources = require("installedsources")
 local Menu = require("ui/widget/menu")
 local NetworkMgr = require("ui/network/manager")
+local Notification = require("ui/widget/notification")
 local OpenWidgets = require("openwidgets")
 local Trapper = require("ui/trapper")
 local UIManager = require("ui/uimanager")
 local T = require("ffi/util").template
 local _ = require("aidoku_l10n")
+
+local POLL_INTERVAL = 0.35
+local VIS_WATCH_INTERVAL = 0.45
 
 local GlobalSearchBrowser = Menu:extend{
     name = "tsundoku_search",
@@ -28,14 +34,60 @@ local GlobalSearchBrowser = Menu:extend{
 }
 
 local function mangaLabel(manga)
-    if type(manga.Title) == "string" and manga.Title ~= "" then
+    if type(manga) == "table" and type(manga.Title) == "string" and manga.Title ~= "" then
         return manga.Title
     end
-    return manga.Key
+    return type(manga) == "table" and tostring(manga.Key or "") or ""
 end
 
 local function mangaCover(manga)
-    return type(manga.Cover) == "string" and manga.Cover or nil
+    return type(manga) == "table" and type(manga.Cover) == "string" and manga.Cover or nil
+end
+
+local function shortenUTF8(s, max_chars)
+    s = tostring(s or ""):gsub("[\r\n\t]+", " ")
+    local count, pos, len = 0, 1, #s
+    while pos <= len do
+        count = count + 1
+        if count > max_chars then
+            return s:sub(1, pos - 1) .. "…"
+        end
+        local b = s:byte(pos)
+        if b < 0x80 then
+            pos = pos + 1
+        elseif b < 0xE0 then
+            pos = pos + 2
+        elseif b < 0xF0 then
+            pos = pos + 3
+        else
+            pos = pos + 4
+        end
+    end
+    return s
+end
+
+local function isCoveredByModalOrScreen(widget)
+    local stack = UIManager._window_stack
+    if type(stack) ~= "table" or #stack == 0 then
+        return false
+    end
+    local covered_above = false
+    for i = #stack, 1, -1 do
+        local entry = stack[i]
+        local w = entry and entry.widget
+        if w == widget then
+            return covered_above
+        end
+        if w and not w.invisible and not w.toast then
+            covered_above = true
+        end
+    end
+    return false
+end
+
+local function leftButtonAnchor(self)
+    local lb = self.title_bar and self.title_bar.left_button
+    return lb and (lb.image and lb.image.dimen or lb.dimen) or nil
 end
 
 function GlobalSearchBrowser:init()
@@ -45,16 +97,83 @@ function GlobalSearchBrowser:init()
     self.selected_map = {} -- source_key -> boolean
     self.last_query = ""
     self.results_items = {}
+    self.seen_result_keys = {}
+    self.failed_sources = {}
+    self.remaining_sources = {}
+    self.next_page_sources = {}
+    self.search_page = 1
+    self.last_searched_total = 0
+    self.search_state = nil
+    self.active_handle = nil
+    self.poll_scheduled = false
+    self.poll_cb = nil
+    self.vis_watch_scheduled = false
+    self.vis_watch_cb = nil
+    self.pending_ui_sync = false
+    self.standby_prevented = false
     self.item_table = {}
     Menu.init(self)
     OpenWidgets.push(self)
 
     UIManager:nextTick(function()
-        self:loadSourcesAndShowSelector()
+        if not self.closed then
+            self:loadSourcesAndShowSelector()
+        end
     end)
 end
 
+function GlobalSearchBrowser:updateStandbyGuard()
+    local should_hold = (self.active_handle ~= nil)
+    if should_hold and not self.standby_prevented then
+        self.standby_prevented = true
+        UIManager:preventStandby()
+    elseif not should_hold and self.standby_prevented then
+        self.standby_prevented = false
+        UIManager:allowStandby()
+    end
+end
+
+function GlobalSearchBrowser:unschedulePoll()
+    if self.poll_cb then
+        UIManager:unschedule(self.poll_cb)
+        self.poll_cb = nil
+    end
+    self.poll_scheduled = false
+end
+
+function GlobalSearchBrowser:unscheduleTimers()
+    self:unschedulePoll()
+    if self.vis_watch_cb then
+        UIManager:unschedule(self.vis_watch_cb)
+        self.vis_watch_cb = nil
+    end
+    self.vis_watch_scheduled = false
+end
+
+function GlobalSearchBrowser:cancelActiveSearch(silent)
+    self:unschedulePoll()
+    if self.active_handle then
+        if silent then
+            self.active_handle:cancel()
+            self:consumeStreamEvents(self.active_handle:drainStreamEvents())
+            self.active_handle = nil
+            if self.search_state then
+                self.search_state.running = false
+                self.search_state.active_by_idx = {}
+            end
+            self:updateStandbyGuard()
+        else
+            self:stopSearch(false)
+        end
+    else
+        self:updateStandbyGuard()
+    end
+end
+
 function GlobalSearchBrowser:onCloseWidget()
+    self.closed = true
+    self:unscheduleTimers()
+    self:cancelActiveSearch(true)
     Menu.onCloseWidget(self)
     OpenWidgets.remove(self)
 end
@@ -92,12 +211,14 @@ function GlobalSearchBrowser:loadSourcesAndShowSelector()
                 if saved == nil then
                     self.selected_map[src.key] = true
                 elseif saved[src.key] == nil then
-                    -- Newly installed source defaults to enabled unless user cleared all
                     self.selected_map[src.key] = false
                 else
                     self.selected_map[src.key] = saved[src.key] and true or false
                 end
             end
+        end
+        if self.closed then
+            return
         end
         self:showSourceSelector()
         if self.prompt_immediately and self:selectedCount() > 0 then
@@ -112,16 +233,12 @@ function GlobalSearchBrowser:loadSourcesAndShowSelector()
 end
 
 function GlobalSearchBrowser:showSourceSelector()
+    if self.active_handle then
+        self:stopSearch(true)
+    end
+    local was_selector = (self.mode == "select_sources")
     self.mode = "select_sources"
     local sel_count, valid_total = self:selectedCount()
-
-    if self.title_bar then
-        self.title_bar:setTitle(_("Select Search Sources"))
-        self.title_bar:setSubTitle(
-            T(_("Tap sources to toggle (%1/%2 selected), then tap Start Search"), sel_count, valid_total),
-            true
-        )
-    end
 
     local items = {}
     if valid_total == 0 then
@@ -165,9 +282,21 @@ function GlobalSearchBrowser:showSourceSelector()
         end
     end
 
-    local saved_page = self.mode == "select_sources" and self.page or 1
-    self.item_table = items
-    self:updateItems(saved_page)
+    local saved_page = was_selector and self.page or 1
+    if not was_selector then
+        self.page = 1
+    end
+    self:switchItemTable(
+        _("Select Search Sources"),
+        items,
+        was_selector and -1 or nil,
+        nil,
+        T(_("Tap sources to toggle (%1/%2 selected), then tap Start Search"), sel_count, valid_total)
+    )
+    if was_selector and saved_page and saved_page >= 1 and saved_page <= (self.page_num or 1) and self.page ~= saved_page then
+        self.page = saved_page
+        self:updateItems(1, true)
+    end
 end
 
 function GlobalSearchBrowser:formatResultRow(entry, dl_stats, meta_map)
@@ -203,41 +332,412 @@ function GlobalSearchBrowser:formatResultRow(entry, dl_stats, meta_map)
     return entry
 end
 
-function GlobalSearchBrowser:refreshResultsMarkers()
-    if self.mode ~= "results" then
-        return
+function GlobalSearchBrowser:formatActiveSummary(st)
+    if not st or not st.active_by_idx then
+        return ""
     end
+    local indices = {}
+    for idx, name in pairs(st.active_by_idx) do
+        if type(name) == "string" and name ~= "" then
+            table.insert(indices, idx)
+        end
+    end
+    if #indices == 0 then
+        return ""
+    end
+    table.sort(indices)
+    local shown = {}
+    for i = 1, math.min(2, #indices) do
+        table.insert(shown, st.active_by_idx[indices[i]])
+    end
+    local text = table.concat(shown, ", ")
+    if #indices > 2 then
+        text = text .. " +" .. tostring(#indices - 2)
+    end
+    return text
+end
+
+function GlobalSearchBrowser:buildResultsSubtitle()
+    local st = self.search_state
+    local count = #self.results_items
+    if st and st.running then
+        local active_summary = self:formatActiveSummary(st)
+        if st.mode_kind == "load_more" then
+            if active_summary ~= "" then
+                return T(_("Loading Page %1 (%2/%3) · %4 results · Active: %5"),
+                    st.page, st.done, st.total, count, active_summary)
+            end
+            return T(_("Loading Page %1 (%2/%3) · %4 results…"),
+                st.page, st.done, st.total, count)
+        end
+        if active_summary ~= "" then
+            return T(_("Searching %1/%2 · %3 results · Active: %4"),
+                st.done, st.total, count, active_summary)
+        end
+        return T(_("Searching %1/%2 · %3 results…"), st.done, st.total, count)
+    end
+
+    local sub
+    if st and st.stopped_early then
+        sub = T(_("Stopped (%1/%2 sources) · %3 results · Hold to bookmark"),
+            st.done, st.total, count)
+    else
+        sub = T(_("%1 results from %2 selected sources · Hold to bookmark"),
+            count, self.last_searched_total)
+    end
+    if #self.failed_sources > 0 then
+        sub = sub .. T(_(" (%1 failed)"), #self.failed_sources)
+    end
+    return sub
+end
+
+function GlobalSearchBrowser:buildResultsItems()
+    local st = self.search_state
+    local running = st and st.running
     local dl_stats = self.downloads_engine:mangaDownloadStats()
     local meta_map = self.store:getMangaMetaMap()
-    local items = {
-        {
+    local items = {}
+
+    if running then
+        local bar = DownloadQueue.progressBar(st.done, st.total, 8)
+        table.insert(items, {
+            text = T(_("%1 Searching %2/%3 · Tap to stop"), bar, st.done, st.total),
+            mandatory = T(_("%1 results"), #self.results_items),
+            bold = true,
+            is_stop_search = true,
+        })
+    else
+        table.insert(items, {
             text = T(_("» Change sources (%1/%2) or search again…"), self:selectedCount()),
             mandatory = self.last_query ~= "" and T(_("Query: %1"), self.last_query) or "",
             bold = true,
             is_search_header = true,
-        },
-    }
+        })
+        if #self.remaining_sources > 0 then
+            table.insert(items, {
+                text = T(_("▶ Continue searching remaining %1 source(s)…"), #self.remaining_sources),
+                mandatory = _("Resume >"),
+                bold = true,
+                is_continue_search = true,
+            })
+        end
+        if #self.failed_sources > 0 then
+            table.insert(items, {
+                text = T(_("✗ %1 source(s) failed · Tap to retry or disable"), #self.failed_sources),
+                mandatory = _("Details >"),
+                is_failed_sources = true,
+            })
+        end
+    end
+
     for _idx, r in ipairs(self.results_items) do
         table.insert(items, self:formatResultRow(r, dl_stats, meta_map))
     end
-    local saved_page = self.page
-    self.item_table = items
-    self:updateItems(saved_page)
+
+    if #self.results_items == 0 then
+        local empty_text
+        if running then
+            empty_text = _("Waiting for first source results… (Results appear here live)")
+        elseif st and st.stopped_early then
+            empty_text = _("Search stopped before any results arrived.")
+        else
+            empty_text = _("No results in the selected sources.")
+        end
+        table.insert(items, {
+            text = empty_text,
+            dim = true,
+            is_placeholder = true,
+        })
+    elseif not running and #self.next_page_sources > 0 then
+        table.insert(items, {
+            text = T(_("» Load more results (Page %1 · %2 sources)…"),
+                (self.search_page or 1) + 1, #self.next_page_sources),
+            bold = true,
+            is_load_more = true,
+        })
+    end
+
+    return items
 end
 
-function GlobalSearchBrowser:showResultsView(searched_count, failed_names)
-    self.mode = "results"
-    if self.title_bar then
-        self.title_bar:setTitle(T(_("Search: %1"), self.last_query))
-        local sub = T(_("%1 results from %2 selected sources · Hold to bookmark"),
-            #self.results_items, searched_count)
-        if failed_names and #failed_names > 0 then
-            sub = sub .. T(_(" (%1 failed)"), #failed_names)
-        end
-        self.title_bar:setSubTitle(sub, true)
+function GlobalSearchBrowser:scheduleVisibilityWatch()
+    if self.vis_watch_scheduled or self.closed then
+        return
     end
-    self.page = 1
-    self:refreshResultsMarkers()
+    self.vis_watch_scheduled = true
+    self.vis_watch_cb = function()
+        self.vis_watch_scheduled = false
+        self.vis_watch_cb = nil
+        if self.closed or not self.pending_ui_sync then
+            return
+        end
+        if self.mode ~= "results" then
+            self.pending_ui_sync = false
+            return
+        end
+        if isCoveredByModalOrScreen(self) then
+            self:scheduleVisibilityWatch()
+            return
+        end
+        self.pending_ui_sync = false
+        self:renderResultsView(true)
+    end
+    UIManager:scheduleIn(VIS_WATCH_INTERVAL, self.vis_watch_cb)
+end
+
+function GlobalSearchBrowser:renderResultsView(preserve_page)
+    self.mode = "results"
+    if isCoveredByModalOrScreen(self) then
+        self.pending_ui_sync = true
+        self:scheduleVisibilityWatch()
+        return
+    end
+    self.pending_ui_sync = false
+    local title = self.last_query ~= "" and T(_("Search: %1"), self.last_query) or _("Multi-source Search")
+    local subtitle = self:buildResultsSubtitle()
+    local items = self:buildResultsItems()
+    if not preserve_page then
+        self.page = 1
+    end
+    self:switchItemTable(title, items, preserve_page and -1 or nil, nil, subtitle)
+end
+
+function GlobalSearchBrowser:refreshResultsMarkers()
+    if self.mode ~= "results" then
+        return
+    end
+    self:renderResultsView(true)
+end
+
+function GlobalSearchBrowser:showResultsView(_searched_count, _failed_names)
+    self:renderResultsView(false)
+end
+
+function GlobalSearchBrowser:consumeStreamEvents(events)
+    if type(events) ~= "table" or #events == 0 or not self.search_state then
+        return false
+    end
+    local st = self.search_state
+    local changed = false
+    for _idx, ev in ipairs(events) do
+        if type(ev) == "table" then
+            local ev_type = type(ev.type) == "string" and ev.type or ""
+            local idx = type(ev.index) == "number" and math.floor(ev.index) or 0
+            local src = idx > 0 and st.sources[idx] or nil
+            local skey = type(ev.sourceKey) == "string" and ev.sourceKey ~= ""
+                and ev.sourceKey or (src and src.key or "")
+            local sname = type(ev.sourceName) == "string" and ev.sourceName ~= ""
+                and ev.sourceName or (src and (src.name or src.text) or skey)
+            local spath = type(ev.sourcePath) == "string" and ev.sourcePath ~= ""
+                and ev.sourcePath or (src and src.path or "")
+
+            if ev_type == "start" then
+                if idx > 0 and not st.completed_by_idx[idx] then
+                    st.active_by_idx[idx] = sname
+                    changed = true
+                end
+            elseif ev_type == "result" then
+                if idx > 0 then
+                    st.active_by_idx[idx] = nil
+                    if not st.completed_by_idx[idx] then
+                        st.completed_by_idx[idx] = true
+                        st.done = st.done + 1
+                    end
+                else
+                    st.done = st.done + 1
+                end
+
+                local err_str = type(ev.error) == "string" and ev.error or ""
+                if err_str ~= "" then
+                    table.insert(self.failed_sources, {
+                        key = skey,
+                        name = sname,
+                        path = spath,
+                        error = err_str,
+                    })
+                else
+                    local entries = type(ev.entries) == "table" and ev.entries or {}
+                    for _eidx, manga in ipairs(entries) do
+                        if type(manga) == "table" and type(manga.Key) == "string" and manga.Key ~= "" then
+                            local dedup_key = tostring(skey) .. "\0" .. manga.Key
+                            if not self.seen_result_keys[dedup_key] then
+                                self.seen_result_keys[dedup_key] = true
+                                table.insert(self.results_items, {
+                                    manga = manga,
+                                    source_path = spath,
+                                    source_key = skey,
+                                    source_name = sname,
+                                })
+                            end
+                        end
+                    end
+                    if ev.hasNext == true and spath ~= "" then
+                        table.insert(self.next_page_sources, {
+                            key = skey,
+                            name = sname,
+                            path = spath,
+                        })
+                    end
+                end
+                changed = true
+            end
+        end
+    end
+    return changed
+end
+
+function GlobalSearchBrowser:schedulePoll()
+    if self.poll_scheduled or not self.active_handle or self.closed then
+        return
+    end
+    self.poll_scheduled = true
+    self.poll_cb = function()
+        self.poll_scheduled = false
+        self.poll_cb = nil
+        self:onPollTick()
+    end
+    UIManager:scheduleIn(POLL_INTERVAL, self.poll_cb)
+end
+
+function GlobalSearchBrowser:onPollTick()
+    if self.closed then
+        return
+    end
+    local handle = self.active_handle
+    local st = self.search_state
+    if not handle or not st then
+        self:updateStandbyGuard()
+        return
+    end
+
+    local proc_state, _out, proc_err = handle:poll()
+    local changed = self:consumeStreamEvents(handle:drainStreamEvents())
+
+    if proc_state == "running" then
+        if changed and self.mode == "results" then
+            self:renderResultsView(true)
+        end
+        self:schedulePoll()
+        return
+    end
+
+    self.active_handle = nil
+    st.running = false
+    st.active_by_idx = {}
+    self:updateStandbyGuard()
+
+    if proc_state == "error" and st.done == 0 then
+        local err_msg = type(proc_err) == "string" and proc_err ~= "" and proc_err or _("command failed")
+        for idx, src in ipairs(st.sources) do
+            if not st.completed_by_idx[idx] then
+                table.insert(self.failed_sources, {
+                    key = src.key or "",
+                    name = src.name or src.text or "",
+                    path = src.path or "",
+                    error = err_msg,
+                })
+            end
+        end
+    end
+
+    if self.mode == "results" then
+        self:renderResultsView(true)
+    end
+end
+
+function GlobalSearchBrowser:stopSearch(silent)
+    self:unschedulePoll()
+    local handle = self.active_handle
+    local st = self.search_state
+    if not handle or not st then
+        return
+    end
+
+    handle:cancel()
+    self:consumeStreamEvents(handle:drainStreamEvents())
+    self.active_handle = nil
+    st.running = false
+    st.stopped_early = true
+    st.active_by_idx = {}
+    self:updateStandbyGuard()
+
+    local remaining = {}
+    for idx, src in ipairs(st.sources) do
+        if not st.completed_by_idx[idx] then
+            table.insert(remaining, src)
+        end
+    end
+    self.remaining_sources = remaining
+
+    if self.mode == "results" then
+        self:renderResultsView(true)
+    end
+
+    if not silent and not self.closed then
+        UIManager:show(Notification:new{
+            text = T(_("Search stopped (%1/%2 sources, %3 results kept)"),
+                st.done, st.total, #self.results_items),
+            timeout = 2.5,
+        })
+    end
+end
+
+function GlobalSearchBrowser:startBatchStream(sources_list, page_num, mode_kind)
+    if type(sources_list) ~= "table" or #sources_list == 0 then
+        return
+    end
+    self:cancelActiveSearch(true)
+
+    if mode_kind == "fresh" then
+        self.search_page = 1
+        self.results_items = {}
+        self.seen_result_keys = {}
+        self.failed_sources = {}
+        self.remaining_sources = {}
+        self.next_page_sources = {}
+        self.last_searched_total = #sources_list
+        self.page = 1
+    elseif mode_kind == "load_more" then
+        self.search_page = page_num
+        self.next_page_sources = {}
+    elseif mode_kind == "retry_failed" then
+        self.failed_sources = {}
+    elseif mode_kind == "continue" then
+        self.remaining_sources = {}
+    end
+
+    NetworkMgr:runWhenConnected(function()
+        if self.closed then
+            return
+        end
+        local workers = self.store and self.store.searchConcurrency and self.store:searchConcurrency() or 0
+        local handle, err = self.engine:spawnSearchBatch(sources_list, self.last_query, page_num, {
+            workers = workers,
+        })
+        if not handle then
+            UIManager:show(InfoMessage:new{
+                text = T(_("Could not start search:\n%1"), tostring(err or _("command failed"))),
+                timeout = 3,
+            })
+            return
+        end
+
+        self.active_handle = handle
+        self.search_state = {
+            running = true,
+            mode_kind = mode_kind,
+            page = page_num,
+            done = 0,
+            total = #sources_list,
+            sources = sources_list,
+            active_by_idx = {},
+            completed_by_idx = {},
+            stopped_early = false,
+        }
+        self:updateStandbyGuard()
+        self:renderResultsView(mode_kind ~= "fresh")
+        self:schedulePoll()
+    end)
 end
 
 function GlobalSearchBrowser:promptQuery()
@@ -300,89 +800,85 @@ function GlobalSearchBrowser:runSearch(query)
     end
 
     self.last_query = query
-    NetworkMgr:runWhenConnected(function()
-        Trapper:wrap(function()
-            local raw_results = {}
-            local failed = {}
-            local stopped_early = false
+    self:startBatchStream(target_sources, 1, "fresh")
+end
 
-            if #target_sources == 1 then
-                local src = target_sources[1]
-                local progress_msg = T(_("Searching (%1/%2): %3…"), 1, 1, src.name)
-                local result, err = self.engine:search(src.path, query, 1, nil, progress_msg)
-                if not result and err == _("Cancelled") then
-                    stopped_early = true
-                else
-                    local entries = result and type(result.Entries) == "table" and result.Entries or nil
-                    if entries then
-                        for _i, manga in ipairs(entries) do
-                            table.insert(raw_results, {
-                                manga = manga,
-                                source_path = src.path,
-                                source_key = src.key,
-                                source_name = src.name,
-                            })
-                        end
-                    else
-                        table.insert(failed, src.name or src.text)
-                    end
-                end
-            else
-                local batch_res, batch_err = self.engine:searchBatch(target_sources, query, 1)
-                if not batch_res and batch_err == _("Cancelled") then
-                    stopped_early = true
-                elseif batch_res and type(batch_res.results) == "table" then
-                    for idx, r in ipairs(batch_res.results) do
-                        local src = target_sources[idx] or {}
-                        local sname = (type(r) == "table" and type(r.sourceName) == "string" and r.sourceName ~= "")
-                            and r.sourceName or (src.name or src.text or "")
-                        local skey = (type(r) == "table" and type(r.sourceKey) == "string" and r.sourceKey ~= "")
-                            and r.sourceKey or (src.key or "")
-                        local spath = (type(r) == "table" and type(r.sourcePath) == "string" and r.sourcePath ~= "")
-                            and r.sourcePath or (src.path or "")
-                        local has_err = type(r) ~= "table" or (type(r.error) == "string" and r.error ~= "")
-                        local entries = not has_err and type(r.entries) == "table" and r.entries or nil
-                        if entries then
-                            for _i, manga in ipairs(entries) do
-                                table.insert(raw_results, {
-                                    manga = manga,
-                                    source_path = spath,
-                                    source_key = skey,
-                                    source_name = sname,
-                                })
-                            end
-                        elseif has_err then
-                            table.insert(failed, sname)
-                        end
-                    end
-                else
-                    for _idx, src in ipairs(target_sources) do
-                        table.insert(failed, src.name or src.text)
-                    end
-                end
-            end
+function GlobalSearchBrowser:showFailedSourcesDialog()
+    if #self.failed_sources == 0 then
+        return
+    end
+    local lines = {}
+    local max_show = math.min(8, #self.failed_sources)
+    for i = 1, max_show do
+        local f = self.failed_sources[i]
+        local name = shortenUTF8(f.name ~= "" and f.name or f.key, 20)
+        local err = shortenUTF8(f.error or _("failed"), 42)
+        table.insert(lines, "• " .. name .. ": " .. err)
+    end
+    if #self.failed_sources > max_show then
+        table.insert(lines, T(_("…and %1 more"), #self.failed_sources - max_show))
+    end
 
-            self.results_items = raw_results
-            self:showResultsView(#target_sources, failed)
-
-            if stopped_early then
-                UIManager:show(InfoMessage:new{
-                    text = T(_("Search stopped early (%1 results kept)."), #raw_results),
-                    timeout = 2,
-                })
-            elseif #raw_results == 0 then
-                UIManager:show(InfoMessage:new{
-                    text = _("No results in the selected sources."),
-                    timeout = 2,
-                })
-            elseif #failed > 0 then
-                UIManager:show(InfoMessage:new{
-                    text = T(_("Some sources failed: %1"), table.concat(failed, ", ")),
-                    timeout = 3,
+    local retry_list = {}
+    local seen_retry = {}
+    for _idx, f in ipairs(self.failed_sources) do
+        if type(f.path) == "string" and f.path ~= "" then
+            local rk = f.key ~= "" and f.key or f.path
+            if not seen_retry[rk] then
+                seen_retry[rk] = true
+                table.insert(retry_list, {
+                    key = f.key,
+                    name = f.name,
+                    path = f.path,
                 })
             end
-        end)
-    end)
+        end
+    end
+
+    local dialog
+    local buttons = {}
+    if #retry_list > 0 then
+        table.insert(buttons, {{
+            text = T(_("Retry failed sources (%1)"), #retry_list),
+            callback = function()
+                UIManager:close(dialog)
+                self:startBatchStream(retry_list, self.search_page or 1, "retry_failed")
+            end,
+        }})
+    end
+    table.insert(buttons, {{
+        text = _("Deselect failed sources"),
+        callback = function()
+            UIManager:close(dialog)
+            local disabled = 0
+            for _idx, f in ipairs(self.failed_sources) do
+                if f.key and f.key ~= "" and self.selected_map[f.key] then
+                    self.selected_map[f.key] = false
+                    disabled = disabled + 1
+                end
+            end
+            self:persistSelection()
+            self.failed_sources = {}
+            self:renderResultsView(true)
+            if disabled > 0 then
+                UIManager:show(Notification:new{
+                    text = T(_("Disabled %1 failed source(s) for future searches."), disabled),
+                    timeout = 2.5,
+                })
+            end
+        end,
+    }})
+    table.insert(buttons, {{
+        text = _("Close"),
+        callback = function() UIManager:close(dialog) end,
+    }})
+
+    dialog = ButtonDialog:new{
+        title = T(_("Failed Sources (%1)"), #self.failed_sources) .. "\n\n" .. table.concat(lines, "\n"),
+        use_info_style = true,
+        buttons = buttons,
+    }
+    UIManager:show(dialog)
 end
 
 function GlobalSearchBrowser:invertSelection()
@@ -398,22 +894,31 @@ end
 function GlobalSearchBrowser:onLeftButtonTap()
     local sel_count, valid_total = self:selectedCount()
     local dialog
-    local buttons = {
-        {{
-            text = T(_("Search keyword (%1/%2 sources)…"), sel_count, valid_total),
+    local buttons = {}
+
+    if self.active_handle and self.search_state and self.search_state.running then
+        table.insert(buttons, {{
+            text = T(_("■ Stop current search (%1/%2)"), self.search_state.done, self.search_state.total),
             callback = function()
                 UIManager:close(dialog)
-                self:promptQuery()
+                self:stopSearch(false)
             end,
-        }},
-    }
+        }})
+    end
+
+    table.insert(buttons, {{
+        text = T(_("Search keyword (%1/%2 sources)…"), sel_count, valid_total),
+        callback = function()
+            UIManager:close(dialog)
+            self:promptQuery()
+        end,
+    }})
 
     if self.mode == "results" then
         table.insert(buttons, {{
             text = T(_("Select search sources (%1/%2)…"), sel_count, valid_total),
             callback = function()
                 UIManager:close(dialog)
-                self.page = 1
                 self:showSourceSelector()
             end,
         }})
@@ -447,12 +952,12 @@ function GlobalSearchBrowser:onLeftButtonTap()
                 self:invertSelection()
             end,
         }})
-        if #self.results_items > 0 then
+        if #self.results_items > 0 or #self.remaining_sources > 0 or #self.failed_sources > 0 then
             table.insert(buttons, {{
                 text = T(_("Back to last results (%1)"), #self.results_items),
                 callback = function()
                     UIManager:close(dialog)
-                    self:showResultsView(sel_count, nil)
+                    self:renderResultsView(false)
                 end,
             }})
         end
@@ -479,7 +984,7 @@ function GlobalSearchBrowser:onLeftButtonTap()
 
     dialog = ButtonDialog:new{
         shrink_unneeded_width = true,
-        anchor = function() return self.title_bar.left_button.image.dimen end,
+        anchor = function() return leftButtonAnchor(self) end,
         buttons = buttons,
     }
     UIManager:show(dialog)
@@ -513,7 +1018,24 @@ function GlobalSearchBrowser:onMenuSelect(item)
     end
 
     -- Results mode
-    if item.is_search_header then
+    if item.is_stop_search then
+        self:stopSearch(false)
+        return true
+    elseif item.is_continue_search then
+        if #self.remaining_sources > 0 then
+            self:startBatchStream(self.remaining_sources, self.search_page or 1, "continue")
+        end
+        return true
+    elseif item.is_failed_sources then
+        self:showFailedSourcesDialog()
+        return true
+    elseif item.is_load_more then
+        if #self.next_page_sources > 0 then
+            local next_page = (self.search_page or 1) + 1
+            self:startBatchStream(self.next_page_sources, next_page, "load_more")
+        end
+        return true
+    elseif item.is_search_header then
         local dialog
         dialog = ButtonDialog:new{
             title = _("Multi-source Search"),
@@ -529,13 +1051,16 @@ function GlobalSearchBrowser:onMenuSelect(item)
                     text = T(_("Change selected sources (%1/%2)…"), self:selectedCount()),
                     callback = function()
                         UIManager:close(dialog)
-                        self.page = 1
                         self:showSourceSelector()
                     end,
                 }},
             },
         }
         UIManager:show(dialog)
+        return true
+    end
+
+    if not item.manga then
         return true
     end
 
@@ -573,7 +1098,6 @@ function GlobalSearchBrowser:onMenuHold(item)
             self:invertSelection()
             return true
         elseif item.source_entry and item.source_entry.key then
-            -- Holding a single source offers "Search ONLY this source right now"
             local src = item.source_entry
             local dialog
             dialog = ButtonDialog:new{
@@ -608,7 +1132,8 @@ function GlobalSearchBrowser:onMenuHold(item)
         return true
     end
 
-    if item.is_search_header or not item.manga then
+    if item.is_search_header or item.is_stop_search or item.is_continue_search
+        or item.is_failed_sources or item.is_load_more or not item.manga then
         return true
     end
 
