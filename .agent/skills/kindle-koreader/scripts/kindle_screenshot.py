@@ -12,19 +12,36 @@ Subcommands:
 import gzip
 import os
 import re
+import shutil
 import struct
 import subprocess
 import sys
 import zlib
 
+sys.dont_write_bytecode = True
+
+
+def resolve_kindle_host(port: str) -> str:
+    host = os.environ.get("KINDLE_HOST", "").strip()
+    if host:
+        return host
+    bridge = os.path.join(os.path.dirname(os.path.abspath(__file__)), "kindle_usb_bridge.py")
+    res = subprocess.run(
+        [sys.executable, "-B", bridge, "host", "--port", port],
+        capture_output=True,
+        text=True,
+    )
+    if res.returncode != 0 or not res.stdout.strip():
+        msg = res.stderr.strip() or "KINDLE_HOST is not set and no USB Kindle was detected"
+        sys.exit(msg)
+    return res.stdout.strip()
+
 
 def ssh_base_cmd():
-    host = os.environ.get("KINDLE_HOST", "").strip()
-    if not host:
-        sys.exit("error: KINDLE_HOST is not set (e.g. export KINDLE_HOST=192.168.x.x)")
     port = os.environ.get("KINDLE_PORT", "2222").strip()
     user = os.environ.get("KINDLE_USER", "root").strip()
-    return [
+    host = resolve_kindle_host(port)
+    cmd = [
         "ssh",
         "-o", "LogLevel=error",
         "-o", "StrictHostKeyChecking=no",
@@ -33,6 +50,16 @@ def ssh_base_cmd():
         "-p", port,
         f"{user}@{host}",
     ]
+    sshpass = shutil.which("sshpass")
+    if sshpass:
+        cmd = [sshpass, "-p", os.environ.get("KINDLE_PASSWORD", "")] + cmd
+    return cmd
+
+
+def ssh_env() -> dict[str, str]:
+    env = os.environ.copy()
+    env.setdefault("SSH_ASKPASS_REQUIRE", "never")
+    return env
 
 
 def probe_fb_geometry():
@@ -45,7 +72,7 @@ def probe_fb_geometry():
         "echo __STRIDE__; "
         "cat /sys/class/graphics/fb0/stride 2>/dev/null || true"
     )
-    res = subprocess.run(ssh_base_cmd() + [probe_sh], capture_output=True, text=True, check=True)
+    res = subprocess.run(ssh_base_cmd() + [probe_sh], capture_output=True, text=True, check=True, env=ssh_env())
     out = res.stdout
 
     width = height = bpp = stride = None
@@ -178,7 +205,7 @@ def cmd_capture(out_path: str) -> None:
     if height > width * 2:
         height = height // 2
     dd_cmd = f"dd if=/dev/fb0 bs={stride} count={height} 2>/dev/null | gzip -c"
-    res = subprocess.run(ssh_base_cmd() + [dd_cmd], capture_output=True, check=True)
+    res = subprocess.run(ssh_base_cmd() + [dd_cmd], capture_output=True, check=True, env=ssh_env())
     raw = gzip.decompress(res.stdout)
     gray_rows = decode_fb_to_gray_rows(raw, width, height, bpp, stride)
     write_gray8_png(out_path, width, height, gray_rows)

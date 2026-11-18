@@ -4,6 +4,7 @@
 # strips macOS AppleDouble (._*) resource forks on FAT32 /mnt/us.
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HOST="${KINDLE_HOST:-}"
 PORT="${KINDLE_PORT:-2222}"
 USER_NAME="${KINDLE_USER:-root}"
@@ -11,8 +12,8 @@ USER_NAME="${KINDLE_USER:-root}"
 usage() {
     cat >&2 <<'EOF'
 Usage:
-  KINDLE_HOST=192.168.x.x kindle_ssh.sh exec "<remote command>"
-  KINDLE_HOST=192.168.x.x kindle_ssh.sh deploy <local_plugin_dir> <remote_plugin_dir>
+  [KINDLE_HOST=192.168.x.x] kindle_ssh.sh exec "<remote command>"
+  [KINDLE_HOST=192.168.x.x] kindle_ssh.sh deploy <local_plugin_dir> <remote_plugin_dir>
 EOF
     exit 2
 }
@@ -22,8 +23,7 @@ if [[ $# -lt 2 ]]; then
 fi
 
 if [[ -z "$HOST" ]]; then
-    echo "error: KINDLE_HOST is not set (e.g. export KINDLE_HOST=192.168.x.x)" >&2
-    exit 2
+    HOST="$(python3 -B "$SCRIPT_DIR/kindle_usb_bridge.py" host --port "$PORT")"
 fi
 
 SSH_OPTS=(
@@ -34,12 +34,18 @@ SSH_OPTS=(
     -p "$PORT"
 )
 
+export SSH_ASKPASS_REQUIRE=never
+SSH_CMD=(ssh "${SSH_OPTS[@]}")
+if command -v sshpass >/dev/null 2>&1; then
+    SSH_CMD=(sshpass -p "${KINDLE_PASSWORD:-}" "${SSH_CMD[@]}")
+fi
+
 subcmd="$1"
 shift
 
 case "$subcmd" in
     exec)
-        exec ssh "${SSH_OPTS[@]}" "${USER_NAME}@${HOST}" "$@"
+        exec "${SSH_CMD[@]}" "${USER_NAME}@${HOST}" "$@"
         ;;
     deploy)
         if [[ $# -lt 2 ]]; then
@@ -54,7 +60,7 @@ case "$subcmd" in
         COPYFILE_DISABLE=1 tar -C "$local_dir" \
             --exclude='.DS_Store' \
             --exclude='._*' \
-            -czf - . | ssh "${SSH_OPTS[@]}" "${USER_NAME}@${HOST}" \
+            -czf - . | "${SSH_CMD[@]}" "${USER_NAME}@${HOST}" \
             "mkdir -p '$remote_dir' && tar -C '$remote_dir' -xzf - && find '$remote_dir/bin' -type f -exec chmod +x {} + 2>/dev/null || true"
         echo "Deployed $local_dir -> ${USER_NAME}@${HOST}:${remote_dir}"
         ;;

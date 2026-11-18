@@ -93,6 +93,29 @@ for f in koreader/aidoku.koplugin/*.lua; do luajit -b "$f" /dev/null; done
 ./koreader/update-strings.sh
 ```
 
+### 真机 USB 免退出调试与 Agent Skill (On-Device USB Debugging)
+
+仓库内置了独立隔离的 Kindle USB 调试桥接插件 [`usbdebug.koplugin`](.agent/skills/kindle-koreader/resources/usbdebug)（独立仓库：[anyin233/usbdebug.koplugin](https://github.com/anyin233/usbdebug.koplugin)）与项目级 Agent Skill [`.agent/skills/kindle-koreader`](.agent/skills/kindle-koreader)，克隆仓库后即可直接进行免 Wi-Fi、免退出 KOReader 的真机调试：
+
+1. **安装宿主机依赖**（macOS：`brew install libmtp libusb sshpass`；Ubuntu/Debian：`sudo apt-get install -y libmtp-dev libusb-1.0-0 sshpass clang`）。
+2. **首次引导部署 `usbdebug.koplugin`（仅第一次需要退出 KOReader 进入 MTP / U 盘模式）**：
+   ```sh
+   ./.agent/skills/kindle-koreader/scripts/bootstrap_mtp.sh
+   ```
+3. **打开 KOReader 开始日常开发调试（无需配置 `KINDLE_HOST`）**：
+   ```sh
+   # 编译 Tsundoku 并热部署到 Kindle
+   ./koreader/build.sh
+   ./.agent/skills/kindle-koreader/scripts/kindle_ssh.sh deploy ./koreader/aidoku.koplugin /mnt/us/koreader/plugins/aidoku.koplugin
+
+   # 实时查看日志、抓取 /dev/fb0 截图与模拟触控
+   ./.agent/skills/kindle-koreader/scripts/kindle_ssh.sh exec "tail -n 40 /mnt/us/koreader/crash.log"
+   python3 -B ./.agent/skills/kindle-koreader/scripts/kindle_screenshot.py capture /tmp/kindle.png
+   ./.agent/skills/kindle-koreader/scripts/kindle_touch.sh tap 636 30
+   ```
+
+> 注：`usbdebug.koplugin` 与 Tsundoku 插件代码及 CI 发布产物（`aidoku-koplugin-*.zip`）完全隔离，仅作为开发期本地工具与项目级 Skill 提供。
+
 ### 仓库目录结构
 
 | 路径 | 说明 |
@@ -104,7 +127,7 @@ for f in koreader/aidoku.koplugin/*.lua; do luajit -b "$f" /dev/null; done
 | [`cbz/`](cbz) | 流式原子写入 `.cbz` 漫画归档与 `ComicInfo.xml` 元数据。 |
 | [`cmd/aidoku-run`](cmd/aidoku-run) | 插件调用的 CLI 后端（支持 `manifests`、`search`、`manga`、`download`、`download-payload`、`covers`、`repo`、`cookie`、`update` 等子命令）。 |
 | [`koreader/aidoku.koplugin`](koreader/aidoku.koplugin) | KOReader Lua 插件前端（书库、多书源搜索 Plus、章节多维排序、非阻塞后台下载队列与下载管理器）。 |
-| [`.agent/skills/kindle-koreader`](.agent/skills/kindle-koreader) | AI Coding Agent 专用的 Kindle + KOReader 真机 SSH 部署、帧缓冲截屏、触控注入与离屏渲染测试 Skill。 |
+| [`.agent/skills/kindle-koreader`](.agent/skills/kindle-koreader) | AI Coding Agent 专用的 Kindle + KOReader 项目级调试 Skill，内置独立隔离的 `usbdebug.koplugin` 源码（`resources/usbdebug/`）、MTP 一键引导与 USB 自动发现脚本（支持免退出 SSH 部署、帧缓冲截屏、触控注入与离屏渲染）。 |
 
 ---
 

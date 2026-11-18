@@ -1,25 +1,48 @@
 ---
 name: kindle-koreader
-description: Operate, deploy to, visually test, and debug a physical Kindle running KOReader over SSH. Use when connecting to a Kindle over SSH, capturing E-Ink framebuffer screenshots, injecting touch taps/holds/swipes, rendering KOReader widgets offscreen, or developing/debugging `.koplugin` Lua and Go binaries on Kindle hardware.
+description: Operate, deploy to, visually test, and debug a physical Kindle running KOReader over zero-exit USB SSH (CDC-ECM/NCM or FunctionFS) or Wi-Fi. Use when bootstrapping USB debugging over MTP, connecting to KOReader over SSH, capturing E-Ink framebuffer screenshots, injecting touch taps/holds/swipes, rendering KOReader widgets offscreen, or developing/debugging Tsundoku `.koplugin` Lua and Go binaries on Kindle hardware.
 ---
 
 # Kindle + KOReader Device Operations & Visual Testing
 
-Deterministic workflow for driving a physical Kindle running KOReader's SSH server (`dropbear`), deploying `.koplugin` bundles, capturing E-Ink screenshots, injecting touch gestures, and verifying UI changes without disrupting active user sessions.
+Deterministic workflow for driving a physical Kindle running KOReader's SSH server (`dropbear`) directly over USB (via the bundled `usbdebug.koplugin` bridge, without exiting KOReader or requiring Wi-Fi) or over Wi-Fi, deploying `.koplugin` bundles, capturing E-Ink screenshots, injecting touch gestures, and verifying UI changes without disrupting active user sessions.
 
-Bundled scripts live in [`scripts/`](scripts/) relative to this `SKILL.md`:
-- `scripts/kindle_ssh.sh` — SSH command runner and clean macOS-to-Kindle `tar` deployer
+Bundled scripts live in [`scripts/`](scripts/) and the embedded USB debug bridge source lives in [`resources/usbdebug/`](resources/usbdebug/) relative to this `SKILL.md`:
+- `scripts/kindle_usb_bridge.py` — USB auto-discovery (`192.168.15.1` CDC-ECM/NCM or `127.0.0.1` FunctionFS bridge) & USB mode probe
+- `scripts/kindle_ssh.sh` — SSH command runner and clean macOS/Linux-to-Kindle `tar` deployer
 - `scripts/kindle_screenshot.py` — Zero-dependency `/dev/fb0` → PNG capture & pixel-diff bounding-box locator
 - `scripts/kindle_touch.sh` — Multi-Touch Type B (`pt_mt` + `BTN_TOUCH`) tap, long-press, and swipe injector via KOReader's `luajit` FFI
 - `scripts/kindle_offscreen_render.sh` — Headless KOReader widget → PNG renderer (never touches `/dev/fb0` or the live session)
+- `scripts/bootstrap_mtp.sh` — One-command first-time installer for `usbdebug.koplugin` over MTP or USB Mass Storage
+- `scripts/build_usbdebug.sh` — Multi-arch cross-compiler (`armv6`, `armv7`, `arm64`) for the bundled `usbdebugd` daemon
 
 For KOReader Lua, `lua-ljsqlite3`, `json` null-sentinel, background subprocess, and i18n pitfalls, read [`koreader-lua-pitfalls.md`](koreader-lua-pitfalls.md).
 
 ---
 
-## Environment Variables
+## Environment Variables & Step 0: USB Probe / First-Time Bootstrap
 
-Set target coordinates once per shell session (defaults: `KINDLE_PORT=2222`, `KINDLE_USER=root`):
+When connected over **USB** with `usbdebug.koplugin` active inside KOReader, `KINDLE_HOST` is **optional** — all bundled scripts auto-discover the Kindle over USB via `scripts/kindle_usb_bridge.py` (`192.168.15.1:2222` on CDC-ECM/NCM USB Ethernet, or `127.0.0.1:2222` via the FunctionFS bridge), and supply empty-password auth automatically when `sshpass` is installed.
+
+Check USB state first:
+
+```bash
+python3 -B scripts/kindle_usb_bridge.py probe
+```
+
+- **`"net": true` or `"ffs": true`**: USB Debug is active — run `scripts/kindle_ssh.sh`, `scripts/kindle_screenshot.py`, `scripts/kindle_touch.sh`, and `scripts/kindle_offscreen_render.sh` immediately without setting `KINDLE_HOST`.
+- **`"mtp": true`** (first-time setup before `usbdebug.koplugin` is on the Kindle, while exited to stock MTP/USB mode):
+  ```bash
+  scripts/bootstrap_mtp.sh
+  ```
+  Then open KOReader on the Kindle; `usbdebug.koplugin` stages `usbdebugd` into `/dev/shm/usbdebugd` and activates USB SSH automatically (and releases UDC 8 seconds after KOReader exits so stock MTP still works).
+- **Rebuilding/redeploying `usbdebug.koplugin`** from [`resources/usbdebug/`](resources/usbdebug/):
+  ```bash
+  scripts/build_usbdebug.sh
+  scripts/kindle_ssh.sh deploy resources/usbdebug/usbdebug.koplugin /mnt/us/koreader/plugins/usbdebug.koplugin
+  ```
+
+To target a Kindle over Wi-Fi instead (or override defaults `KINDLE_PORT=2222`, `KINDLE_USER=root`):
 
 ```bash
 export KINDLE_HOST="192.168.x.x"
@@ -55,7 +78,7 @@ scripts/kindle_ssh.sh deploy ./aidoku.koplugin /mnt/us/koreader/plugins/aidoku.k
 Key constraints enforced by `kindle_ssh.sh`:
 - **Never pass `-o BatchMode=yes`** to SSH: KOReader's passwordless Dropbear uses empty-password auth, which `BatchMode=yes` rejects with `Permission denied (publickey,password)`.
 - **Always set `COPYFILE_DISABLE=1`** on macOS `tar`: prevents `._*` AppleDouble resource-fork files from littering `/mnt/us` (FAT32/vfat).
-- **Never back up directories into `/mnt/us/<backup>` or `/tmp/<large>`**: `/mnt/us/*` folders appear directly in KOReader's File Manager, and `/tmp` is a small RAM `tmpfs`. Store small temporary backups under `/var/tmp/` and clean them up when done.
+- **Never back up directories into `/mnt/us/<backup>` or `/tmp/<large>`**: `/mnt/us/*` folders appear directly in KOReader's File Manager, and `/tmp` -> `/var/tmp` sits on a 64 MB `tmpfs` (often >95% full on PW6). Store temporary RAM binaries/backups under `/dev/shm/` (478 MB `tmpfs` on PW6) or tiny status files under `/var/tmp/`, and clean them up when done.
 - **Keep binary pipes clean**: macOS Homebrew OpenSSH may print an `ssh_askpass` warning on `stderr`; never merge remote `2>&1` into binary `stdout` pipes (`gzip`, `tar`, `cat`).
 
 ### Step 3: Visual Capture & Exact Coordinate Discovery

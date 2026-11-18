@@ -5,3 +5,6 @@ test_source
 koreader/aidoku.koplugin/bin/
 sources/*/target/
 sources/*/*.aix
+.agent/skills/kindle-koreader/resources/usbdebug/build/
+.agent/skills/kindle-koreader/resources/usbdebug/usbdebug.koplugin/bin/
+__pycache__/
