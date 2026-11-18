@@ -142,7 +142,8 @@ type Net struct {
 	// ParseHTML parses response bytes as HTML relative to baseURL and
 	// stores the resulting document, returning its Store descriptor. Wired
 	// up once the html namespace exists.
-	ParseHTML func(data []byte, baseURL string) (descriptor int32, err error)
+	ParseHTML         func(data []byte, baseURL string) (descriptor int32, err error)
+	ParseHTMLWithType func(data []byte, baseURL, contentType string) (descriptor int32, err error)
 
 	// FlareSolverr, set when FLARESOLVERR_HOST is configured, is used as a
 	// second-line retry when a GET request comes back as a Cloudflare
@@ -428,14 +429,24 @@ func LinkNet(builder wazero.HostModuleBuilder, n *Net) wazero.HostModuleBuilder 
 			if req.ResponseData == nil {
 				return int32(netMissingData)
 			}
-			if n.ParseHTML == nil {
+			if n.ParseHTML == nil && n.ParseHTMLWithType == nil {
 				return int32(netInvalidHTML)
 			}
 			baseURL := ""
-			if req.Response != nil && req.Response.Request != nil && req.Response.Request.URL != nil {
-				baseURL = req.Response.Request.URL.String()
+			contentType := ""
+			if req.Response != nil {
+				if req.Response.Request != nil && req.Response.Request.URL != nil {
+					baseURL = req.Response.Request.URL.String()
+				}
+				contentType = req.Response.Header.Get("Content-Type")
 			}
-			d, err := n.ParseHTML(req.ResponseData, baseURL)
+			var d int32
+			var err error
+			if n.ParseHTMLWithType != nil {
+				d, err = n.ParseHTMLWithType(req.ResponseData, baseURL, contentType)
+			} else {
+				d, err = n.ParseHTML(req.ResponseData, baseURL)
+			}
 			if err != nil {
 				return int32(netInvalidHTML)
 			}

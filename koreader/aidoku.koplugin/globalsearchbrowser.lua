@@ -306,25 +306,59 @@ function GlobalSearchBrowser:runSearch(query)
             local failed = {}
             local stopped_early = false
 
-            for idx, src in ipairs(target_sources) do
-                local progress_msg = T(_("Searching (%1/%2): %3…"), idx, #target_sources, src.name)
+            if #target_sources == 1 then
+                local src = target_sources[1]
+                local progress_msg = T(_("Searching (%1/%2): %3…"), 1, 1, src.name)
                 local result, err = self.engine:search(src.path, query, 1, nil, progress_msg)
                 if not result and err == _("Cancelled") then
                     stopped_early = true
-                    break
+                else
+                    local entries = result and type(result.Entries) == "table" and result.Entries or nil
+                    if entries then
+                        for _i, manga in ipairs(entries) do
+                            table.insert(raw_results, {
+                                manga = manga,
+                                source_path = src.path,
+                                source_key = src.key,
+                                source_name = src.name,
+                            })
+                        end
+                    else
+                        table.insert(failed, src.name or src.text)
+                    end
                 end
-                local entries = result and type(result.Entries) == "table" and result.Entries or nil
-                if entries then
-                    for _i, manga in ipairs(entries) do
-                        table.insert(raw_results, {
-                            manga = manga,
-                            source_path = src.path,
-                            source_key = src.key,
-                            source_name = src.name,
-                        })
+            else
+                local batch_res, batch_err = self.engine:searchBatch(target_sources, query, 1)
+                if not batch_res and batch_err == _("Cancelled") then
+                    stopped_early = true
+                elseif batch_res and type(batch_res.results) == "table" then
+                    for idx, r in ipairs(batch_res.results) do
+                        local src = target_sources[idx] or {}
+                        local sname = (type(r) == "table" and type(r.sourceName) == "string" and r.sourceName ~= "")
+                            and r.sourceName or (src.name or src.text or "")
+                        local skey = (type(r) == "table" and type(r.sourceKey) == "string" and r.sourceKey ~= "")
+                            and r.sourceKey or (src.key or "")
+                        local spath = (type(r) == "table" and type(r.sourcePath) == "string" and r.sourcePath ~= "")
+                            and r.sourcePath or (src.path or "")
+                        local has_err = type(r) ~= "table" or (type(r.error) == "string" and r.error ~= "")
+                        local entries = not has_err and type(r.entries) == "table" and r.entries or nil
+                        if entries then
+                            for _i, manga in ipairs(entries) do
+                                table.insert(raw_results, {
+                                    manga = manga,
+                                    source_path = spath,
+                                    source_key = skey,
+                                    source_name = sname,
+                                })
+                            end
+                        elseif has_err then
+                            table.insert(failed, sname)
+                        end
                     end
                 else
-                    table.insert(failed, src.name or src.text)
+                    for _idx, src in ipairs(target_sources) do
+                        table.insert(failed, src.name or src.text)
+                    end
                 end
             end
 

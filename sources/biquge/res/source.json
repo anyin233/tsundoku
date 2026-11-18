@@ -1,0 +1,24 @@
+{
+	"info": {
+		"id": "zh.biquge",
+		"name": "笔趣阁",
+		"altNames": ["Biquge", "笔趣阁通用镜像", "杰奇小说", "船说小说"],
+		"version": 1,
+		"languages": ["zh"],
+		"contentRating": 0,
+		"minAppVersion": "0.7"
+	},
+	"listings": [
+		{
+			"id": "hot",
+			"name": "热门小说"
+		},
+		{
+			"id": "recent",
+			"name": "最近更新"
+		}
+	],
+	"config": {
+		"supportsAuthorSearch": true
+	}
+}

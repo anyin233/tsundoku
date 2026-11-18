@@ -8,11 +8,12 @@ import (
 // ComicInfo is a subset of the de facto ComicInfo.xml schema (originated by
 // ComicRack, now read by Komga, Kavita, CDisplayEx, YACReader, and other
 // comic/manga readers beyond this project's own KOReader plugin) that
-// AidokuRunner's Manga/Chapter models can populate honestly. Fields like
-// AgeRating or reading direction (ComicInfo's "Manga" element) are
-// deliberately left out rather than invented: this project's own
-// ContentRating/Viewer enums don't map onto ComicInfo's fixed value sets
-// without editorializing values that aren't a clean 1:1.
+// AidokuRunner's Manga/Chapter models can populate honestly. Known
+// models.Viewer values map onto standard ComicInfo.xml v2.1 fields:
+// ViewerVertical/ViewerWebtoon set Format="Webtoon", and
+// ViewerRightToLeft/ViewerLeftToRight set Manga="YesAndRightToLeft"/"No",
+// while ViewerUnknown (and ContentRating, which has no clean 1:1 mapping)
+// are omitted rather than invented.
 //
 // Number and Volume are kept as strings rather than ComicInfo's nominal
 // xs:int for Volume: readers of this format (Komga, Kavita, ...) parse both
@@ -35,6 +36,8 @@ type ComicInfo struct {
 	Web             string   `xml:"Web,omitempty"`
 	PageCount       int      `xml:"PageCount,omitempty"`
 	LanguageISO     string   `xml:"LanguageISO,omitempty"`
+	Format          string   `xml:"Format,omitempty"`
+	Manga           string   `xml:"Manga,omitempty"`
 	ScanInformation string   `xml:"ScanInformation,omitempty"`
 }
 

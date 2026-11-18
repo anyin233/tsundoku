@@ -178,6 +178,7 @@ func New(ctx context.Context, sourceKey string, wasmBytes []byte, config Config)
 
 	htmlLib := host.NewHtml(i.store)
 	i.net.ParseHTML = htmlLib.ParseHTML
+	i.net.ParseHTMLWithType = htmlLib.ParseHTMLWithContentType
 
 	canvasLib := &host.Canvas{Store: i.store, HTTPClient: httpClient}
 	i.net.DecodeImage = canvasLib.DecodeImage

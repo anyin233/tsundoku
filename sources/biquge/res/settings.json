@@ -1,0 +1,71 @@
+[
+	{
+		"type": "group",
+		"title": "镜像站配置",
+		"footer": "已内置 5 个经实测可直连且无需验证码的书源；也可在下方填写任意笔趣阁（杰奇 CMS / 船说 CMS）镜像站首页地址。填写自定义网址时优先使用自定义网址。",
+		"items": [
+			{
+				"type": "select",
+				"key": "preset_mirror",
+				"title": "内置书源 / 镜像站",
+				"values": [
+					"https://www.bqg9.xyz",
+					"https://www.biquge123.uk",
+					"https://www.biqiuge8.net",
+					"https://www.piaotia.com",
+					"https://uukanshu.cc",
+					"custom"
+				],
+				"titles": [
+					"新笔趣阁 5200 (bqg9.xyz)",
+					"新笔趣阁 123 (biquge123.uk)",
+					"笔趣阁 8 (biqiuge8.net)",
+					"飘天文学 (piaotia.com)",
+					"UU看书 (uukanshu.cc)",
+					"仅使用自定义网址"
+				],
+				"default": "https://www.bqg9.xyz",
+				"notification": "mirror_url",
+				"refreshes": ["content", "listings"]
+			},
+			{
+				"type": "text",
+				"key": "mirror_url",
+				"title": "自定义镜像站网址（填写后优先）",
+				"placeholder": "留空则使用上方内置书源，如 https://www.example.com",
+				"notification": "mirror_url",
+				"refreshes": ["content", "listings"]
+			}
+		]
+	},
+	{
+		"type": "group",
+		"title": "高级解析设置（可选，默认自动识别）",
+		"footer": "若站点使用非标准搜索路径，可填写自定义搜索规则，例如 /modules/article/search.php?searchkey={query} 或 POST|/s.php|keyword={query}。",
+		"items": [
+			{
+				"type": "select",
+				"key": "charset",
+				"title": "站点编码",
+				"values": ["auto", "utf-8", "gbk"],
+				"titles": ["自动识别", "UTF-8", "GBK / GB18030"],
+				"default": "auto",
+				"notification": "charset",
+				"refreshes": ["content"]
+			},
+			{
+				"type": "text",
+				"key": "search_rule",
+				"title": "自定义搜索规则（留空自动探测）",
+				"placeholder": "/modules/article/search.php?searchkey={query}",
+				"refreshes": ["content"]
+			},
+			{
+				"type": "button",
+				"key": "reset_probe",
+				"title": "重置搜索接口探测缓存",
+				"notification": "reset_probe"
+			}
+		]
+	}
+]

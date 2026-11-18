@@ -18,9 +18,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
+	"github.com/ohaiibuzzle/aidokurunner-go/epub"
 	_ "modernc.org/sqlite"
 )
 
@@ -46,6 +48,7 @@ type Entry struct {
 	ChapterNumber *float32 `json:"chapterNumber"` // nil if the source didn't report one, same as models.Chapter
 	VolumeNumber  *float32 `json:"volumeNumber"`  // nil if the source didn't report one, same as models.Chapter
 	DateUploaded  *int64   `json:"dateUploaded"`  // unix seconds; nil if the source didn't report one
+	Viewer        uint8    `json:"viewer"`        // models.Viewer enum (0=Unknown, 1=LTR, 2=RTL, 3=Vertical, 4=Webtoon)
 }
 
 // Open opens (creating if needed) the downloads index database at
@@ -85,6 +88,7 @@ func Open(dir string) (*Store, error) {
 			chapter_number REAL,
 			volume_number  REAL,
 			date_uploaded  INTEGER,
+			viewer         INTEGER NOT NULL DEFAULT 0,
 			PRIMARY KEY (source_key, manga_key, chapter_key)
 		)
 	`); err != nil {
@@ -98,6 +102,14 @@ func Open(dir string) (*Store, error) {
 	if err := s.migrateAddDateUploaded(); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("downloads: migrating schema: %w", err)
+	}
+	if err := s.migrateAddViewer(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("downloads: migrating schema: %w", err)
+	}
+	if _, err := db.Exec(`CREATE INDEX IF NOT EXISTS idx_downloads_path ON downloads(path)`); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("downloads: creating path index: %w", err)
 	}
 	return s, nil
 }
@@ -234,33 +246,42 @@ func (s *Store) migrateAddChapterOrdering() error {
 	return tx.Commit()
 }
 
-func (s *Store) migrateAddDateUploaded() error {
+func (s *Store) hasColumn(target string) (bool, error) {
 	rows, err := s.db.Query(`PRAGMA table_info(downloads)`)
 	if err != nil {
-		return err
+		return false, err
 	}
-	hasDateUploaded := false
+	defer rows.Close()
 	for rows.Next() {
 		var cid int
 		var name, colType string
 		var notNull, pk int
 		var dflt sql.NullString
 		if err := rows.Scan(&cid, &name, &colType, &notNull, &dflt, &pk); err != nil {
-			rows.Close()
-			return err
+			return false, err
 		}
-		if name == "date_uploaded" {
-			hasDateUploaded = true
+		if name == target {
+			return true, nil
 		}
 	}
-	if err := rows.Err(); err != nil {
+	return false, rows.Err()
+}
+
+func (s *Store) migrateAddDateUploaded() error {
+	has, err := s.hasColumn("date_uploaded")
+	if err != nil || has {
 		return err
 	}
-	rows.Close()
-	if hasDateUploaded {
-		return nil
-	}
 	_, err = s.db.Exec(`ALTER TABLE downloads ADD COLUMN date_uploaded INTEGER`)
+	return err
+}
+
+func (s *Store) migrateAddViewer() error {
+	has, err := s.hasColumn("viewer")
+	if err != nil || has {
+		return err
+	}
+	_, err = s.db.Exec(`ALTER TABLE downloads ADD COLUMN viewer INTEGER NOT NULL DEFAULT 0`)
 	return err
 }
 
@@ -276,6 +297,12 @@ func (s *Store) Record(sourceKey, sourcePath, mangaKey, chapterKey, path, mangaT
 
 // RecordWithDate is Record plus an optional source upload timestamp (unix seconds).
 func (s *Store) RecordWithDate(sourceKey, sourcePath, mangaKey, chapterKey, path, mangaTitle, chapterTitle string, chapterNumber, volumeNumber *float32, dateUploaded *int64) (*Entry, error) {
+	return s.RecordWithViewer(sourceKey, sourcePath, mangaKey, chapterKey, path, mangaTitle, chapterTitle, chapterNumber, volumeNumber, dateUploaded, 0)
+}
+
+// RecordWithViewer is RecordWithDate plus the manga's models.Viewer value
+// (0 = Unknown, 1 = LTR, 2 = RTL, 3 = Vertical, 4 = Webtoon).
+func (s *Store) RecordWithViewer(sourceKey, sourcePath, mangaKey, chapterKey, path, mangaTitle, chapterTitle string, chapterNumber, volumeNumber *float32, dateUploaded *int64, viewer uint8) (*Entry, error) {
 	info, err := os.Stat(path)
 	if err != nil {
 		return nil, fmt.Errorf("downloads: stat %s: %w", path, err)
@@ -297,20 +324,134 @@ func (s *Store) RecordWithDate(sourceKey, sourcePath, mangaKey, chapterKey, path
 		ChapterNumber: chapterNumber,
 		VolumeNumber:  volumeNumber,
 		DateUploaded:  dateUploaded,
+		Viewer:        viewer,
 	}
-	_, err = s.db.Exec(`
-		INSERT INTO downloads (source_key, manga_key, chapter_key, source_path, path, manga_title, chapter_title, size_bytes, downloaded_at, chapter_number, volume_number, date_uploaded)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT (source_key, manga_key, chapter_key) DO UPDATE SET
-			source_path=excluded.source_path, path=excluded.path, manga_title=excluded.manga_title, chapter_title=excluded.chapter_title,
-			size_bytes=excluded.size_bytes, downloaded_at=excluded.downloaded_at,
-			chapter_number=excluded.chapter_number, volume_number=excluded.volume_number,
-			date_uploaded=excluded.date_uploaded
-	`, e.SourceKey, e.MangaKey, e.ChapterKey, e.SourcePath, e.Path, e.MangaTitle, e.ChapterTitle, e.SizeBytes, e.DownloadedAt, e.ChapterNumber, e.VolumeNumber, e.DateUploaded)
+	_, err = s.db.Exec(upsertDownloadSQL, e.SourceKey, e.MangaKey, e.ChapterKey, e.SourcePath, e.Path, e.MangaTitle, e.ChapterTitle, e.SizeBytes, e.DownloadedAt, e.ChapterNumber, e.VolumeNumber, e.DateUploaded, e.Viewer)
 	if err != nil {
 		return nil, fmt.Errorf("downloads: recording: %w", err)
 	}
 	return e, nil
+}
+
+const upsertDownloadSQL = `
+	INSERT INTO downloads (source_key, manga_key, chapter_key, source_path, path, manga_title, chapter_title, size_bytes, downloaded_at, chapter_number, volume_number, date_uploaded, viewer)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	ON CONFLICT (source_key, manga_key, chapter_key) DO UPDATE SET
+		source_path=excluded.source_path, path=excluded.path, manga_title=excluded.manga_title, chapter_title=excluded.chapter_title,
+		size_bytes=excluded.size_bytes, downloaded_at=excluded.downloaded_at,
+		chapter_number=excluded.chapter_number, volume_number=excluded.volume_number,
+		date_uploaded=excluded.date_uploaded,
+		viewer=CASE WHEN excluded.viewer > 0 THEN excluded.viewer ELSE downloads.viewer END
+`
+
+// BookChapterRecord describes one chapter inside a shared single-book archive (EPUB).
+type BookChapterRecord struct {
+	ChapterKey    string
+	ChapterTitle  string
+	ChapterNumber *float32
+	VolumeNumber  *float32
+	DateUploaded  *int64
+}
+
+// RecordBookChapters atomically upserts multiple chapter rows that share epubPath
+// and updates size_bytes across all existing rows pointing to epubPath.
+func (s *Store) RecordBookChapters(sourceKey, sourcePath, mangaKey, epubPath, mangaTitle string, chapters []BookChapterRecord, viewer uint8) ([]Entry, error) {
+	if len(chapters) == 0 {
+		return nil, nil
+	}
+	info, err := os.Stat(epubPath)
+	if err != nil {
+		return nil, fmt.Errorf("downloads: stat %s: %w", epubPath, err)
+	}
+	sizeBytes := info.Size()
+	now := time.Now().Unix()
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, fmt.Errorf("downloads: beginning book record transaction: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck
+
+	stmt, err := tx.Prepare(upsertDownloadSQL)
+	if err != nil {
+		return nil, fmt.Errorf("downloads: preparing book record: %w", err)
+	}
+	defer stmt.Close()
+
+	entries := make([]Entry, 0, len(chapters))
+	for _, ch := range chapters {
+		e := Entry{
+			SourceKey:     sourceKey,
+			SourcePath:    sourcePath,
+			MangaKey:      mangaKey,
+			ChapterKey:    ch.ChapterKey,
+			Path:          epubPath,
+			MangaTitle:    mangaTitle,
+			ChapterTitle:  ch.ChapterTitle,
+			SizeBytes:     sizeBytes,
+			DownloadedAt:  now,
+			ChapterNumber: ch.ChapterNumber,
+			VolumeNumber:  ch.VolumeNumber,
+			DateUploaded:  ch.DateUploaded,
+			Viewer:        viewer,
+		}
+		if _, err := stmt.Exec(
+			e.SourceKey, e.MangaKey, e.ChapterKey, e.SourcePath, e.Path,
+			e.MangaTitle, e.ChapterTitle, e.SizeBytes, e.DownloadedAt,
+			e.ChapterNumber, e.VolumeNumber, e.DateUploaded, e.Viewer,
+		); err != nil {
+			return nil, fmt.Errorf("downloads: recording chapter %s: %w", ch.ChapterKey, err)
+		}
+		entries = append(entries, e)
+	}
+
+	if _, err := tx.Exec(`UPDATE downloads SET size_bytes = ? WHERE path = ?`, sizeBytes, epubPath); err != nil {
+		return nil, fmt.Errorf("downloads: syncing shared book size: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("downloads: committing book record: %w", err)
+	}
+	return entries, nil
+}
+
+// DeleteBookChapterRows deletes chapterKeys for a shared EPUB and updates
+// surviving rows' size_bytes if the EPUB file still exists.
+func (s *Store) DeleteBookChapterRows(sourceKey, mangaKey, epubPath string, chapterKeys []string) error {
+	if len(chapterKeys) == 0 {
+		return nil
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("downloads: beginning chapter delete transaction: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck
+
+	for _, ck := range chapterKeys {
+		if ck == "" {
+			continue
+		}
+		if epubPath != "" {
+			if _, err := tx.Exec(`DELETE FROM downloads WHERE (path = ? OR (source_key = ? AND manga_key = ?)) AND chapter_key = ?`,
+				epubPath, sourceKey, mangaKey, ck); err != nil {
+				return fmt.Errorf("downloads: deleting chapter %s: %w", ck, err)
+			}
+		} else {
+			if _, err := tx.Exec(`DELETE FROM downloads WHERE source_key = ? AND manga_key = ? AND chapter_key = ?`,
+				sourceKey, mangaKey, ck); err != nil {
+				return fmt.Errorf("downloads: deleting chapter %s: %w", ck, err)
+			}
+		}
+	}
+
+	if epubPath != "" {
+		if info, err := os.Stat(epubPath); err == nil {
+			if _, uerr := tx.Exec(`UPDATE downloads SET size_bytes = ? WHERE path = ?`, info.Size(), epubPath); uerr != nil {
+				return fmt.Errorf("downloads: updating surviving book size: %w", uerr)
+			}
+		}
+	}
+
+	return tx.Commit()
 }
 
 // UnusedPath returns path if no other (manga_key, chapter_key) under
@@ -392,30 +533,47 @@ func nullInt64(n sql.NullInt64) *int64 {
 	return &v
 }
 
+const entryColumns = `source_key, source_path, manga_key, chapter_key, path, manga_title, chapter_title, size_bytes, downloaded_at, chapter_number, volume_number, date_uploaded, viewer`
+
+type rowScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanEntry(s rowScanner) (Entry, error) {
+	var e Entry
+	var chapterNumber, volumeNumber sql.NullFloat64
+	var dateUploaded, viewer sql.NullInt64
+	err := s.Scan(&e.SourceKey, &e.SourcePath, &e.MangaKey, &e.ChapterKey, &e.Path, &e.MangaTitle, &e.ChapterTitle, &e.SizeBytes, &e.DownloadedAt, &chapterNumber, &volumeNumber, &dateUploaded, &viewer)
+	if err != nil {
+		return Entry{}, err
+	}
+	e.ChapterNumber = nullFloat32(chapterNumber)
+	e.VolumeNumber = nullFloat32(volumeNumber)
+	e.DateUploaded = nullInt64(dateUploaded)
+	if viewer.Valid && viewer.Int64 >= 0 {
+		e.Viewer = uint8(viewer.Int64)
+	}
+	return e, nil
+}
+
 // ByPath is the reverse lookup: given a local file path (e.g. the document
 // currently open in a reader), find which chapter it is. Returns nil if
 // path isn't indexed.
 func (s *Store) ByPath(path string) (*Entry, error) {
-	e := &Entry{}
-	var chapterNumber, volumeNumber sql.NullFloat64
-	var dateUploaded sql.NullInt64
-	err := s.db.QueryRow(`SELECT source_key, source_path, manga_key, chapter_key, path, manga_title, chapter_title, size_bytes, downloaded_at, chapter_number, volume_number, date_uploaded
-		FROM downloads WHERE path=?`, path).
-		Scan(&e.SourceKey, &e.SourcePath, &e.MangaKey, &e.ChapterKey, &e.Path, &e.MangaTitle, &e.ChapterTitle, &e.SizeBytes, &e.DownloadedAt, &chapterNumber, &volumeNumber, &dateUploaded)
+	e, err := scanEntry(s.db.QueryRow(`SELECT `+entryColumns+` FROM downloads WHERE path=?`, path))
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("downloads: querying: %w", err)
 	}
-	e.ChapterNumber = nullFloat32(chapterNumber)
-	e.VolumeNumber = nullFloat32(volumeNumber)
-	e.DateUploaded = nullInt64(dateUploaded)
-	return e, nil
+	return &e, nil
 }
 
-// Remove deletes both the index entry and its backing file. A no-op (not
-// an error) if the entry doesn't exist.
+// Remove deletes the index entry and updates or removes its backing file.
+// For shared multi-chapter EPUBs, it removes the chapter from the archive and
+// repacks, deleting the file only once no chapters remain. A no-op (not an
+// error) if the entry doesn't exist.
 func (s *Store) Remove(sourceKey, mangaKey, chapterKey string) error {
 	path, err := s.Path(sourceKey, mangaKey, chapterKey)
 	if err != nil {
@@ -424,11 +582,38 @@ func (s *Store) Remove(sourceKey, mangaKey, chapterKey string) error {
 	if path == "" {
 		return nil
 	}
-	// File first: if that fails, the row stays so a later Remove/Prune can
-	// retry, instead of leaving a file nothing indexes (and so nothing ever
-	// deletes).
-	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("downloads: removing file %s: %w", path, err)
+
+	var refCount int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM downloads WHERE path = ?`, path).Scan(&refCount); err != nil {
+		return fmt.Errorf("downloads: counting path refs for %s: %w", path, err)
+	}
+
+	if strings.HasSuffix(strings.ToLower(path), ".epub") {
+		res, rerr := epub.RemoveChapters(path, []string{chapterKey})
+		if rerr != nil {
+			return fmt.Errorf("downloads: removing chapter from epub %s: %w", path, rerr)
+		}
+		if _, err := s.db.Exec(`DELETE FROM downloads WHERE source_key=? AND manga_key=? AND chapter_key=?`,
+			sourceKey, mangaKey, chapterKey); err != nil {
+			return fmt.Errorf("downloads: deleting index entry: %w", err)
+		}
+		if res != nil && res.TotalChapters > 0 {
+			if info, serr := os.Stat(path); serr == nil {
+				if _, uerr := s.db.Exec(`UPDATE downloads SET size_bytes = ? WHERE path = ?`, info.Size(), path); uerr != nil {
+					return fmt.Errorf("downloads: updating epub size: %w", uerr)
+				}
+			}
+		}
+		return nil
+	}
+
+	if refCount <= 1 {
+		// File first: if that fails, the row stays so a later Remove/Prune can
+		// retry, instead of leaving a file nothing indexes (and so nothing ever
+		// deletes).
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("downloads: removing file %s: %w", path, err)
+		}
 	}
 	if _, err := s.db.Exec(`DELETE FROM downloads WHERE source_key=? AND manga_key=? AND chapter_key=?`,
 		sourceKey, mangaKey, chapterKey); err != nil {
@@ -439,39 +624,33 @@ func (s *Store) Remove(sourceKey, mangaKey, chapterKey string) error {
 
 // List returns every downloaded chapter, most recently downloaded first.
 func (s *Store) List() ([]Entry, error) {
-	rows, err := s.db.Query(`SELECT source_key, source_path, manga_key, chapter_key, path, manga_title, chapter_title, size_bytes, downloaded_at, chapter_number, volume_number, date_uploaded
-		FROM downloads ORDER BY downloaded_at DESC`)
+	rows, err := s.db.Query(`SELECT ` + entryColumns + ` FROM downloads ORDER BY downloaded_at DESC`)
 	if err != nil {
 		return nil, fmt.Errorf("downloads: listing: %w", err)
 	}
 	defer rows.Close()
 	var entries []Entry
 	for rows.Next() {
-		var e Entry
-		var chapterNumber, volumeNumber sql.NullFloat64
-		var dateUploaded sql.NullInt64
-		if err := rows.Scan(&e.SourceKey, &e.SourcePath, &e.MangaKey, &e.ChapterKey, &e.Path, &e.MangaTitle, &e.ChapterTitle, &e.SizeBytes, &e.DownloadedAt, &chapterNumber, &volumeNumber, &dateUploaded); err != nil {
+		e, err := scanEntry(rows)
+		if err != nil {
 			return nil, fmt.Errorf("downloads: scanning: %w", err)
 		}
-		e.ChapterNumber = nullFloat32(chapterNumber)
-		e.VolumeNumber = nullFloat32(volumeNumber)
-		e.DateUploaded = nullInt64(dateUploaded)
 		entries = append(entries, e)
 	}
 	return entries, rows.Err()
 }
 
-// TotalBytes returns the sum of size_bytes across every indexed download.
+// TotalBytes returns the deduplicated sum of size_bytes across unique files on disk.
 func (s *Store) TotalBytes() (int64, error) {
 	var total sql.NullInt64
-	if err := s.db.QueryRow(`SELECT SUM(size_bytes) FROM downloads`).Scan(&total); err != nil {
+	if err := s.db.QueryRow(`SELECT COALESCE(SUM(max_size), 0) FROM (SELECT MAX(size_bytes) AS max_size FROM downloads GROUP BY path)`).Scan(&total); err != nil {
 		return 0, fmt.Errorf("downloads: summing: %w", err)
 	}
 	return total.Int64, nil
 }
 
-// Prune deletes the oldest-downloaded chapters (index entry + file), one at
-// a time, until the total is at or under limitBytes. Returns what was
+// Prune deletes the oldest-downloaded files (index entries + file), one file
+// at a time, until the total is at or under limitBytes. Returns what was
 // removed, oldest first. A limitBytes <= 0 is treated as "no limit" (a
 // no-op), since 0 is store.lua's zero-value default meaning "unset".
 func (s *Store) Prune(limitBytes int64) ([]Entry, error) {
@@ -489,14 +668,50 @@ func (s *Store) Prune(limitBytes int64) ([]Entry, error) {
 	if err != nil {
 		return nil, err
 	}
-	var removed []Entry
-	for i := len(entries) - 1; i >= 0 && total > limitBytes; i-- {
+
+	type pathGroup struct {
+		path    string
+		size    int64
+		maxAt   int64
+		entries []Entry
+	}
+	byPath := make(map[string]*pathGroup)
+	for i := len(entries) - 1; i >= 0; i-- {
 		e := entries[i]
-		if err := s.Remove(e.SourceKey, e.MangaKey, e.ChapterKey); err != nil {
-			return removed, err
+		g, ok := byPath[e.Path]
+		if !ok {
+			g = &pathGroup{path: e.Path, size: e.SizeBytes, maxAt: e.DownloadedAt}
+			byPath[e.Path] = g
 		}
-		total -= e.SizeBytes
-		removed = append(removed, e)
+		if e.SizeBytes > g.size {
+			g.size = e.SizeBytes
+		}
+		if e.DownloadedAt > g.maxAt {
+			g.maxAt = e.DownloadedAt
+		}
+		g.entries = append(g.entries, e)
+	}
+	groups := make([]*pathGroup, 0, len(byPath))
+	for _, g := range byPath {
+		groups = append(groups, g)
+	}
+	sort.SliceStable(groups, func(i, j int) bool {
+		return groups[i].maxAt < groups[j].maxAt
+	})
+
+	var removed []Entry
+	for _, g := range groups {
+		if total <= limitBytes {
+			break
+		}
+		if err := os.Remove(g.path); err != nil && !os.IsNotExist(err) {
+			return removed, fmt.Errorf("downloads: removing file %s: %w", g.path, err)
+		}
+		if _, err := s.db.Exec(`DELETE FROM downloads WHERE path = ?`, g.path); err != nil {
+			return removed, fmt.Errorf("downloads: deleting pruned rows for %s: %w", g.path, err)
+		}
+		total -= g.size
+		removed = append(removed, g.entries...)
 	}
 	return removed, nil
 }

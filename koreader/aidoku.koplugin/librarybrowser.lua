@@ -20,6 +20,7 @@ local ButtonDialog = require("ui/widget/buttondialog")
 local CenterContainer = require("ui/widget/container/centercontainer")
 local ChapterCache = require("chaptercache")
 local ChapterOrder = require("chapterorder")
+local ComicLayout = require("comiclayout")
 local ConfirmBox = require("ui/widget/confirmbox")
 local CoverCache = require("covercache")
 local Device = require("device")
@@ -44,6 +45,7 @@ local OverlapGroup = require("ui/widget/overlapgroup")
 local Prefetch = require("prefetch")
 local RightContainer = require("ui/widget/container/rightcontainer")
 local Size = require("ui/size")
+local Store = require("store")
 local TextBoxWidget = require("ui/widget/textboxwidget")
 local TextWidget = require("ui/widget/textwidget")
 local TopContainer = require("ui/widget/container/topcontainer")
@@ -602,7 +604,6 @@ function LibraryBrowser:onCloseWidget()
         DownloadQueue:unsubscribe(self.listener_key)
     end
     CoverCache:cancelPending()
-    CoverCache:clearMemoryCache()
     Menu.onCloseWidget(self)
     OpenWidgets.remove(self)
 end
@@ -908,9 +909,10 @@ function LibraryBrowser:sortedLibraryEntries(dl_stats, meta_map)
     local entries = self.store:libraryEntries()
     local order = self.store:librarySortOrder()
     if order == "last_read" then
+        local last_read_map = self.store:getLastReadMap()
         table.sort(entries, function(a, b)
-            local la = self.store:lastReadAt(entryKey(a), a.manga_key)
-            local lb = self.store:lastReadAt(entryKey(b), b.manga_key)
+            local la = Store.lookupLastRead(last_read_map, entryKey(a), a.manga_key)
+            local lb = Store.lookupLastRead(last_read_map, entryKey(b), b.manga_key)
             if la ~= lb then return la > lb end
             return a.title:lower() < b.title:lower()
         end)
@@ -1314,19 +1316,29 @@ function LibraryBrowser:batchDownloadEntry(entry)
                 end
             end
             local chapters = type(updated.Chapters) == "table" and updated.Chapters or {}
-            self.store:recordMangaMeta(source_key, entry.manga_key, updated.Key, #chapters)
+            self.store:recordMangaMeta(source_key, entry.manga_key, updated.Key, #chapters, ComicLayout.viewerFromManga(updated))
             if type(updated.Cover) == "string" and updated.Cover ~= "" then
                 self.store:updateBookmarkCover(source_key, entry.manga_key, updated.Cover)
             end
             local ordered = ChapterOrder.orderedByReading(chapters)
             local mtitle = Prefetch.mangaLabel(updated)
+            local dl_map = self.downloads_engine:downloadedPathsMap(source_key, updated.Key, mtitle, entry.manga_key)
+            local alt_map = (entry.manga_key ~= updated.Key)
+                and self.downloads_engine:downloadedPathsMap(source_key, entry.manga_key, mtitle)
+                or nil
+            local epub_path = self.downloads_engine:mangaEpubPath(source_key, updated.Key)
+            if epub_path == "" and entry.manga_key ~= updated.Key then
+                epub_path = self.downloads_engine:mangaEpubPath(source_key, entry.manga_key)
+            end
+            local is_novel = (source_key == "zh.biquge" or epub_path ~= "")
+            local canonical_keys = Prefetch.canonicalKeys(chapters)
+            local manga_dir_name = mtitle .. " [" .. source_key .. "]"
             local specs = {}
             for _idx, c in ipairs(ordered) do
-                if self.downloads_engine:path(source_key, updated.Key, c.Key) == ""
-                    and self.downloads_engine:path(source_key, entry.manga_key, c.Key) == ""
-                then
+                if not dl_map[c.Key] and not (alt_map and alt_map[c.Key]) then
                     local clabel = Prefetch.chapterLabel(c)
-                    local safe = util.getSafeFilename(clabel .. ".cbz", self.downloads_dir)
+                    local out_path = epub_path ~= "" and epub_path
+                        or (self.downloads_dir .. "/" .. util.getSafeFilename(clabel .. ".cbz", self.downloads_dir))
                     table.insert(specs, {
                         source_key = source_key,
                         source_path = found.path,
@@ -1337,9 +1349,11 @@ function LibraryBrowser:batchDownloadEntry(entry)
                         chapter_key = c.Key,
                         chapter_title = clabel,
                         chapter = c,
-                        out_path = self.downloads_dir .. "/" .. safe,
+                        out_path = out_path,
                         downloads_dir = self.downloads_dir,
-                        manga_dir_name = mtitle .. " [" .. source_key .. "]",
+                        manga_dir_name = manga_dir_name,
+                        is_novel = is_novel,
+                        canonical_keys = canonical_keys,
                     })
                 end
             end

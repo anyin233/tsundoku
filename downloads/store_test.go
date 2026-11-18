@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/ohaiibuzzle/aidokurunner-go/epub"
 )
 
 func writeFile(t *testing.T, dir, name string, size int) string {
@@ -618,6 +620,180 @@ func TestDateUploadedAndMigration(t *testing.T) {
 	entry1, err := s.ByPath(file1)
 	if err != nil || entry1 == nil || entry1.DateUploaded != nil {
 		t.Fatalf("ByPath(file1) DateUploaded = %+v, err=%v, want nil", entry1, err)
+	}
+}
+
+func TestViewerAndMigration(t *testing.T) {
+	dir := t.TempDir()
+	db, err := sql.Open("sqlite", filepath.Join(dir, "index.db"))
+	if err != nil {
+		t.Fatalf("opening raw db: %v", err)
+	}
+	if _, err := db.Exec(`
+		CREATE TABLE downloads (
+			source_key     TEXT NOT NULL,
+			manga_key      TEXT NOT NULL,
+			chapter_key    TEXT NOT NULL,
+			source_path    TEXT NOT NULL,
+			path           TEXT NOT NULL,
+			manga_title    TEXT NOT NULL,
+			chapter_title  TEXT NOT NULL,
+			size_bytes     INTEGER NOT NULL,
+			downloaded_at  INTEGER NOT NULL,
+			chapter_number REAL,
+			volume_number  REAL,
+			date_uploaded  INTEGER,
+			PRIMARY KEY (source_key, manga_key, chapter_key)
+		)
+	`); err != nil {
+		t.Fatalf("seeding pre-viewer schema: %v", err)
+	}
+	file1 := writeFile(t, dir, "ch1.cbz", 128)
+	if _, err := db.Exec(`INSERT INTO downloads VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		"src.key", "manga1", "ch1", "src.aix", file1, "Manga", "Chapter 1", 128, 1000, 1.0, nil, nil); err != nil {
+		t.Fatalf("seeding row: %v", err)
+	}
+	db.Close()
+
+	s, err := Open(dir)
+	if err != nil {
+		t.Fatalf("Open (migrating viewer): %v", err)
+	}
+	defer s.Close()
+
+	file2 := writeFile(t, dir, "ch2.cbz", 256)
+	if _, err := s.RecordWithViewer("src.key", "src.aix", "manga1", "ch2", file2, "Manga", "Chapter 2", nil, nil, nil, 4); err != nil {
+		t.Fatalf("RecordWithViewer: %v", err)
+	}
+	entry2, err := s.ByPath(file2)
+	if err != nil || entry2 == nil || entry2.Viewer != 4 {
+		t.Fatalf("ByPath(file2) Viewer = %+v, err=%v, want 4", entry2, err)
+	}
+	// Re-recording with viewer=0 must preserve the previously known non-zero viewer.
+	if _, err := s.RecordWithViewer("src.key", "src.aix", "manga1", "ch2", file2, "Manga", "Chapter 2", nil, nil, nil, 0); err != nil {
+		t.Fatalf("RecordWithViewer(0): %v", err)
+	}
+	entry2After, err := s.ByPath(file2)
+	if err != nil || entry2After == nil || entry2After.Viewer != 4 {
+		t.Fatalf("ByPath(file2) after 0 overwrite = %+v, err=%v, want 4 preserved", entry2After, err)
+	}
+	entry1, err := s.ByPath(file1)
+	if err != nil || entry1 == nil || entry1.Viewer != 0 {
+		t.Fatalf("ByPath(file1) Viewer = %+v, err=%v, want 0", entry1, err)
+	}
+	listed, err := s.List()
+	if err != nil || len(listed) != 2 {
+		t.Fatalf("List() = %d entries, err=%v, want 2", len(listed), err)
+	}
+	var sawFile2 bool
+	for _, e := range listed {
+		if e.Path == file2 {
+			sawFile2 = true
+			if e.Viewer != 4 {
+				t.Errorf("List() file2 Viewer = %d, want 4", e.Viewer)
+			}
+		}
+	}
+	if !sawFile2 {
+		t.Errorf("List() missing %q", file2)
+	}
+
+	var idxCount int
+	if err := s.db.QueryRow(`SELECT count(*) FROM sqlite_master WHERE type='index' AND name='idx_downloads_path'`).Scan(&idxCount); err != nil {
+		t.Fatalf("checking idx_downloads_path: %v", err)
+	}
+	if idxCount != 1 {
+		t.Errorf("idx_downloads_path count = %d, want 1", idxCount)
+	}
+}
+
+func TestSharedEPUBBookChaptersTotalBytesRemoveAndPrune(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(dir)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer s.Close()
+
+	epubPath := filepath.Join(dir, "Novel.epub")
+	_, err = epub.UpsertChapters(epubPath, epub.BookMeta{
+		SourceKey: "zh.biquge",
+		MangaKey:  "/book/1/",
+		Title:     "Novel",
+	}, []epub.ChapterInput{
+		{Key: "c1", Title: "Ch 1", Text: "First chapter text", TOCOrder: 1},
+		{Key: "c2", Title: "Ch 2", Text: "Second chapter text", TOCOrder: 2},
+		{Key: "c3", Title: "Ch 3", Text: "Third chapter text", TOCOrder: 3},
+	}, nil)
+	if err != nil {
+		t.Fatalf("UpsertChapters: %v", err)
+	}
+
+	fi, err := os.Stat(epubPath)
+	if err != nil {
+		t.Fatalf("stat epub: %v", err)
+	}
+	epubSize := fi.Size()
+
+	c1Num, c2Num, c3Num := float32(1), float32(2), float32(3)
+	if _, err := s.RecordBookChapters("zh.biquge", "biquge.aix", "/book/1/", epubPath, "Novel", []BookChapterRecord{
+		{ChapterKey: "c1", ChapterTitle: "Ch 1", ChapterNumber: &c1Num},
+		{ChapterKey: "c2", ChapterTitle: "Ch 2", ChapterNumber: &c2Num},
+		{ChapterKey: "c3", ChapterTitle: "Ch 3", ChapterNumber: &c3Num},
+	}, 0); err != nil {
+		t.Fatalf("RecordBookChapters: %v", err)
+	}
+
+	// TotalBytes must deduplicate shared epubPath rather than returning 3 * epubSize.
+	total, err := s.TotalBytes()
+	if err != nil {
+		t.Fatalf("TotalBytes: %v", err)
+	}
+	if total != epubSize {
+		t.Fatalf("TotalBytes = %d, want deduplicated %d", total, epubSize)
+	}
+
+	// Remove single chapter c2: repacks EPUB without deleting c1/c3.
+	if err := s.Remove("zh.biquge", "/book/1/", "c2"); err != nil {
+		t.Fatalf("Remove c2: %v", err)
+	}
+	if got, _ := s.Path("zh.biquge", "/book/1/", "c2"); got != "" {
+		t.Fatalf("expected c2 removed from index, got %q", got)
+	}
+	m, err := epub.ReadManifest(epubPath)
+	if err != nil {
+		t.Fatalf("ReadManifest after c2 remove: %v", err)
+	}
+	if len(m.Chapters) != 2 || m.Chapters[0].Key != "c1" || m.Chapters[1].Key != "c3" {
+		t.Fatalf("unexpected manifest chapters after remove: %+v", m.Chapters)
+	}
+
+	// Surviving rows must reflect the repacked size.
+	fiAfter, _ := os.Stat(epubPath)
+	totalAfter, _ := s.TotalBytes()
+	if totalAfter != fiAfter.Size() {
+		t.Fatalf("TotalBytes after repack = %d, want %d", totalAfter, fiAfter.Size())
+	}
+
+	// Add a newer CBZ and ensure Prune removes the older EPUB as one unit when over limit.
+	cbzPath := writeFile(t, dir, "newer.cbz", 100)
+	if _, err := s.Record("src.key", "src.aix", "m2", "ch1", cbzPath, "Newer", "Ch 1", nil, nil); err != nil {
+		t.Fatalf("Record newer cbz: %v", err)
+	}
+	if _, err := s.db.Exec(`UPDATE downloads SET downloaded_at = 100 WHERE path = ?`, epubPath); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec(`UPDATE downloads SET downloaded_at = 200 WHERE path = ?`, cbzPath); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Prune(200); err != nil {
+		t.Fatalf("Prune: %v", err)
+	}
+	if _, err := os.Stat(epubPath); !os.IsNotExist(err) {
+		t.Fatalf("expected pruned EPUB to be deleted, err=%v", err)
+	}
+	if totalEnd, _ := s.TotalBytes(); totalEnd != 100 {
+		t.Fatalf("TotalBytes after prune = %d, want 100", totalEnd)
 	}
 }
 

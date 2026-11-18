@@ -174,15 +174,11 @@ func handleCovers(ctx context.Context, settings *settingsstore.Store, cookiePath
 		groups[pos].indices = append(groups[pos].indices, i)
 	}
 
-	cacheDir := filepath.Join(os.TempDir(), "aidoku-run-wazero-cache")
-	if dir := os.Getenv("AIDOKU_SETTINGS_DIR"); dir != "" {
-		cacheDir = filepath.Join(dir, "wazero-cache")
-	}
 	var compilationCache wazero.CompilationCache
+	var cacheDir string
 	if len(groups) > 0 && (len(groups) > 1 || groups[0].sourcePath != "") {
-		cc, cerr := wazero.NewCompilationCacheWithDir(cacheDir)
-		if cerr == nil {
-			compilationCache = cc
+		compilationCache, cacheDir = openCompilationCache()
+		if compilationCache != nil {
 			defer compilationCache.Close(ctx)
 		}
 	}
@@ -205,7 +201,9 @@ func handleCovers(ctx context.Context, settings *settingsstore.Store, cookiePath
 		}
 		src, lerr := source.LoadPath(ctx, spath, interpConfig, settings)
 		if errors.Is(lerr, runtime.ErrCompile) && compilationCache != nil {
-			_ = os.RemoveAll(cacheDir)
+			if cacheDir != "" {
+				_ = os.RemoveAll(cacheDir)
+			}
 			interpConfig.CompilationCache = nil
 			src, lerr = source.LoadPath(ctx, spath, interpConfig, settings)
 		}

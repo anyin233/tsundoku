@@ -9,6 +9,8 @@ DownloadsBrowser (Download Manager):
 local ButtonDialog = require("ui/widget/buttondialog")
 local ConfirmBox = require("ui/widget/confirmbox")
 local DownloadQueue = require("downloadqueue")
+local DownloadsEngine = require("downloadsengine")
+local EpubHelper = require("epubhelper")
 local InfoMessage = require("ui/widget/infomessage")
 local InstalledSources = require("installedsources")
 local Menu = require("ui/widget/menu")
@@ -284,10 +286,14 @@ function DownloadsBrowser:genItemTable()
             })
         end
     elseif self.view_mode == "all" then
-        local valid_entries = {}
-        for _idx, entry in ipairs(self.cached_entries) do
-            if entry.path ~= "" and lfs.attributes(entry.path, "mode") == "file" then
-                table.insert(valid_entries, entry)
+        local valid_entries = mstats.valid_entries
+        if not valid_entries then
+            local existing = DownloadsEngine.buildExistingFilesSet(self.cached_entries)
+            valid_entries = {}
+            for _idx, entry in ipairs(self.cached_entries) do
+                if entry.path ~= "" and existing[entry.path] then
+                    table.insert(valid_entries, entry)
+                end
             end
         end
         if #valid_entries > 0 then
@@ -479,7 +485,7 @@ function DownloadsBrowser:showTaskActions(task)
             text = _("Open chapter"),
             callback = function()
                 UIManager:close(dialog)
-                self:openChapterFile(task.source_key, task.manga_key, task.result_path)
+                self:openChapterFile(task.source_key, task.manga_key, task.result_path, task.chapter_key)
             end,
         }})
     end
@@ -502,14 +508,32 @@ function DownloadsBrowser:showTaskActions(task)
     UIManager:show(dialog)
 end
 
-function DownloadsBrowser:openChapterFile(source_key, manga_key, path)
+function DownloadsBrowser:openChapterFile(source_key, manga_key, path, chapter_key)
     if lfs.attributes(path, "mode") ~= "file" then
         UIManager:show(InfoMessage:new{ text = _("Download no longer available."), timeout = 2 })
         self:reload()
         return
     end
+    local jump_xp
+    if EpubHelper.isEpub(path) and chapter_key then
+        jump_xp = EpubHelper.prepareJumpToChapter(path, chapter_key, { ui = self.ui })
+    end
     self.store:markLastRead(source_key, manga_key)
     require("pendinglibrary").from_tsundoku = true
+    if EpubHelper.isEpub(path)
+        and self.ui.document
+        and DownloadsEngine.normalizePath(self.ui.document.file) == DownloadsEngine.normalizePath(path)
+    then
+        OpenWidgets.closeAll()
+        UIManager:close(self)
+        if jump_xp then
+            EpubHelper.jumpOpenDocument(self.ui, jump_xp)
+        end
+        if self.store:isEphemeralMode() then
+            self.downloads_engine:removeAllExcept(path)
+        end
+        return
+    end
     if self.ui.document then
         self.ui:switchDocument(path)
     else
@@ -533,6 +557,16 @@ function DownloadsBrowser:openMangaGroupChapters(group)
         end
         return (a.downloadedAt or 0) < (b.downloadedAt or 0)
     end)
+
+    if self.store then
+        local synced = {}
+        for _idx, entry in ipairs(sorted) do
+            if EpubHelper.isEpub(entry.path) and not synced[entry.path] then
+                synced[entry.path] = true
+                EpubHelper.syncReadChapters(entry.path, self.store, entry.sourceKey, entry.mangaKey, { ui = self.ui })
+            end
+        end
+    end
 
     for _idx, entry in ipairs(sorted) do
         local is_read = self.store and self.store:isChapterRead(entry.sourceKey, entry.mangaKey, entry.chapterKey)
@@ -559,7 +593,7 @@ function DownloadsBrowser:openMangaGroupChapters(group)
         onMenuSelect = function(_m, item)
             local e = item.download_entry
             UIManager:close(sub_menu)
-            self:openChapterFile(e.sourceKey, e.mangaKey, e.path)
+            self:openChapterFile(e.sourceKey, e.mangaKey, e.path, e.chapterKey)
             return true
         end,
         onMenuHold = function(_m, item)
@@ -598,7 +632,7 @@ function DownloadsBrowser:onMenuSelect(item)
     end
     local entry = item.download_entry
     if entry then
-        self:openChapterFile(entry.sourceKey, entry.mangaKey, entry.path)
+        self:openChapterFile(entry.sourceKey, entry.mangaKey, entry.path, entry.chapterKey)
     end
     return true
 end

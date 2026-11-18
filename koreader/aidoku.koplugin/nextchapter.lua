@@ -12,6 +12,7 @@ local ChapterCache = require("chaptercache")
 local ChapterOrder = require("chapterorder")
 local ConfirmBox = require("ui/widget/confirmbox")
 local DownloadsEngine = require("downloadsengine")
+local EpubHelper = require("epubhelper")
 local InfoMessage = require("ui/widget/infomessage")
 local InstalledSources = require("installedsources")
 local NetworkMgr = require("ui/network/manager")
@@ -115,6 +116,32 @@ function NextChapter.handle(ctx, file_path)
             end
         end
 
+        local is_epub = EpubHelper.isEpub(file_path)
+        local current_chapter_key = entry.chapterKey
+        if is_epub then
+            local manifest = EpubHelper.readManifest(file_path)
+            if manifest and type(manifest.chapters) == "table" and #manifest.chapters > 0 then
+                current_chapter_key = manifest.chapters[#manifest.chapters].key
+            end
+        end
+
+        local function openOrReload(path, target_chapter_key)
+            if EpubHelper.isEpub(path) then
+                local xp = EpubHelper.prepareJumpToChapter(path, target_chapter_key, { ui = ctx.ui })
+                if DownloadsEngine.normalizePath(path) == DownloadsEngine.normalizePath(file_path)
+                    and ctx.reload_callback
+                then
+                    ctx.reload_callback(xp)
+                    ctx.store:markLastRead(entry.sourceKey, entry.mangaKey)
+                    if ctx.store:isEphemeralMode() then
+                        ctx.downloads_engine:removeAllExcept(path)
+                    end
+                    return
+                end
+            end
+            openDownloaded(path)
+        end
+
         -- Reading order comes from the full chapter list whenever we have
         -- it: ChapterCache (usually primed by mangabrowser.lua's reload()),
         -- else a fetch if already connected. The downloads index only knows
@@ -131,13 +158,14 @@ function NextChapter.handle(ctx, file_path)
                 ChapterCache.set(entry.sourceKey, entry.mangaKey, updated)
             end
         end
+        local dl_map = ctx.downloads_engine:downloadedPathsMap(entry.sourceKey, entry.mangaKey, entry.mangaTitle)
         local function is_local(c)
-            return ctx.downloads_engine:path(entry.sourceKey, entry.mangaKey, c.Key) ~= ""
+            return dl_map[c.Key] ~= nil
         end
         local chapters, next_chapter
         if updated and type(updated.Chapters) == "table" then
             chapters = updated.Chapters
-            next_chapter = ChapterOrder.after(chapters, entry.chapterKey, 1, is_local)[1]
+            next_chapter = ChapterOrder.after(chapters, current_chapter_key, 1, is_local)[1]
         end
         if not next_chapter then
             -- Offline/no list, or the list lacks this chapter's key (source
@@ -145,7 +173,7 @@ function NextChapter.handle(ctx, file_path)
             -- what follows. It's a subset of the full list, so this can't
             -- skip ahead of a true last chapter.
             local local_chapters = ChapterOrder.fromEntries(ctx.downloads_engine:list(), entry.sourceKey, entry.mangaKey)
-            next_chapter = ChapterOrder.after(local_chapters, entry.chapterKey, 1, is_local)[1]
+            next_chapter = ChapterOrder.after(local_chapters, current_chapter_key, 1, is_local)[1]
             if next_chapter or not chapters then
                 chapters = local_chapters
             end
@@ -155,13 +183,15 @@ function NextChapter.handle(ctx, file_path)
             return
         end
 
+        local canonical_keys = Prefetch.canonicalKeys(chapters)
+
         -- Re-resolve the path rather than trusting any list: covers a stale
         -- index row whose file was deleted out from under it -- see the same
         -- note in mangabrowser.lua's downloadedPath().
         local existing = ctx.downloads_engine:path(entry.sourceKey, entry.mangaKey, next_chapter.Key)
         if existing ~= "" then
             local function openLocalNext()
-                openDownloaded(existing)
+                openOrReload(existing, next_chapter.Key)
                 prefetchAfter(chapters, next_chapter.Key)
             end
             if ctx.store:nextChapterMode() == "auto" then
@@ -196,18 +226,63 @@ function NextChapter.handle(ctx, file_path)
 
         local function fetchAndOpen()
             Trapper:wrap(function()
-                local existing = ctx.downloads_engine:path(entry.sourceKey, entry.mangaKey, next_chapter.Key)
-                if existing ~= "" then
-                    openDownloaded(existing)
+                local existing_path = ctx.downloads_engine:path(entry.sourceKey, entry.mangaKey, next_chapter.Key)
+                if existing_path ~= "" then
+                    openOrReload(existing_path, next_chapter.Key)
                     prefetchAfter(chapters, next_chapter.Key)
                     return
                 end
+                local manga_dir_name = mangaLabel(updated) .. " [" .. entry.sourceKey .. "]"
+                if is_epub or entry.sourceKey == "zh.biquge" then
+                    local batch_count = math.max(5, ctx.store:effectiveBufferChapters())
+                    local candidates = ChapterOrder.after(chapters, current_chapter_key, batch_count, is_local)
+                    local to_fetch = {}
+                    for _idx, c in ipairs(candidates) do
+                        if not is_local(c) then
+                            table.insert(to_fetch, c)
+                        end
+                    end
+                    if #to_fetch == 0 then
+                        to_fetch = { next_chapter }
+                    end
+                    local out_target = is_epub and file_path or nil
+                    local old_keys = (is_epub and not EpubHelper.usesAdjacentSidecar(file_path))
+                        and EpubHelper.manifestKeys(EpubHelper.readManifest(file_path))
+                        or nil
+                    local path, dl_err = ctx.engine:batchDownload({
+                        source_path = source_path,
+                        manga = updated,
+                        chapters = to_fetch,
+                        canonical_keys = canonical_keys,
+                        out_path = out_target,
+                        downloads_dir = ctx.downloads_dir,
+                        manga_dir_name = manga_dir_name,
+                        progress_text = T(_("Downloading %1 chapter(s)…"), #to_fetch),
+                    })
+                    if not path then
+                        UIManager:show(InfoMessage:new{ text = T(_("Download failed:\n%1"), dl_err) })
+                        return
+                    end
+                    if EpubHelper.isEpub(path) then
+                        EpubHelper.invalidateCache(path)
+                        if old_keys and #old_keys > 0 and not EpubHelper.usesAdjacentSidecar(path) then
+                            local new_keys = EpubHelper.manifestKeys(EpubHelper.readManifest(path))
+                            EpubHelper.remapDocSettings(path, old_keys, new_keys)
+                        end
+                    end
+                    if not ctx.store:isEphemeralMode() then
+                        ctx.downloads_engine:prune(ctx.store:downloadLimitBytes(), path)
+                    end
+                    openOrReload(path, next_chapter.Key)
+                    return
+                end
+
                 local chapter_filename = util.getSafeFilename(
                     chapterLabel(next_chapter) .. ".cbz", ctx.downloads_dir)
                 local out_path = ctx.downloads_dir .. "/" .. chapter_filename
-                local manga_dir_name = mangaLabel(updated) .. " [" .. entry.sourceKey .. "]"
                 local path, dl_err = ctx.engine:download(
-                    source_path, entry.mangaKey, next_chapter.Key, out_path, ctx.downloads_dir, nil, nil, manga_dir_name)
+                    source_path, entry.mangaKey, next_chapter.Key, out_path, ctx.downloads_dir, nil, nil, manga_dir_name,
+                    false, updated, next_chapter, nil, canonical_keys)
                 if not path then
                     UIManager:show(InfoMessage:new{ text = T(_("Download failed:\n%1"), dl_err) })
                     return

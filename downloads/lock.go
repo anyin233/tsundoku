@@ -78,6 +78,12 @@ func AcquireLock(ctx context.Context, sourceKey, mangaKey, chapterKey string) (*
 	return acquire(ctx, sourceKey+"\x00"+mangaKey+"\x00"+chapterKey)
 }
 
+// AcquireBookLock serializes concurrent EPUB edits/removals targeting the same
+// (sourceKey, mangaKey) book across aidoku-run processes.
+func AcquireBookLock(ctx context.Context, sourceKey, mangaKey string) (*Lock, error) {
+	return acquire(ctx, "book\x00"+sourceKey+"\x00"+mangaKey)
+}
+
 // AcquirePathLock is AcquireLock keyed on an output file path instead, so
 // two different chapters whose titles sanitize to the same filename can't
 // write it at once. Take it after the chapter's own AcquireLock (fixed

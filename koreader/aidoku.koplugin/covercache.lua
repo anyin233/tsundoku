@@ -13,6 +13,7 @@ local json = require("json")
 local lfs = require("libs/libkoreader-lfs")
 local util = require("util")
 
+local ok_dev, Device = pcall(require, "device")
 local ok_sha2, sha2 = pcall(require, "ffi/sha2")
 local ok_bit, bit = pcall(require, "bit")
 
@@ -26,6 +27,7 @@ local CoverCache = {
     mem_cache = {},      -- cache_key -> { bb = Blitbuffer, disk_path = string, seq = number }
     mem_count = 0,
     seq = 0,
+    disk_exists = {},    -- disk_path -> true
     failed_until = {},   -- entry_id -> unix timestamp
     active_batch = nil,
     poll_scheduled = false,
@@ -79,8 +81,15 @@ function CoverCache:hasDiskCover(covers_dir, source_key, manga_key)
         return false
     end
     local p = CoverCache.diskPath(covers_dir, source_key, manga_key)
+    if self.disk_exists[p] then
+        return true
+    end
     local attr = lfs.attributes(p)
-    return attr ~= nil and attr.mode == "file" and (attr.size or 0) > 0
+    local exists = attr ~= nil and attr.mode == "file" and (attr.size or 0) > 0
+    if exists then
+        self.disk_exists[p] = true
+    end
+    return exists
 end
 
 function CoverCache:evictOldest()
@@ -103,6 +112,7 @@ end
 
 function CoverCache:invalidateEntry(covers_dir, source_key, manga_key)
     local disk_path = CoverCache.diskPath(covers_dir, source_key, manga_key)
+    self.disk_exists[disk_path] = nil
     for k, v in pairs(self.mem_cache) do
         if v.disk_path == disk_path then
             self.mem_cache[k] = nil
@@ -122,10 +132,21 @@ function CoverCache:clearMemoryCache()
         end
     end
     self.mem_count = 0
+    self.disk_exists = {}
 end
 
 function CoverCache:resetFailures()
     self.failed_until = {}
+end
+
+local function targetDisplayBBType(fallback_type)
+    local screen = ok_dev and Device and Device.screen or nil
+    if screen and type(screen.isColorEnabled) == "function" and not screen:isColorEnabled()
+        and Blitbuffer.TYPE_BB8
+    then
+        return Blitbuffer.TYPE_BB8
+    end
+    return fallback_type
 end
 
 local function scaleAspectFill(raw_bb, target_w, target_h)
@@ -134,37 +155,43 @@ local function scaleAspectFill(raw_bb, target_w, target_h)
         pcall(function() raw_bb:free() end)
         return nil
     end
-    if src_w == target_w and src_h == target_h then
-        return raw_bb
-    end
 
-    local scale = math.max(target_w / src_w, target_h / src_h)
-    local scaled_w = math.max(target_w, math.floor(src_w * scale + 0.5))
-    local scaled_h = math.max(target_h, math.floor(src_h * scale + 0.5))
+    local scaled_bb = raw_bb
+    local scaled_w, scaled_h = src_w, src_h
+    if src_w ~= target_w or src_h ~= target_h then
+        local scale = math.max(target_w / src_w, target_h / src_h)
+        scaled_w = math.max(target_w, math.floor(src_w * scale + 0.5))
+        scaled_h = math.max(target_h, math.floor(src_h * scale + 0.5))
 
-    local ok_ri, RenderImage = pcall(require, "ui/renderimage")
-    local ok_sc, scaled_bb = pcall(function()
-        if ok_ri and RenderImage and type(RenderImage.scaleBlitBuffer) == "function" then
-            return RenderImage:scaleBlitBuffer(raw_bb, scaled_w, scaled_h, false)
+        if scaled_w ~= src_w or scaled_h ~= src_h then
+            local ok_ri, RenderImage = pcall(require, "ui/renderimage")
+            local ok_sc, res_bb = pcall(function()
+                if ok_ri and RenderImage and type(RenderImage.scaleBlitBuffer) == "function" then
+                    return RenderImage:scaleBlitBuffer(raw_bb, scaled_w, scaled_h, false)
+                end
+                return raw_bb:scale(scaled_w, scaled_h)
+            end)
+            if res_bb ~= raw_bb then
+                pcall(function() raw_bb:free() end)
+            end
+            if not ok_sc or not res_bb then
+                return nil
+            end
+            scaled_bb = res_bb
         end
-        return raw_bb:scale(scaled_w, scaled_h)
-    end)
-    if scaled_bb ~= raw_bb then
-        pcall(function() raw_bb:free() end)
     end
-    if not ok_sc or not scaled_bb then
-        return nil
-    end
-    if scaled_w == target_w and scaled_h == target_h then
+
+    local dst_type = targetDisplayBBType(scaled_bb:getType())
+    if scaled_w == target_w and scaled_h == target_h and scaled_bb:getType() == dst_type then
         return scaled_bb
     end
 
-    local ok_crop, crop_bb = pcall(Blitbuffer.new, target_w, target_h, scaled_bb:getType())
+    local ok_crop, crop_bb = pcall(Blitbuffer.new, target_w, target_h, dst_type)
     if not ok_crop or not crop_bb then
         return scaled_bb
     end
-    local x_off = math.floor((scaled_w - target_w) / 2)
-    local y_off = math.floor((scaled_h - target_h) / 2)
+    local x_off = math.max(0, math.floor((scaled_w - target_w) / 2))
+    local y_off = math.max(0, math.floor((scaled_h - target_h) / 2))
     pcall(crop_bb.blitFrom, crop_bb, scaled_bb, 0, 0, x_off, y_off, target_w, target_h)
     pcall(function() scaled_bb:free() end)
     return crop_bb
@@ -186,9 +213,12 @@ function CoverCache:getScaledBB(covers_dir, source_key, manga_key, target_w, tar
         return hit.bb
     end
 
-    local attr = lfs.attributes(disk_path)
-    if not attr or attr.mode ~= "file" or (attr.size or 0) <= 0 then
-        return nil
+    if not self.disk_exists[disk_path] then
+        local attr = lfs.attributes(disk_path)
+        if not attr or attr.mode ~= "file" or (attr.size or 0) <= 0 then
+            return nil
+        end
+        self.disk_exists[disk_path] = true
     end
 
     local ok_ri, RenderImage = pcall(require, "ui/renderimage")
@@ -197,6 +227,7 @@ function CoverCache:getScaledBB(covers_dir, source_key, manga_key, target_w, tar
     end
     local ok_dec, raw_bb = pcall(RenderImage.renderImageFile, RenderImage, disk_path, false, nil, nil)
     if not ok_dec or not raw_bb then
+        self.disk_exists[disk_path] = nil
         return nil
     end
 

@@ -103,6 +103,15 @@ local function parseDownloadProgress(text)
 end
 Runner.parseDownloadProgress = parseDownloadProgress
 
+local function parseSearchProgress(text)
+    local done, total, name
+    for d, t, n in (text or ""):gmatch("%[search%] (%d+)/(%d+)\t([^\r\n]+)") do
+        done, total, name = tonumber(d), tonumber(t), n
+    end
+    return done, total, name
+end
+Runner.parseSearchProgress = parseSearchProgress
+
 local function collectCoverIndices(text, seen, ready)
     for idx_str in (text or ""):gmatch("%[cover%] (%d+)\r?\n") do
         local idx = tonumber(idx_str)
@@ -185,6 +194,9 @@ function Runner:spawnAsync(args, env, low_priority, cleanup_files)
         stderr_tail = "",
         current_page = 0,
         total_pages = 0,
+        search_done = 0,
+        search_total = 0,
+        search_name = "",
         cover_seen = {},
         cover_ready = {},
         finished = false,
@@ -208,6 +220,12 @@ function Runner:spawnAsync(args, env, low_priority, cleanup_files)
             if cur and tot then
                 self.current_page = cur
                 self.total_pages = tot
+            end
+            local sd, st, sn = parseSearchProgress(combined)
+            if sd and st then
+                self.search_done = sd
+                self.search_total = st
+                self.search_name = sn or ""
             end
             collectCoverIndices(combined, self.cover_seen, self.cover_ready)
             self.stderr_tail = combined:sub(math.max(1, #combined - 128))
@@ -256,6 +274,12 @@ function Runner:spawnAsync(args, env, low_priority, cleanup_files)
             self.current_page = cur
             self.total_pages = tot
         end
+        local sd, st, sn = parseSearchProgress(full_stderr)
+        if sd and st then
+            self.search_done = sd
+            self.search_total = st
+            self.search_name = sn or ""
+        end
         collectCoverIndices(full_stderr, self.cover_seen, self.cover_ready)
         cleanupFiles()
 
@@ -300,13 +324,10 @@ function Runner:exec(args, progress_text, env, low_priority)
     return decodeProcessResult(cmd, output, stderr)
 end
 
--- execDownload runs a foreground download inside a Trapper coroutine while
--- polling stderr for "[download] page N/M" and updating the TrapWidget text
--- live so the user sees exact page progress and can tap anywhere to cancel.
-function Runner:execDownload(args, progress_prefix, env, low_priority, cleanup_files)
+local function runTrappedAsync(self, args, initial_text, env, low_priority, cleanup_files, poll_interval, format_progress_fn)
     local co = coroutine.running()
-    if not co or not progress_prefix then
-        local out, err = self:exec(args, progress_prefix, env, low_priority)
+    if not co or not initial_text then
+        local out, err = self:exec(args, initial_text, env, low_priority)
         for _idx, p in ipairs(cleanup_files or {}) do
             os.remove(p)
         end
@@ -318,7 +339,7 @@ function Runner:execDownload(args, progress_prefix, env, low_priority, cleanup_f
         return nil, spawn_err
     end
 
-    local last_shown = progress_prefix
+    local last_shown = initial_text
     local trap_widget = TrapWidget:new{
         text = last_shown,
     }
@@ -335,7 +356,7 @@ function Runner:execDownload(args, progress_prefix, env, low_priority, cleanup_f
         local timer_fn = function()
             coroutine.resume(co, true)
         end
-        UIManager:scheduleIn(0.35, timer_fn)
+        UIManager:scheduleIn(poll_interval or 0.35, timer_fn)
         local go_on = coroutine.yield()
         if not go_on then
             UIManager:unschedule(timer_fn)
@@ -346,21 +367,18 @@ function Runner:execDownload(args, progress_prefix, env, low_priority, cleanup_f
 
         local state, a, b = handle:poll()
         if state == "running" then
-            if a and b and b > 0 then
-                local pct = math.floor((a * 100) / b)
-                local updated_text = T(_("%1 (%2/%3 pages, %4%)"), progress_prefix, a, b, pct)
-                if updated_text ~= last_shown then
-                    last_shown = updated_text
-                    UIManager:close(trap_widget)
-                    trap_widget = TrapWidget:new{
-                        text = last_shown,
-                        dismiss_callback = function()
-                            coroutine.resume(co, false)
-                        end,
-                    }
-                    UIManager:show(trap_widget)
-                    UIManager:setDirty(trap_widget, "ui")
-                end
+            local updated_text = format_progress_fn and format_progress_fn(handle) or nil
+            if updated_text and updated_text ~= last_shown then
+                last_shown = updated_text
+                UIManager:close(trap_widget)
+                trap_widget = TrapWidget:new{
+                    text = last_shown,
+                    dismiss_callback = function()
+                        coroutine.resume(co, false)
+                    end,
+                }
+                UIManager:show(trap_widget)
+                UIManager:setDirty(trap_widget, "ui")
             end
         elseif state == "done" then
             result_out = a
@@ -378,6 +396,31 @@ function Runner:execDownload(args, progress_prefix, env, low_priority, cleanup_f
         return nil, _("Cancelled")
     end
     return result_out, result_err
+end
+
+-- execDownload runs a foreground download inside a Trapper coroutine while
+-- polling stderr for "[download] page N/M" and updating the TrapWidget text
+-- live so the user sees exact page progress and can tap anywhere to cancel.
+function Runner:execDownload(args, progress_prefix, env, low_priority, cleanup_files)
+    return runTrappedAsync(self, args, progress_prefix, env, low_priority, cleanup_files, 0.35, function(handle)
+        local cur, tot = handle.current_page, handle.total_pages
+        if cur and tot and tot > 0 then
+            local pct = math.floor((cur * 100) / tot)
+            return T(_("%1 (%2/%3 pages, %4%)"), progress_prefix, cur, tot, pct)
+        end
+        return nil
+    end)
+end
+
+-- execSearchBatch runs `aidoku-run - search-batch <payload>` inside a Trapper
+-- coroutine while polling stderr for "[search] done/total\tsourceName".
+function Runner:execSearchBatch(args, initial_text, env, cleanup_files)
+    return runTrappedAsync(self, args, initial_text, env, false, cleanup_files, 0.25, function(handle)
+        if handle.search_total and handle.search_total > 0 then
+            return T(_("Searching (%1/%2): %3…"), handle.search_done or 0, handle.search_total, handle.search_name or "")
+        end
+        return nil
+    end)
 end
 
 -- execJSON is exec() plus decoding stdout as JSON.

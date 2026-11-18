@@ -7,11 +7,18 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/andybalholm/cascadia"
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
 	nethtml "golang.org/x/net/html"
+	"golang.org/x/text/encoding"
+	"golang.org/x/text/encoding/htmlindex"
+	"golang.org/x/text/encoding/simplifiedchinese"
+	"golang.org/x/text/encoding/traditionalchinese"
 )
 
 type htmlResult int32
@@ -55,13 +62,103 @@ func NewHtml(store *Store) *Html {
 // ParseHTML implements the callback Net expects for its `html` binding
 // (net.html(): parse a fetched response body as a document).
 func (h *Html) ParseHTML(data []byte, baseURL string) (int32, error) {
-	root, err := nethtml.ParseWithOptions(strings.NewReader(string(data)), nethtml.ParseOptionEnableScripting(false))
+	return h.ParseHTMLWithContentType(data, baseURL, "")
+}
+
+// ParseHTMLWithContentType decodes data to UTF-8 using contentType and HTML
+// <meta> charset declarations (supporting GBK/GB2312/GB18030/Big5 etc.) before
+// parsing it into a DOM node stored in h.Store.
+func (h *Html) ParseHTMLWithContentType(data []byte, baseURL, contentType string) (int32, error) {
+	decoded := decodeHTMLToUTF8(data, contentType)
+	root, err := nethtml.ParseWithOptions(strings.NewReader(decoded), nethtml.ParseOptionEnableScripting(false))
 	if err != nil {
 		return 0, err
 	}
 	descriptor := h.Store.Store(root)
 	h.registerBase(descriptor, root, baseURL)
 	return descriptor, nil
+}
+
+var (
+	headerCharsetRe = regexp.MustCompile(`(?i)charset\s*=\s*["']?([a-z0-9_-]+)`)
+	metaCharsetRe   = regexp.MustCompile(`(?is)<meta\b[^>]*\bcharset\s*=\s*["']?\s*([a-z0-9_-]+)`)
+)
+
+func sniffCharset(data []byte, contentType string) string {
+	if m := headerCharsetRe.FindStringSubmatch(contentType); len(m) == 2 {
+		return strings.ToLower(strings.TrimSpace(m[1]))
+	}
+	head := data
+	if len(head) > 4096 {
+		head = head[:4096]
+	}
+	if m := metaCharsetRe.FindSubmatch(head); len(m) == 2 {
+		return strings.ToLower(strings.TrimSpace(string(m[1])))
+	}
+	return ""
+}
+
+func containsCJK(s string) bool {
+	for _, r := range s {
+		if unicode.Is(unicode.Han, r) {
+			return true
+		}
+	}
+	return false
+}
+
+func decoderForCharset(cs string) *encoding.Decoder {
+	switch cs {
+	case "gbk", "gb2312", "gb18030", "x-gbk", "chinese", "csgb2312", "iso-ir-58":
+		return simplifiedchinese.GB18030.NewDecoder()
+	case "big5", "big5-hkscs", "csbig5":
+		return traditionalchinese.Big5.NewDecoder()
+	case "", "utf-8", "utf8":
+		return nil
+	default:
+		enc, err := htmlindex.Get(cs)
+		if err != nil || enc == nil {
+			return nil
+		}
+		name, _ := htmlindex.Name(enc)
+		if strings.EqualFold(name, "utf-8") {
+			return nil
+		}
+		return enc.NewDecoder()
+	}
+}
+
+func decodeHTMLToUTF8(data []byte, contentType string) string {
+	if len(data) == 0 {
+		return ""
+	}
+	cs := sniffCharset(data, contentType)
+	dec := decoderForCharset(cs)
+
+	if utf8.Valid(data) {
+		if dec == nil {
+			return string(data)
+		}
+		// Some Chinese sites emit UTF-8 bytes with a stale <meta charset="gbk">.
+		// Keep UTF-8 when valid Han characters are already present.
+		s := string(data)
+		if containsCJK(s) {
+			return s
+		}
+		if out, err := dec.Bytes(data); err == nil {
+			return string(out)
+		}
+		return s
+	}
+
+	if dec == nil {
+		// Undeclared non-UTF-8 bytes: default to GB18030 (superset of GBK/GB2312).
+		dec = simplifiedchinese.GB18030.NewDecoder()
+	}
+	if out, err := dec.Bytes(data); err == nil {
+		return string(out)
+	}
+	return string(data)
 }
 
 // registerBase records root's base URL (if any) and arranges for that
@@ -78,11 +175,19 @@ func (h *Html) registerBase(descriptor int32, root *nethtml.Node, baseURL string
 	h.Store.OnRemove(descriptor, func() { h.bases.remove(root) })
 }
 
-func readMemString(m api.Module, offset, length int32) (string, bool) {
+func readMemBytes(m api.Module, offset, length int32) ([]byte, bool) {
 	if offset < 0 || length < 0 {
-		return "", false
+		return nil, false
 	}
 	b, ok := m.Memory().Read(uint32(offset), uint32(length))
+	if !ok {
+		return nil, false
+	}
+	return b, true
+}
+
+func readMemString(m api.Module, offset, length int32) (string, bool) {
+	b, ok := readMemBytes(m, offset, length)
 	if !ok {
 		return "", false
 	}
@@ -94,10 +199,11 @@ func readMemString(m api.Module, offset, length int32) (string, bool) {
 func LinkHtml(builder wazero.HostModuleBuilder, h *Html) wazero.HostModuleBuilder {
 	builder = builder.NewFunctionBuilder().
 		WithFunc(func(ctx context.Context, m api.Module, htmlOff, htmlLen, baseOff, baseLen int32) int32 {
-			htmlStr, ok := readMemString(m, htmlOff, htmlLen)
+			rawBytes, ok := readMemBytes(m, htmlOff, htmlLen)
 			if !ok {
 				return int32(htmlInvalidString)
 			}
+			htmlStr := decodeHTMLToUTF8(rawBytes, "")
 			root, err := nethtml.ParseWithOptions(strings.NewReader(htmlStr), nethtml.ParseOptionEnableScripting(false))
 			if err != nil {
 				return int32(htmlInvalidHTML)
@@ -114,10 +220,11 @@ func LinkHtml(builder wazero.HostModuleBuilder, h *Html) wazero.HostModuleBuilde
 
 	builder = builder.NewFunctionBuilder().
 		WithFunc(func(ctx context.Context, m api.Module, htmlOff, htmlLen, baseOff, baseLen int32) int32 {
-			htmlStr, ok := readMemString(m, htmlOff, htmlLen)
+			rawBytes, ok := readMemBytes(m, htmlOff, htmlLen)
 			if !ok {
 				return int32(htmlInvalidString)
 			}
+			htmlStr := decodeHTMLToUTF8(rawBytes, "")
 			nodes, err := parseFragmentNodes(htmlStr)
 			if err != nil {
 				return int32(htmlInvalidHTML)
@@ -581,16 +688,23 @@ func LinkHtml(builder wazero.HostModuleBuilder, h *Html) wazero.HostModuleBuilde
 
 	builder = builder.NewFunctionBuilder().
 		WithFunc(func(ctx context.Context, m api.Module, descriptor, queryOff, queryLen int32) int32 {
-			listDescriptor := h.selectImpl(m, descriptor, queryOff, queryLen)
-			if listDescriptor < 0 {
-				return listDescriptor
+			item := h.Store.Fetch(descriptor)
+			query, ok := readMemString(m, queryOff, queryLen)
+			if !ok {
+				return int32(htmlInvalidString)
 			}
-			defer h.Store.Remove(listDescriptor)
-			list, ok := h.Store.Fetch(listDescriptor).(elementList)
-			if !ok || len(list) == 0 {
+			roots, ok := nodesOf(item)
+			if !ok {
+				return int32(htmlInvalidDescriptor)
+			}
+			node, err := selectFirstFrom(roots, query)
+			if err != nil {
+				return int32(htmlInvalidQuery)
+			}
+			if node == nil {
 				return int32(htmlNoResult)
 			}
-			return h.Store.Store(list[0])
+			return h.Store.Store(node)
 		}).
 		Export("select_first")
 
@@ -632,12 +746,52 @@ func (h *Html) selectImpl(m api.Module, descriptor, queryOff, queryLen int32) in
 	return h.Store.Store(out)
 }
 
-// selectFrom matches like jsoup's Element.select: each root is itself a
-// candidate, which cascadia.QueryAll alone would skip.
-func selectFrom(roots []*nethtml.Node, query string) (elementList, error) {
+var selectorCache sync.Map
+
+func compileSelector(query string) (cascadia.SelectorGroup, error) {
+	if cached, ok := selectorCache.Load(query); ok {
+		return cached.(cascadia.SelectorGroup), nil
+	}
 	sel, err := cascadia.ParseGroup(rewriteIndexPseudos(query))
 	if err != nil {
 		return nil, err
+	}
+	if len(query) <= 256 {
+		selectorCache.Store(query, sel)
+	}
+	return sel, nil
+}
+
+func selectFirstFrom(roots []*nethtml.Node, query string) (*nethtml.Node, error) {
+	sel, err := compileSelector(query)
+	if err != nil {
+		return nil, err
+	}
+	for _, root := range roots {
+		if root.Type == nethtml.ElementNode && sel.Match(root) {
+			return root, nil
+		}
+		if match := cascadia.Query(root, sel); match != nil {
+			return match, nil
+		}
+	}
+	return nil, nil
+}
+
+// selectFrom matches like jsoup's Element.select: each root is itself a
+// candidate, which cascadia.QueryAll alone would skip.
+func selectFrom(roots []*nethtml.Node, query string) (elementList, error) {
+	sel, err := compileSelector(query)
+	if err != nil {
+		return nil, err
+	}
+	if len(roots) == 1 {
+		root := roots[0]
+		var out elementList
+		if root.Type == nethtml.ElementNode && sel.Match(root) {
+			out = append(out, root)
+		}
+		return append(out, cascadia.QueryAll(root, sel)...), nil
 	}
 	var out elementList
 	seen := make(map[*nethtml.Node]bool)

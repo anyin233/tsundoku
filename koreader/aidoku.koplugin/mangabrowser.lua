@@ -13,9 +13,11 @@ MangaBrowser: shows one manga's chapter list with:
 local ButtonDialog = require("ui/widget/buttondialog")
 local ChapterCache = require("chaptercache")
 local ChapterOrder = require("chapterorder")
+local ComicLayout = require("comiclayout")
 local ConfirmBox = require("ui/widget/confirmbox")
 local DownloadQueue = require("downloadqueue")
 local DownloadsEngine = require("downloadsengine")
+local EpubHelper = require("epubhelper")
 local InfoMessage = require("ui/widget/infomessage")
 local InputDialog = require("ui/widget/inputdialog")
 local Menu = require("ui/widget/menu")
@@ -395,14 +397,7 @@ function MangaBrowser:promptPushAllToKoobone()
 end
 
 function MangaBrowser:downloadedPath(chapter_key)
-    local path = self.downloaded_keys[chapter_key]
-    if not path or path == "" then
-        return ""
-    end
-    if lfs.attributes(path, "mode") ~= "file" then
-        return ""
-    end
-    return path
+    return self.downloaded_keys[chapter_key] or ""
 end
 
 function MangaBrowser:findChapterTask(chapter_key)
@@ -503,25 +498,85 @@ function MangaBrowser:refresh()
 end
 
 function MangaBrowser:reloadDownloadedKeys(all)
-    all = all or self.downloads_engine:list()
     self.downloaded_keys = {}
+    if not all and self.downloads_engine and self.downloads_engine.downloadedPathsMap then
+        local mtitle = mangaLabel(self.manga)
+        local primary = self.downloads_engine:downloadedPathsMap(self.source_key, self.manga.Key, mtitle, self.initial_manga_key)
+        for ck, p in pairs(primary) do
+            self.downloaded_keys[ck] = p
+        end
+        if self.initial_manga_key ~= "" and self.initial_manga_key ~= self.manga.Key then
+            local alt = self.downloads_engine:downloadedPathsMap(self.source_key, self.initial_manga_key, mtitle)
+            for ck, p in pairs(alt) do
+                if not self.downloaded_keys[ck] then
+                    self.downloaded_keys[ck] = p
+                end
+            end
+        end
+        return self.downloads_engine:list()
+    end
+    all = all or self.downloads_engine:list()
     if not all then
         return all
     end
     local mtitle = mangaLabel(self.manga)
+    local candidates = {}
     for _idx, entry in ipairs(all) do
         if DownloadsEngine.entryMatchesManga(entry, self.source_key, self.manga.Key, mtitle)
             or (self.initial_manga_key ~= "" and DownloadsEngine.entryMatchesManga(entry, self.source_key, self.initial_manga_key, mtitle))
         then
+            table.insert(candidates, entry)
+        end
+    end
+    local existing = DownloadsEngine.buildExistingFilesSet(candidates)
+    for _idx, entry in ipairs(candidates) do
+        if entry.path ~= "" and existing[entry.path] then
             self.downloaded_keys[entry.chapterKey] = entry.path
         end
     end
     return all
 end
 
+function MangaBrowser:canonicalKeys()
+    return Prefetch.canonicalKeys(self.chapters)
+end
+
+function MangaBrowser:mangaEpubPath()
+    if self.downloads_engine and self.downloads_engine.mangaEpubPath then
+        local p = self.downloads_engine:mangaEpubPath(self.source_key, self.manga.Key)
+        if p ~= "" then
+            return p
+        end
+        if self.initial_manga_key ~= "" and self.initial_manga_key ~= self.manga.Key then
+            p = self.downloads_engine:mangaEpubPath(self.source_key, self.initial_manga_key)
+            if p ~= "" then
+                return p
+            end
+        end
+    end
+    for _ck, p in pairs(self.downloaded_keys or {}) do
+        if EpubHelper.isEpub(p) and lfs.attributes(p, "mode") == "file" then
+            return p
+        end
+    end
+    return ""
+end
+
+function MangaBrowser:isNovel()
+    return self.source_key == "zh.biquge" or self:mangaEpubPath() ~= ""
+end
+
+function MangaBrowser:syncEpubReadChapters()
+    local epub_path = self:mangaEpubPath()
+    if epub_path ~= "" then
+        EpubHelper.syncReadChapters(epub_path, self.store, self.source_key, self.manga.Key, { ui = self.ui })
+    end
+end
+
 function MangaBrowser:reload()
     Trapper:wrap(function()
         local all = self:reloadDownloadedKeys()
+        self:syncEpubReadChapters()
         if #self.chapters == 0 then
             self.chapters = ChapterOrder.fromEntries(all, self.source_key, self.manga.Key)
         end
@@ -557,7 +612,7 @@ function MangaBrowser:reload()
         self.manga = updated
         self.chapters = type(updated.Chapters) == "table" and updated.Chapters or {}
         self.network_loaded = true
-        self.store:recordMangaMeta(self.source_key, self.initial_manga_key, self.manga.Key, #self.chapters)
+        self.store:recordMangaMeta(self.source_key, self.initial_manga_key, self.manga.Key, #self.chapters, ComicLayout.viewerFromManga(self.manga))
         local fresh_cover = mangaCover(updated)
         if fresh_cover and fresh_cover ~= "" then
             if self.store:isBookmarked(self.source_key, self.manga.Key)
@@ -570,6 +625,7 @@ function MangaBrowser:reload()
             end
         end
         self:reloadDownloadedKeys()
+        self:syncEpubReadChapters()
         self:refresh()
         if self.refresh_callback then
             self.refresh_callback()
@@ -630,7 +686,7 @@ function MangaBrowser:promptResume()
         ok_text = _("Resume"),
         cancel_text = _("Not now"),
         ok_callback = function()
-            self:onMenuSelect({ chapter = chapter })
+            self:onMenuSelect({ chapter = chapter, is_resume_row = true })
         end,
     })
 end
@@ -665,10 +721,24 @@ function MangaBrowser:findLastReadChapter(ordered)
     return last_key
 end
 
-function MangaBrowser:buildQueueSpec(chapter, redownload)
-    local mtitle = mangaLabel(self.manga)
+function MangaBrowser:buildQueueSpec(chapter, redownload, shared)
+    local s = shared or {}
+    local mtitle = s.manga_title or mangaLabel(self.manga)
     local clabel = chapterLabel(chapter)
-    local chapter_filename = util.getSafeFilename(clabel .. ".cbz", self.downloads_dir)
+    local epub_path = s.epub_path
+    if epub_path == nil then
+        epub_path = self:mangaEpubPath()
+    end
+    local out_path = epub_path ~= "" and epub_path
+        or (self.downloads_dir .. "/" .. util.getSafeFilename(clabel .. ".cbz", self.downloads_dir))
+    local is_novel = s.is_novel
+    if is_novel == nil then
+        is_novel = self:isNovel()
+    end
+    local canonical_keys = s.canonical_keys
+    if canonical_keys == nil then
+        canonical_keys = self:canonicalKeys()
+    end
     return {
         source_key = self.source_key,
         source_path = self.source_path,
@@ -679,18 +749,29 @@ function MangaBrowser:buildQueueSpec(chapter, redownload)
         chapter_key = chapter.Key,
         chapter_title = clabel,
         chapter = chapter,
-        out_path = self.downloads_dir .. "/" .. chapter_filename,
+        out_path = out_path,
         downloads_dir = self.downloads_dir,
-        manga_dir_name = mtitle .. " [" .. self.source_key .. "]",
+        manga_dir_name = s.manga_dir_name or (mtitle .. " [" .. self.source_key .. "]"),
+        is_novel = is_novel,
+        canonical_keys = canonical_keys,
         redownload = redownload and true or false,
     }
 end
 
 function MangaBrowser:enqueueChaptersList(chapters_list)
+    local mtitle = mangaLabel(self.manga)
+    local epub_path = self:mangaEpubPath()
+    local shared = {
+        manga_title = mtitle,
+        manga_dir_name = mtitle .. " [" .. self.source_key .. "]",
+        epub_path = epub_path,
+        is_novel = self.source_key == "zh.biquge" or epub_path ~= "",
+        canonical_keys = self:canonicalKeys(),
+    }
     local to_queue = {}
     for _idx, c in ipairs(chapters_list) do
         if self:downloadedPath(c.Key) == "" then
-            table.insert(to_queue, self:buildQueueSpec(c, false))
+            table.insert(to_queue, self:buildQueueSpec(c, false, shared))
         end
     end
     if #to_queue == 0 then
@@ -822,10 +903,29 @@ function MangaBrowser:promptBulkDownload()
     dialog:onShowKeyboard()
 end
 
-function MangaBrowser:openLocal(path)
+function MangaBrowser:openLocal(path, chapter_key, preserve_scroll, needs_reload)
+    local jump_xp
+    if EpubHelper.isEpub(path) and chapter_key then
+        jump_xp = EpubHelper.prepareJumpToChapter(path, chapter_key, {
+            preserve_if_matching = preserve_scroll,
+            ui = self.ui,
+        })
+    end
     self.store:markLastRead(self.source_key, self.manga.Key)
     require("pendinglibrary").from_tsundoku = true
     UIManager:close(self)
+    if EpubHelper.isEpub(path)
+        and self.ui.document
+        and DownloadsEngine.normalizePath(self.ui.document.file) == DownloadsEngine.normalizePath(path)
+    then
+        if needs_reload and self.ui.reloadDocument then
+            self.ui:reloadDocument()
+        end
+        if jump_xp then
+            EpubHelper.jumpOpenDocument(self.ui, jump_xp)
+        end
+        return
+    end
     if self.ui.document then
         self.ui:switchDocument(path)
     else
@@ -837,15 +937,19 @@ function MangaBrowser:downloadAndOpen(chapter, redownload)
     NetworkMgr:runWhenConnected(function()
         Trapper:wrap(function()
             local clabel = chapterLabel(chapter)
-            local chapter_filename = util.getSafeFilename(clabel .. ".cbz", self.downloads_dir)
-            local out_path = self.downloads_dir .. "/" .. chapter_filename
+            local existing_epub = self:mangaEpubPath()
+            local old_keys = (existing_epub ~= "" and not EpubHelper.usesAdjacentSidecar(existing_epub))
+                and EpubHelper.manifestKeys(EpubHelper.readManifest(existing_epub))
+                or nil
+            local out_path = existing_epub ~= "" and existing_epub
+                or (self.downloads_dir .. "/" .. util.getSafeFilename(clabel .. ".cbz", self.downloads_dir))
             local manga_dir_name = mangaLabel(self.manga) .. " [" .. self.source_key .. "]"
             local progress_prefix = T(_("Downloading %1"), clabel)
 
             local path, err = self.engine:download(
                 self.source_path, self.manga.Key, chapter.Key, out_path,
                 self.downloads_dir, nil, progress_prefix, manga_dir_name,
-                redownload, self.manga, chapter
+                redownload, self.manga, chapter, nil, self:canonicalKeys()
             )
             if not path then
                 if err ~= _("Cancelled") then
@@ -854,26 +958,24 @@ function MangaBrowser:downloadAndOpen(chapter, redownload)
                 return
             end
             self.downloaded_keys[chapter.Key] = path
-            if self.offline_mode_active and not tostring(self.manga and self.manga.Key or ""):match("^koob:") then
-        table.insert(buttons, {{
-            text = _("Check online chapters"),
-            callback = function()
-                UIManager:close(dialog)
-                self.offline_first = false
-                self.offline_mode_active = false
-                self:reload()
-            end,
-        }})
-    end
+            local is_epub = EpubHelper.isEpub(path)
+            if is_epub then
+                EpubHelper.invalidateCache(path)
+                self:reloadDownloadedKeys()
+                if old_keys and #old_keys > 0 and not EpubHelper.usesAdjacentSidecar(path) then
+                    local new_keys = EpubHelper.manifestKeys(EpubHelper.readManifest(path))
+                    EpubHelper.remapDocSettings(path, old_keys, new_keys)
+                end
+            end
 
-    if not self.store:isEphemeralMode() then
+            if not self.store:isEphemeralMode() then
                 self.downloads_engine:prune(self.store:downloadLimitBytes(), path)
             end
             if self.refresh_callback then
                 self.refresh_callback()
             end
             self:refresh()
-            self:openLocal(path)
+            self:openLocal(path, chapter.Key, false, is_epub)
             if self.store:isEphemeralMode() then
                 self.downloads_engine:removeAllExcept(path)
             end
@@ -895,7 +997,7 @@ function MangaBrowser:onMenuSelect(item)
     end
     local existing = self:downloadedPath(item.chapter.Key)
     if existing ~= "" then
-        self:openLocal(existing)
+        self:openLocal(existing, item.chapter.Key, item.is_resume_row == true, false)
         if self.store:isEphemeralMode() then
             self.downloads_engine:removeAllExcept(existing)
         end

@@ -316,6 +316,7 @@ func (c *Client) DownloadKooboneVolumeCBZ(
 		Key:       vol.MangaKey,
 		Title:     vol.MangaTitle,
 		Authors:   authors,
+		Viewer:    models.ViewerRightToLeft,
 	}
 	if vol.CoverURL != "" {
 		cover := vol.CoverURL
@@ -434,7 +435,7 @@ func (c *Client) DownloadKooboneVolumeCBZ(
 		return "", err
 	}
 
-	entry, err := store.RecordWithDate(
+	entry, err := store.RecordWithViewer(
 		SourceKey,
 		sourcePath,
 		manga.Key,
@@ -445,6 +446,7 @@ func (c *Client) DownloadKooboneVolumeCBZ(
 		chapter.ChapterNumber,
 		chapter.VolumeNumber,
 		epochPtr,
+		uint8(manga.Viewer),
 	)
 	if err != nil {
 		return "", fmt.Errorf("koobone: recording download: %w", err)
@@ -498,6 +500,7 @@ func ConvertEPUBFileToCBZ(
 		Series:    manga.Title,
 		Writer:    strings.Join(manga.Authors, ", "),
 		PageCount: len(imageEntries),
+		Manga:     "YesAndRightToLeft",
 	}
 	if chapter.Title != nil {
 		ci.Title = *chapter.Title

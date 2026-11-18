@@ -75,6 +75,22 @@ local function languageShortLabel(lang)
     return LANGUAGE_OPTIONS[1].short()
 end
 
+local COMIC_LAYOUT_OPTIONS = {
+    { id = "auto",    label = function() return _("Auto (Manga paged / Webtoon scroll)") end, short = function() return _("Auto") end },
+    { id = "paged",   label = function() return _("Paged (Single page + Fit page)") end,      short = function() return _("Paged") end },
+    { id = "webtoon", label = function() return _("Webtoon (Continuous + Fit width)") end,   short = function() return _("Webtoon") end },
+    { id = "off",     label = function() return _("Off (Use KOReader defaults)") end,         short = function() return _("Off") end },
+}
+
+local function comicLayoutShortLabel(mode)
+    for _idx, opt in ipairs(COMIC_LAYOUT_OPTIONS) do
+        if opt.id == mode then
+            return opt.short()
+        end
+    end
+    return COMIC_LAYOUT_OPTIONS[1].short()
+end
+
 local function formatMB(bytes)
     return string.format("%.1f MB", bytes / MB)
 end
@@ -132,6 +148,11 @@ function SettingsBrowser:genItemTable()
             text = _("Library view"),
             mandatory = viewModeLabel(self.store:libraryViewMode()),
             is_library_view_entry = true,
+        },
+        {
+            text = _("Comic reader layout"),
+            mandatory = comicLayoutShortLabel(self.store:comicReaderMode()),
+            is_comic_layout_entry = true,
         },
         {
             text = _("Prefetch next chapters"),
@@ -553,6 +574,31 @@ function SettingsBrowser:promptLanguage()
     UIManager:show(dialog)
 end
 
+function SettingsBrowser:promptComicReaderMode()
+    local current = self.store:comicReaderMode()
+    local dialog
+    local buttons = {}
+    for _idx, opt in ipairs(COMIC_LAYOUT_OPTIONS) do
+        local is_cur = (opt.id == current)
+        local mode_id = opt.id
+        table.insert(buttons, {{
+            text = (is_cur and "✓ " or "") .. opt.label(),
+            callback = function()
+                UIManager:close(dialog)
+                if mode_id ~= current then
+                    self.store:setComicReaderMode(mode_id)
+                    self:refresh()
+                end
+            end,
+        }})
+    end
+    dialog = ButtonDialog:new{
+        title = _("Comic reader layout"),
+        buttons = buttons,
+    }
+    UIManager:show(dialog)
+end
+
 function SettingsBrowser:cycleLibraryViewMode()
     local current = self.store:libraryViewMode()
     local next_mode = VIEW_MODE_ORDER[1]
@@ -631,6 +677,8 @@ function SettingsBrowser:onMenuSelect(item)
         self:promptLanguage()
     elseif item.is_library_view_entry then
         self:cycleLibraryViewMode()
+    elseif item.is_comic_layout_entry then
+        self:promptComicReaderMode()
     elseif item.is_buffer_entry then
         if self.store:isEphemeralMode() then
             UIManager:show(InfoMessage:new{

@@ -7,6 +7,7 @@ across LibraryBrowser, SearchBrowser, GlobalSearchBrowser, and DownloadsBrowser.
 
 local DataStorage = require("datastorage")
 local DocSettings = require("docsettings")
+local EpubHelper = require("epubhelper")
 local SQ3 = require("lua-ljsqlite3/init")
 local ffiUtil = require("ffi/util")
 local lfs = require("libs/libkoreader-lfs")
@@ -16,6 +17,87 @@ local DownloadsEngine = {}
 DownloadsEngine.__index = DownloadsEngine
 
 local _full_data_dir_cache = nil
+local _cache_rev = 0
+local _cache_by_dir = {}
+
+function DownloadsEngine.invalidateCache(downloads_dir)
+    _cache_rev = _cache_rev + 1
+    if type(downloads_dir) == "string" and downloads_dir ~= "" then
+        _cache_by_dir[DownloadsEngine.normalizePath(downloads_dir)] = nil
+    else
+        _cache_by_dir = {}
+    end
+end
+
+local function dbStateToken(downloads_dir)
+    if not downloads_dir or downloads_dir == "" then
+        return tostring(_cache_rev)
+    end
+    local db_attr = lfs.attributes(downloads_dir .. "/index.db")
+    local wal_attr = lfs.attributes(downloads_dir .. "/index.db-wal")
+    return string.format("%d:%s:%s:%s:%s",
+        _cache_rev,
+        tostring(db_attr and db_attr.modification or 0),
+        tostring(db_attr and db_attr.size or 0),
+        tostring(wal_attr and wal_attr.modification or 0),
+        tostring(wal_attr and wal_attr.size or 0))
+end
+
+-- buildExistingFilesSet verifies file existence in batches grouped by parent
+-- directory (1 readdir per unique manga folder instead of 400+ FUSE stat() calls).
+function DownloadsEngine.buildExistingFilesSet(items)
+    local existing = {}
+    local records = {}
+    local dirs_needed = {}
+    for _idx, item in ipairs(items or {}) do
+        local raw_p = type(item) == "table" and item.path or item
+        if type(raw_p) == "string" and raw_p ~= "" then
+            local norm_p = DownloadsEngine.normalizePath(raw_p)
+            local dir, name = norm_p:match("^(.*)/([^/]+)$")
+            if name then
+                if dir == "" then
+                    dir = "/"
+                end
+                dirs_needed[dir] = true
+            end
+            table.insert(records, { raw = raw_p, norm = norm_p, dir = dir, name = name })
+        end
+    end
+
+    local dir_entries = {}
+    for dir in pairs(dirs_needed) do
+        if lfs.attributes(dir, "mode") == "directory" then
+            local map = {}
+            local ok_dir, iter, dir_obj = pcall(lfs.dir, dir)
+            if ok_dir and iter then
+                for fname in iter, dir_obj do
+                    if fname ~= "." and fname ~= ".." then
+                        map[fname] = true
+                    end
+                end
+            end
+            dir_entries[dir] = map
+        end
+    end
+
+    for _idx, rec in ipairs(records) do
+        local found = false
+        if rec.name then
+            local d = rec.dir == "" and "/" or rec.dir
+            local map = dir_entries[d]
+            if map and map[rec.name] then
+                found = true
+            end
+        elseif lfs.attributes(rec.norm, "mode") == "file" then
+            found = true
+        end
+        if found then
+            existing[rec.norm] = true
+            existing[rec.raw] = true
+        end
+    end
+    return existing
+end
 
 function DownloadsEngine.fullDataDir()
     if _full_data_dir_cache then
@@ -96,7 +178,17 @@ local function float32(v)
     return v and tonumber(string.format("%.7g", v))
 end
 
-local function rowToEntry(row)
+local function rowToEntry(row, has_date_uploaded, has_viewer)
+    local idx = 12
+    local date_uploaded = nil
+    if has_date_uploaded then
+        date_uploaded = row[idx] and tonumber(row[idx]) or nil
+        idx = idx + 1
+    end
+    local viewer = 0
+    if has_viewer then
+        viewer = (row[idx] and tonumber(row[idx])) or 0
+    end
     return {
         sourceKey = row[1],
         sourcePath = row[2],
@@ -109,7 +201,8 @@ local function rowToEntry(row)
         downloadedAt = tonumber(row[9]) or 0,
         chapterNumber = float32(row[10]),
         volumeNumber = float32(row[11]),
-        dateUploaded = row[12] and tonumber(row[12]) or nil,
+        dateUploaded = date_uploaded,
+        viewer = viewer,
     }
 end
 
@@ -142,12 +235,16 @@ local function firstRow(stmt)
     return stmt:step()
 end
 
-function DownloadsEngine.new(downloads_dir)
+function DownloadsEngine.new(downloads_dir, engine)
     downloads_dir = DownloadsEngine.normalizePath(downloads_dir)
     local self = setmetatable({
         downloads_dir = downloads_dir,
+        engine = engine,
         conn = nil,
         has_date_uploaded = nil,
+        has_viewer = nil,
+        table_exists = false,
+        path_index_ensured = false,
     }, DownloadsEngine)
     local ok, conn = pcall(SQ3.open, downloads_dir .. "/index.db")
     if ok and pcall(conn.set_busy_timeout, conn, 5000) then
@@ -156,37 +253,72 @@ function DownloadsEngine.new(downloads_dir)
     return self
 end
 
+function DownloadsEngine:stateToken()
+    return dbStateToken(self.downloads_dir)
+end
+
+function DownloadsEngine:setEngine(engine)
+    self.engine = engine
+end
+
 function DownloadsEngine:isAvailable()
     return self.conn ~= nil
 end
 
 function DownloadsEngine:tableExists()
+    if self.table_exists then
+        return true
+    end
     if not self.conn then
         return false
     end
     local ok, count = pcall(self.conn.rowexec, self.conn,
         "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='downloads'")
-    return ok and (tonumber(count) or 0) > 0
+    if ok and (tonumber(count) or 0) > 0 then
+        self.table_exists = true
+        return true
+    end
+    return false
+end
+
+function DownloadsEngine:ensurePathIndex()
+    if self.path_index_ensured or not self.conn then
+        return
+    end
+    self.path_index_ensured = true
+    pcall(self.conn.exec, self.conn, "CREATE INDEX IF NOT EXISTS idx_downloads_path ON downloads(path)")
 end
 
 function DownloadsEngine:entryColumns()
-    if self.has_date_uploaded then
-        return BASE_COLUMNS .. ", date_uploaded"
+    if self.has_date_uploaded and self.has_viewer then
+        return BASE_COLUMNS .. ", date_uploaded, viewer", true, true
     end
-    local found = query(self.conn, false, "PRAGMA table_info(downloads)", nil, function(stmt)
+    local has_date, has_viewer = false, false
+    query(self.conn, false, "PRAGMA table_info(downloads)", nil, function(stmt)
         local row = {}
         while stmt:step(row) do
             if row[2] == "date_uploaded" then
-                return true
+                has_date = true
+            elseif row[2] == "viewer" then
+                has_viewer = true
             end
         end
-        return false
+        return true
     end)
-    if found then
+    if has_date then
         self.has_date_uploaded = true
-        return BASE_COLUMNS .. ", date_uploaded"
     end
-    return BASE_COLUMNS
+    if has_viewer then
+        self.has_viewer = true
+    end
+    local cols = BASE_COLUMNS
+    if has_date then
+        cols = cols .. ", date_uploaded"
+    end
+    if has_viewer then
+        cols = cols .. ", viewer"
+    end
+    return cols, has_date, has_viewer
 end
 
 function DownloadsEngine:indexedPath(source_key, manga_key, chapter_key)
@@ -215,7 +347,8 @@ function DownloadsEngine:byPath(file_path)
     if not self:tableExists() or type(file_path) ~= "string" or file_path == "" then
         return nil
     end
-    local cols = self:entryColumns()
+    self:ensurePathIndex()
+    local cols, has_date, has_viewer = self:entryColumns()
     local norm = DownloadsEngine.normalizePath(file_path)
     local rel = DownloadsEngine.relativeDataPath(norm)
     local alt = rel ~= "" and rel or norm
@@ -225,7 +358,62 @@ function DownloadsEngine:byPath(file_path)
     if not row then
         return nil
     end
-    return rowToEntry(row)
+    return rowToEntry(row, has_date, has_viewer)
+end
+
+function DownloadsEngine:mangaEpubPath(source_key, manga_key)
+    if not self:tableExists() or not source_key or not manga_key or manga_key == "" then
+        return ""
+    end
+    local stats = self:mangaDownloadStats()
+    if stats and stats.by_exact then
+        local g = stats.by_exact[source_key .. "\0" .. manga_key]
+        return g and g.epubPath or ""
+    end
+    local row = query(self.conn, nil,
+        "SELECT path FROM downloads WHERE source_key=? AND manga_key=? AND lower(path) LIKE '%.epub' ORDER BY downloaded_at DESC LIMIT 1",
+        { source_key, manga_key }, firstRow)
+    local p = row and row[1] or ""
+    if p == "" then
+        return ""
+    end
+    local norm = DownloadsEngine.normalizePath(p)
+    if lfs.attributes(norm, "mode") ~= "file" then
+        return ""
+    end
+    return norm
+end
+
+local function unlinkFilePaths(norm_path, raw_paths)
+    if lfs.attributes(norm_path, "mode") == "file" then
+        local ok, err = os.remove(norm_path)
+        if not ok then
+            return false, err
+        end
+    end
+    for raw_path in pairs(raw_paths or {}) do
+        if raw_path ~= norm_path and lfs.attributes(raw_path, "mode") == "file" then
+            local ok, err = os.remove(raw_path)
+            if not ok then
+                return false, err
+            end
+        end
+    end
+    purgeSidecar(norm_path)
+    return true
+end
+
+function DownloadsEngine:deleteRowsByPaths(norm_path, raw_paths)
+    local deleted = query(self.conn, false,
+        "DELETE FROM downloads WHERE path=?", { norm_path }, function(stmt) stmt:step() return true end)
+    for raw_path in pairs(raw_paths or {}) do
+        if raw_path ~= norm_path then
+            query(self.conn, false,
+                "DELETE FROM downloads WHERE path=?", { raw_path }, function(stmt) stmt:step() return true end)
+        end
+    end
+    DownloadsEngine.invalidateCache(self.downloads_dir)
+    return deleted
 end
 
 function DownloadsEngine:remove(source_key, manga_key, chapter_key)
@@ -234,37 +422,82 @@ function DownloadsEngine:remove(source_key, manga_key, chapter_key)
         return true
     end
     local path = DownloadsEngine.normalizePath(raw_path)
-    if lfs.attributes(path, "mode") == "file" then
-        local ok, err = os.remove(path)
-        if not ok then
+    if EpubHelper.isEpub(path) then
+        if not self.engine then
+            return false, "engine unavailable for epub repack"
+        end
+        local res, err = self.engine:epubRemove({
+            epub_path = path,
+            downloads_dir = self.downloads_dir,
+            source_key = source_key,
+            manga_key = manga_key,
+            chapter_keys = { chapter_key },
+        })
+        if not res then
             return false, err
         end
-    elseif lfs.attributes(raw_path, "mode") == "file" then
-        local ok, err = os.remove(raw_path)
-        if not ok then
-            return false, err
+        if (res.remaining or 0) <= 0 then
+            purgeSidecar(path)
+        elseif type(res.oldKeys) == "table" and type(res.newKeys) == "table" then
+            EpubHelper.remapDocSettings(path, res.oldKeys, res.newKeys, res.sdrRemapped == true)
         end
+        EpubHelper.invalidateCache(path)
+        DownloadsEngine.invalidateCache(self.downloads_dir)
+        return true
     end
-    purgeSidecar(path)
+
+    local ok_rm, rm_err = unlinkFilePaths(path, { [raw_path] = true })
+    if not ok_rm then
+        return false, rm_err
+    end
     local deleted = query(self.conn, false,
         "DELETE FROM downloads WHERE source_key=? AND manga_key=? AND chapter_key=?",
         { source_key, manga_key, chapter_key }, function(stmt) stmt:step() return true end)
     if not deleted then
         return false
     end
+    DownloadsEngine.invalidateCache(self.downloads_dir)
     return true
 end
 
 -- removeManga deletes every downloaded chapter matching (source_key, manga_key)
--- (including canonical slug/id variants), returning how many chapters were removed.
+-- (including canonical slug/id variants), unlinking shared EPUB files once
+-- instead of repacking chapter-by-chapter, returning how many rows were removed.
 function DownloadsEngine:removeManga(source_key, manga_key, manga_title)
-    local removed = 0
+    local matching = {}
+    local files_to_unlink = {}
     for _idx, e in ipairs(self:list() or {}) do
         if DownloadsEngine.entryMatchesManga(e, source_key, manga_key, manga_title) then
-            if self:remove(e.sourceKey, e.mangaKey, e.chapterKey) then
+            table.insert(matching, e)
+            local norm = DownloadsEngine.normalizePath(e.path)
+            if norm ~= "" then
+                files_to_unlink[norm] = files_to_unlink[norm] or {}
+                files_to_unlink[norm][e.path] = true
+            end
+        end
+    end
+    if #matching == 0 then
+        return 0
+    end
+
+    for norm, raw_paths in pairs(files_to_unlink) do
+        unlinkFilePaths(norm, raw_paths)
+    end
+
+    local removed = 0
+    for _idx, e in ipairs(matching) do
+        local norm = DownloadsEngine.normalizePath(e.path)
+        if lfs.attributes(norm, "mode") ~= "file" then
+            local deleted = query(self.conn, false,
+                "DELETE FROM downloads WHERE source_key=? AND manga_key=? AND chapter_key=?",
+                { e.sourceKey, e.mangaKey, e.chapterKey }, function(stmt) stmt:step() return true end)
+            if deleted then
                 removed = removed + 1
             end
         end
+    end
+    if removed > 0 then
+        DownloadsEngine.invalidateCache(self.downloads_dir)
     end
     return removed
 end
@@ -296,9 +529,14 @@ function DownloadsEngine:resetProgress(source_key, manga_key)
     if not self:tableExists() then
         return
     end
+    local seen = {}
     for _idx, e in ipairs(self:list() or {}) do
         if DownloadsEngine.entryMatchesManga(e, source_key, manga_key) then
-            purgeSidecar(e.path)
+            local norm = DownloadsEngine.normalizePath(e.path)
+            if norm ~= "" and not seen[norm] then
+                seen[norm] = true
+                purgeSidecar(norm)
+            end
         end
     end
 end
@@ -307,19 +545,29 @@ function DownloadsEngine:list()
     if not self:tableExists() then
         return {}
     end
-    local cols = self:entryColumns()
+    local token = dbStateToken(self.downloads_dir)
+    local cached = _cache_by_dir[self.downloads_dir]
+    if cached and cached.token == token and cached.entries then
+        return cached.entries
+    end
+    local cols, has_date, has_viewer = self:entryColumns()
     local entries = query(self.conn, nil,
         "SELECT " .. cols .. " FROM downloads ORDER BY downloaded_at DESC", nil,
         function(stmt)
             local out, row = {}, {}
             while stmt:step(row) do
-                table.insert(out, rowToEntry(row))
+                table.insert(out, rowToEntry(row, has_date, has_viewer))
             end
             return out
         end)
     if not entries then
         return nil, _("Could not read the downloads index.")
     end
+    _cache_by_dir[self.downloads_dir] = {
+        token = token,
+        entries = entries,
+        stats = nil,
+    }
     return entries
 end
 
@@ -327,14 +575,29 @@ end
 -- manga, indexed by exact key, slug prefix (before '/'), and manga title so
 -- lookups from LibraryBrowser, SearchBrowser, and GlobalSearchBrowser are O(1).
 function DownloadsEngine:mangaDownloadStats(entries)
-    entries = entries or self:list() or {}
+    local token = dbStateToken(self.downloads_dir)
+    local cached = _cache_by_dir[self.downloads_dir]
+    local use_cache = (entries == nil) or (cached and cached.entries == entries)
+    if use_cache and cached and cached.token == token and cached.stats then
+        return cached.stats
+    end
+
+    if not entries then
+        entries = self:list() or {}
+        cached = _cache_by_dir[self.downloads_dir]
+        token = dbStateToken(self.downloads_dir)
+    end
+
+    local existing = DownloadsEngine.buildExistingFilesSet(entries)
+    local valid_entries = {}
     local by_exact = {}
     local by_prefix = {}
     local by_title = {}
     local groups = {}
 
     for _idx, e in ipairs(entries) do
-        if e.path ~= "" and lfs.attributes(e.path, "mode") == "file" then
+        if e.path ~= "" and existing[e.path] then
+            table.insert(valid_entries, e)
             local exact_id = e.sourceKey .. "\0" .. e.mangaKey
             local group = by_exact[exact_id]
             if not group then
@@ -347,6 +610,7 @@ function DownloadsEngine:mangaDownloadStats(entries)
                     sizeBytes = 0,
                     latestAt = 0,
                     chapters = {},
+                    _seen_paths = {},
                 }
                 by_exact[exact_id] = group
                 table.insert(groups, group)
@@ -360,20 +624,42 @@ function DownloadsEngine:mangaDownloadStats(entries)
                 end
             end
             group.count = group.count + 1
-            group.sizeBytes = group.sizeBytes + (e.sizeBytes or 0)
-            if (e.downloadedAt or 0) > group.latestAt then
-                group.latestAt = e.downloadedAt
+            local norm = DownloadsEngine.normalizePath(e.path)
+            if norm ~= "" and not group._seen_paths[norm] then
+                group._seen_paths[norm] = true
+                group.sizeBytes = group.sizeBytes + (e.sizeBytes or 0)
+            end
+            local dl_at = e.downloadedAt or 0
+            if norm ~= "" and EpubHelper.isEpub(norm) and (not group.epubPath or dl_at > (group._epub_at or -1)) then
+                group.epubPath = norm
+                group._epub_at = dl_at
+            end
+            if dl_at > group.latestAt then
+                group.latestAt = dl_at
             end
             table.insert(group.chapters, e)
         end
     end
+    for _idx, group in ipairs(groups) do
+        group._seen_paths = nil
+        group._epub_at = nil
+    end
 
-    return {
+    local stats = {
         groups = groups,
         by_exact = by_exact,
         by_prefix = by_prefix,
         by_title = by_title,
+        valid_entries = valid_entries,
     }
+    if use_cache then
+        if not cached or cached.token ~= token then
+            cached = { token = token, entries = entries }
+            _cache_by_dir[self.downloads_dir] = cached
+        end
+        cached.stats = stats
+    end
+    return stats
 end
 
 function DownloadsEngine.lookupMangaGroup(stats, source_key, manga_key, manga_title, canonical_key)
@@ -400,12 +686,53 @@ function DownloadsEngine.lookupMangaGroup(stats, source_key, manga_key, manga_ti
     return nil
 end
 
+-- Returns a read-only { [chapter_key] = file_path } map for a manga in O(1)
+-- when stats are cached, avoiding per-chapter SQLite + lfs.attributes queries.
+function DownloadsEngine:downloadedPathsMap(source_key, manga_key, manga_title, canonical_key)
+    local stats = self:mangaDownloadStats()
+    local group = DownloadsEngine.lookupMangaGroup(stats, source_key, manga_key, manga_title, canonical_key)
+    if not group then
+        return {}
+    end
+    if not group._paths_map then
+        local map = {}
+        for _idx, e in ipairs(group.chapters or {}) do
+            if e.chapterKey and e.chapterKey ~= "" and e.path and e.path ~= "" then
+                map[e.chapterKey] = e.path
+            end
+        end
+        group._paths_map = map
+    end
+    return group._paths_map
+end
+
 function DownloadsEngine:totalBytes()
     if not self:tableExists() then
         return 0
     end
-    local ok, total = pcall(self.conn.rowexec, self.conn, "SELECT SUM(size_bytes) FROM downloads")
+    local ok, total = pcall(self.conn.rowexec, self.conn,
+        "SELECT COALESCE(SUM(sz), 0) FROM (SELECT MAX(size_bytes) AS sz FROM downloads GROUP BY path)")
     return ok and tonumber(total) or 0
+end
+
+local function isPathKept(keep_path, norm_path, raw_paths)
+    if type(keep_path) == "table" then
+        if keep_path[norm_path] then
+            return true
+        end
+        for raw_path in pairs(raw_paths or {}) do
+            if keep_path[raw_path] then
+                return true
+            end
+        end
+        return false
+    elseif type(keep_path) == "string" and keep_path ~= "" then
+        local keep_norm = DownloadsEngine.normalizePath(keep_path)
+        if norm_path == keep_norm or raw_paths[keep_path] then
+            return true
+        end
+    end
+    return false
 end
 
 function DownloadsEngine:prune(limit_bytes, keep_path)
@@ -417,23 +744,45 @@ function DownloadsEngine:prune(limit_bytes, keep_path)
         return {}
     end
     local entries = self:list() or {}
+    -- entries is newest-first; group by distinct file path so shared EPUB files
+    -- are counted once and unlinked wholesale rather than repacked per chapter.
+    local groups = {}
+    local by_norm = {}
+    for _idx, e in ipairs(entries) do
+        local norm = DownloadsEngine.normalizePath(e.path)
+        if norm ~= "" then
+            local g = by_norm[norm]
+            if not g then
+                g = {
+                    norm_path = norm,
+                    raw_paths = {},
+                    sizeBytes = 0,
+                    entries = {},
+                }
+                by_norm[norm] = g
+                table.insert(groups, g)
+            end
+            g.raw_paths[e.path] = true
+            if (e.sizeBytes or 0) > g.sizeBytes then
+                g.sizeBytes = e.sizeBytes or 0
+            end
+            table.insert(g.entries, e)
+        end
+    end
+
     local removed = {}
-    for i = #entries, 1, -1 do
+    for i = #groups, 1, -1 do
         if total <= limit_bytes then
             break
         end
-        local e = entries[i]
-        local kept
-        if type(keep_path) == "table" then
-            kept = keep_path[e.path]
-        else
-            kept = e.path == keep_path
-        end
-        if not kept then
-            local ok = self:remove(e.sourceKey, e.mangaKey, e.chapterKey)
-            if ok then
-                total = total - e.sizeBytes
-                table.insert(removed, e)
+        local g = groups[i]
+        if not isPathKept(keep_path, g.norm_path, g.raw_paths) then
+            local ok_rm = unlinkFilePaths(g.norm_path, g.raw_paths)
+            if ok_rm and self:deleteRowsByPaths(g.norm_path, g.raw_paths) then
+                total = total - g.sizeBytes
+                for _j, e in ipairs(g.entries) do
+                    table.insert(removed, e)
+                end
             end
         end
     end
@@ -441,9 +790,19 @@ function DownloadsEngine:prune(limit_bytes, keep_path)
 end
 
 function DownloadsEngine:removeAllExcept(keep_path)
+    local by_norm = {}
     for _idx, e in ipairs(self:list() or {}) do
-        if e.path ~= keep_path then
-            self:remove(e.sourceKey, e.mangaKey, e.chapterKey)
+        local norm = DownloadsEngine.normalizePath(e.path)
+        if norm ~= "" then
+            by_norm[norm] = by_norm[norm] or {}
+            by_norm[norm][e.path] = true
+        end
+    end
+    for norm, raw_paths in pairs(by_norm) do
+        if not isPathKept(keep_path, norm, raw_paths) then
+            if unlinkFilePaths(norm, raw_paths) then
+                self:deleteRowsByPaths(norm, raw_paths)
+            end
         end
     end
 end

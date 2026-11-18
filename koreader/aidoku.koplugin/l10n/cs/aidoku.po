@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: aidoku.koplugin\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-16 02:16+0000\n"
+"POT-Creation-Date: 2026-11-18 16:27+0000\n"
 "PO-Revision-Date: 2026-10-07 13:35+0700\n"
 "Last-Translator: Automatically generated\n"
 "Language-Team: none\n"
@@ -17,114 +17,120 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=3; plural=(n==1) ? 0 : (n>=2 && n<=4) ? 1 : 2;\n"
 
-#: downloadqueue.lua:274 downloadqueue.lua:339 subprocess.lua:122
-#: subprocess.lua:177
+#: downloadqueue.lua:319 downloadqueue.lua:360 downloadqueue.lua:457
+#: subprocess.lua:131 subprocess.lua:186
 #, fuzzy
 msgid "command failed"
 msgstr ""
 "Stahování selhalo:\n"
 "%1"
 
-#: downloadsbrowser.lua:71 globalsearchbrowser.lua:428 koobonebrowser.lua:406
-#: koobonebrowser.lua:581 librarybrowser.lua:1079 mangabrowser.lua:287
-#: settingsbrowser.lua:123 sourcesbrowser.lua:46
+#: downloadqueue.lua:431
+#, fuzzy
+msgid "Added %1 chapter(s) to current book."
+msgstr "Žádné kapitoly ke stažení."
+
+#: downloadsbrowser.lua:73 globalsearchbrowser.lua:462 koobonebrowser.lua:406
+#: koobonebrowser.lua:581 librarybrowser.lua:1081 mangabrowser.lua:289
+#: settingsbrowser.lua:139 sourcesbrowser.lua:46
 #, fuzzy
 msgid "Download Manager"
 msgstr "Stažené kapitoly"
 
-#: downloadsbrowser.lua:144
+#: downloadsbrowser.lua:146
 msgid "%1/%2p (%3%)"
 msgstr ""
 
-#: downloadsbrowser.lua:146 downloadsbrowser.lua:168
+#: downloadsbrowser.lua:148 downloadsbrowser.lua:170
 #, fuzzy
 msgid "Preparing…"
 msgstr "Hledání…"
 
-#: downloadsbrowser.lua:148
+#: downloadsbrowser.lua:150
 msgid "Active: %1 · Queue: %2 · Saved: %3 ch (%4)"
 msgstr ""
 
-#: downloadsbrowser.lua:151
+#: downloadsbrowser.lua:153
 msgid "Paused (%1 queued) · Saved: %2 ch (%3)"
 msgstr ""
 
-#: downloadsbrowser.lua:154
+#: downloadsbrowser.lua:156
 msgid "%1 failed · Saved: %2 manga / %3 ch (%4)"
 msgstr ""
 
-#: downloadsbrowser.lua:157
+#: downloadsbrowser.lua:159
 msgid "Idle · Saved: %1 manga / %2 ch (%3)"
 msgstr ""
 
-#: downloadsbrowser.lua:171
+#: downloadsbrowser.lua:173
 msgid "Paused #%1"
 msgstr ""
 
-#: downloadsbrowser.lua:173
+#: downloadsbrowser.lua:175
 msgid "Queued #%1"
 msgstr ""
 
-#: downloadsbrowser.lua:175 koobonebrowser.lua:242
+#: downloadsbrowser.lua:177 koobonebrowser.lua:242
 msgid "Failed"
 msgstr ""
 
-#: downloadsbrowser.lua:177 globalsearchbrowser.lua:312 koobonebrowser.lua:507
-#: mangabrowser.lua:851 subprocess.lua:297 subprocess.lua:378
+#: downloadsbrowser.lua:179 globalsearchbrowser.lua:313
+#: globalsearchbrowser.lua:332 koobonebrowser.lua:507 mangabrowser.lua:955
+#: subprocess.lua:321 subprocess.lua:396
 msgid "Cancelled"
 msgstr "Zrušeno"
 
-#: downloadsbrowser.lua:179
+#: downloadsbrowser.lua:181
 msgid "Done ✓"
 msgstr ""
 
-#: downloadsbrowser.lua:222
+#: downloadsbrowser.lua:224
 msgid "Paused"
 msgstr ""
 
-#: downloadsbrowser.lua:223
+#: downloadsbrowser.lua:225
 msgid "%1 remaining"
 msgstr ""
 
-#: downloadsbrowser.lua:225
+#: downloadsbrowser.lua:227
 msgid "── Download Queue (%1) ──"
 msgstr ""
 
-#: downloadsbrowser.lua:245
+#: downloadsbrowser.lua:247
 msgid "No active download tasks in queue."
 msgstr ""
 
-#: downloadsbrowser.lua:256
+#: downloadsbrowser.lua:258
 msgid "── Downloaded Books (%1) ──"
 msgstr ""
 
-#: downloadsbrowser.lua:267
+#: downloadsbrowser.lua:269
 msgid "All %1 ch · %2"
 msgstr ""
 
-#: downloadsbrowser.lua:269
+#: downloadsbrowser.lua:271
 msgid "%1/%2 ch · %3"
 msgstr ""
 
-#: downloadsbrowser.lua:271
+#: downloadsbrowser.lua:273
 msgid "%1 ch · %2"
 msgstr ""
 
-#: downloadsbrowser.lua:281 downloadsbrowser.lua:314
+#: downloadsbrowser.lua:283 downloadsbrowser.lua:320
 msgid "No downloaded chapters yet."
 msgstr "Zatím nejsou stažené žádné kapitoly."
 
-#: downloadsbrowser.lua:295
+#: downloadsbrowser.lua:301
 #, fuzzy
 msgid "── Downloaded Chapters (%1) ──"
 msgstr "Stažené kapitoly"
 
-#: downloadsbrowser.lua:304 downloadsbrowser.lua:541 koobonebrowser.lua:225
-#: mangabrowser.lua:469
+#: downloadsbrowser.lua:310 downloadsbrowser.lua:575 koobonebrowser.lua:225
+#: mangabrowser.lua:464
 msgid "Read"
 msgstr "Přečteno"
 
-#: downloadsbrowser.lua:333
+#: downloadsbrowser.lua:339
 msgid ""
 "Could not load downloads:\n"
 "%1"
@@ -132,85 +138,85 @@ msgstr ""
 "Stažené kapitoly se nepodařilo načíst:\n"
 "%1"
 
-#: downloadsbrowser.lua:347
+#: downloadsbrowser.lua:353
 msgid "View: Queue + Chapters"
 msgstr ""
 
-#: downloadsbrowser.lua:348
+#: downloadsbrowser.lua:354
 msgid "View: Grouped by Book"
 msgstr ""
 
-#: downloadsbrowser.lua:349
+#: downloadsbrowser.lua:355
 msgid "View: Queue Only"
 msgstr ""
 
-#: downloadsbrowser.lua:371
+#: downloadsbrowser.lua:377
 msgid "Pause download queue"
 msgstr ""
 
-#: downloadsbrowser.lua:371
+#: downloadsbrowser.lua:377
 #, fuzzy
 msgid "Resume download queue"
 msgstr "Odstranit stažení"
 
-#: downloadsbrowser.lua:386
+#: downloadsbrowser.lua:392
 msgid "Retry failed/cancelled (%1)"
 msgstr ""
 
-#: downloadsbrowser.lua:397
+#: downloadsbrowser.lua:403
 msgid "Cancel all pending (%1)"
 msgstr ""
 
-#: downloadsbrowser.lua:401
+#: downloadsbrowser.lua:407
 msgid "Cancel %1 active/queued download(s)?"
 msgstr ""
 
-#: downloadsbrowser.lua:402
+#: downloadsbrowser.lua:408
 #, fuzzy
 msgid "Cancel downloads"
 msgstr "Stáhnout znovu"
 
-#: downloadsbrowser.lua:414
+#: downloadsbrowser.lua:420
 msgid "Clear finished queue history"
 msgstr ""
 
-#: downloadsbrowser.lua:424
+#: downloadsbrowser.lua:430
 msgid "Refresh status"
 msgstr ""
 
-#: downloadsbrowser.lua:446
+#: downloadsbrowser.lua:452
 #, fuzzy
 msgid "Download next (prioritize)"
 msgstr "Stáhnout další kapitoly"
 
-#: downloadsbrowser.lua:457
+#: downloadsbrowser.lua:463
 msgid "Cancel this download"
 msgstr ""
 
-#: downloadsbrowser.lua:468
+#: downloadsbrowser.lua:474
 #, fuzzy
 msgid "Retry download"
 msgstr "Stáhnout znovu"
 
-#: downloadsbrowser.lua:479
+#: downloadsbrowser.lua:485
 msgid "Open chapter"
 msgstr ""
 
-#: downloadsbrowser.lua:489
+#: downloadsbrowser.lua:495
 #, fuzzy
 msgid "Remove from queue list"
 msgstr "Odebrat '%1' z knihovny?"
 
-#: downloadsbrowser.lua:507
+#: downloadsbrowser.lua:513
 msgid "Download no longer available."
 msgstr "Stažení již není k dispozici."
 
-#: downloadsbrowser.lua:554
+#: downloadsbrowser.lua:588
 #, fuzzy
 msgid "%1 downloaded chapters (%2)"
 msgstr "Stažené kapitoly"
 
-#: downloadsbrowser.lua:568
+#: downloadsbrowser.lua:602
 #, fuzzy
 msgid ""
 "Remove download?\n"
@@ -221,35 +227,35 @@ msgstr ""
 "\n"
 "%1"
 
-#: downloadsbrowser.lua:569 downloadsbrowser.lua:663 downloadsbrowser.lua:683
-#: librarybrowser.lua:1415 librarybrowser.lua:1431 sourcesbrowser.lua:198
+#: downloadsbrowser.lua:603 downloadsbrowser.lua:697 downloadsbrowser.lua:717
+#: librarybrowser.lua:1429 librarybrowser.lua:1445 sourcesbrowser.lua:198
 msgid "Remove"
 msgstr "Odstranit"
 
-#: downloadsbrowser.lua:619
+#: downloadsbrowser.lua:653
 #, fuzzy
 msgid "View downloaded chapters"
 msgstr "Stažené kapitoly"
 
-#: downloadsbrowser.lua:628
+#: downloadsbrowser.lua:662
 msgid "Open manga detail page"
 msgstr ""
 
-#: downloadsbrowser.lua:634 nextchapter.lua:187
+#: downloadsbrowser.lua:668 nextchapter.lua:217
 msgid "Source no longer installed."
 msgstr "Zdroj již není nainstalován."
 
-#: downloadsbrowser.lua:658
+#: downloadsbrowser.lua:692
 #, fuzzy
 msgid "Remove all %1 downloaded chapters"
 msgstr "Zatím nejsou stažené žádné kapitoly."
 
-#: downloadsbrowser.lua:662 librarybrowser.lua:1414
+#: downloadsbrowser.lua:696 librarybrowser.lua:1428
 #, fuzzy
 msgid "Remove all %1 downloaded chapters of '%2'?"
 msgstr "Zatím nejsou stažené žádné kapitoly."
 
-#: downloadsbrowser.lua:682
+#: downloadsbrowser.lua:716
 msgid ""
 "Remove download?\n"
 "\n"
@@ -259,121 +265,149 @@ msgstr ""
 "\n"
 "%1"
 
-#: downloadsengine.lua:321
+#: downloadsengine.lua:564
 msgid "Could not read the downloads index."
 msgstr "Nelze načíst index stažených souborů."
 
-#: engine.lua:35
+#: engine.lua:43
 msgid "Fetching repository…"
 msgstr "Načítání repozitáře…"
 
-#: engine.lua:39
+#: engine.lua:47
 msgid "Installing…"
 msgstr "Instalace…"
 
-#: engine.lua:43
+#: engine.lua:51
 msgid "Loading cookies…"
 msgstr "Načítání cookies…"
 
-#: engine.lua:51
+#: engine.lua:59
 msgid "Checking for updates…"
 msgstr "Kontrola aktualizací…"
 
-#: engine.lua:55
+#: engine.lua:63
 msgid "Downloading update…"
 msgstr "Stahování aktualizace…"
 
-#: engine.lua:59
+#: engine.lua:67
 msgid "Loading source…"
 msgstr "Načítání zdroje…"
 
-#: engine.lua:122
+#: engine.lua:130
 msgid "Could not write search filters"
 msgstr ""
 
-#: engine.lua:126
+#: engine.lua:134 engine.lua:440
 msgid "Searching…"
 msgstr "Hledání…"
 
-#: engine.lua:134
+#: engine.lua:142
 msgid "Loading filters…"
 msgstr "Načítání filtrů…"
 
-#: engine.lua:138
+#: engine.lua:146
 msgid "Loading settings…"
-msgstr "Načítání nastavení…"
-
-#: engine.lua:161
-#, fuzzy
-msgid "Logging in…"
 msgstr "Načítání nastavení…"
 
 #: engine.lua:169
 #, fuzzy
+msgid "Logging in…"
+msgstr "Načítání nastavení…"
+
+#: engine.lua:177
+#, fuzzy
 msgid "Logging out…"
 msgstr "Načítání zdroje…"
 
-#: engine.lua:173
+#: engine.lua:181
 #, fuzzy
 msgid "Updating…"
 msgstr "Hledání…"
 
-#: engine.lua:177
+#: engine.lua:185
 #, fuzzy
 msgid "Loading listings…"
 msgstr "Načítání nastavení…"
 
-#: engine.lua:183
+#: engine.lua:191
 #, fuzzy
 msgid "Loading…"
 msgstr "Načítání zdroje…"
 
-#: engine.lua:189
+#: engine.lua:197
 msgid "Signing in to Kox.moe…"
 msgstr ""
 
-#: engine.lua:193
+#: engine.lua:201
 msgid "Signing out…"
 msgstr ""
 
-#: engine.lua:201
+#: engine.lua:209
 msgid "Refreshing account status…"
 msgstr ""
 
-#: engine.lua:207
+#: engine.lua:215
 msgid "Pushing to Koobone…"
 msgstr ""
 
-#: engine.lua:213
+#: engine.lua:221
 #, fuzzy
 msgid "Loading Koobone bookshelf…"
 msgstr "Načítání cookies…"
 
-#: engine.lua:224
+#: engine.lua:232
 #, fuzzy
 msgid "Loading Koobone volumes…"
 msgstr "Načítání cookies…"
 
-#: engine.lua:242
+#: engine.lua:250
 msgid "Syncing Koobone bookshelf…"
 msgstr ""
 
-#: engine.lua:250
+#: engine.lua:258
 msgid "Loading chapters…"
 msgstr "Načítání kapitol…"
 
-#: engine.lua:323
-msgid "Downloading chapter…"
-msgstr "Stahování kapitoly…"
-
-#: engine.lua:363
+#: engine.lua:282
 #, fuzzy
-msgid "Could not encode cover request"
+msgid "Could not encode request payload"
 msgstr ""
 "Aktualizace se nepodařilo zkontrolovat:\n"
 "%1"
 
-#: engine.lua:373
+#: engine.lua:292
+#, fuzzy
+msgid "Could not write request payload"
+msgstr ""
+"Aktualizace se nepodařilo zkontrolovat:\n"
+"%1"
+
+#: engine.lua:338
+msgid "Downloading chapter…"
+msgstr "Stahování kapitoly…"
+
+#: engine.lua:411
+#, fuzzy
+msgid "Downloading chapters…"
+msgstr "Stahování kapitoly…"
+
+#: engine.lua:439 globalsearchbrowser.lua:311 subprocess.lua:420
+#, fuzzy
+msgid "Searching (%1/%2): %3…"
+msgstr "Hledání…"
+
+#: engine.lua:452 subprocess.lua:435
+msgid "Invalid response from aidoku-run"
+msgstr ""
+
+#: engine.lua:484
+#, fuzzy
+msgid "Could not decode epub-remove result"
+msgstr ""
+"Aktualizace se nepodařilo zkontrolovat:\n"
+"%1"
+
+#: engine.lua:494
 #, fuzzy
 msgid "Could not write cover request"
 msgstr ""
@@ -384,7 +418,7 @@ msgstr ""
 msgid "Search filters"
 msgstr "Filtry vyhledávání"
 
-#: filterbrowser.lua:73 filterbrowser.lua:151 mangabrowser.lua:155
+#: filterbrowser.lua:73 filterbrowser.lua:151 mangabrowser.lua:157
 msgid "Sort: %1"
 msgstr "Řazení: %1"
 
@@ -441,7 +475,7 @@ msgstr "Hledat s těmito filtry"
 msgid "Any"
 msgstr "Libovolné"
 
-#: globalsearchbrowser.lua:42 globalsearchbrowser.lua:485
+#: globalsearchbrowser.lua:42 globalsearchbrowser.lua:519
 msgid "Multi-source Search"
 msgstr ""
 
@@ -490,7 +524,7 @@ msgstr ""
 msgid "Downloaded all %1 ch"
 msgstr "Stažené kapitoly"
 
-#: globalsearchbrowser.lua:191 librarybrowser.lua:968 mangabrowser.lua:147
+#: globalsearchbrowser.lua:191 librarybrowser.lua:970 mangabrowser.lua:149
 #: searchbrowser.lua:279
 #, fuzzy
 msgid "Downloaded %1 ch"
@@ -535,10 +569,10 @@ msgstr "Název…"
 msgid "Sources…"
 msgstr "Zdroje"
 
-#: globalsearchbrowser.lua:266 koobonebrowser.lua:435 mangabrowser.lua:804
-#: searchbrowser.lua:233 settingsbrowser.lua:206 settingsbrowser.lua:240
-#: settingsbrowser.lua:275 settingsbrowser.lua:305 settingsbrowser.lua:342
-#: settingsbrowser.lua:489 sourcesettingsbrowser.lua:457
+#: globalsearchbrowser.lua:266 koobonebrowser.lua:435 mangabrowser.lua:885
+#: searchbrowser.lua:233 settingsbrowser.lua:227 settingsbrowser.lua:261
+#: settingsbrowser.lua:296 settingsbrowser.lua:326 settingsbrowser.lua:363
+#: settingsbrowser.lua:510 sourcesettingsbrowser.lua:457
 #: sourcesettingsbrowser.lua:497
 msgid "Cancel"
 msgstr "Zrušit"
@@ -547,80 +581,75 @@ msgstr "Zrušit"
 msgid "Search"
 msgstr "Hledat"
 
-#: globalsearchbrowser.lua:310
-#, fuzzy
-msgid "Searching (%1/%2): %3…"
-msgstr "Hledání…"
-
-#: globalsearchbrowser.lua:336
+#: globalsearchbrowser.lua:370
 msgid "Search stopped early (%1 results kept)."
 msgstr ""
 
-#: globalsearchbrowser.lua:341
+#: globalsearchbrowser.lua:375
 #, fuzzy
 msgid "No results in the selected sources."
 msgstr "Žádné výsledky z žádného zdroje."
 
-#: globalsearchbrowser.lua:346
+#: globalsearchbrowser.lua:380
 msgid "Some sources failed: %1"
 msgstr "Některé zdroje selhaly: %1"
 
-#: globalsearchbrowser.lua:369
+#: globalsearchbrowser.lua:403
 msgid "Search keyword (%1/%2 sources)…"
 msgstr ""
 
-#: globalsearchbrowser.lua:379
+#: globalsearchbrowser.lua:413
 msgid "Select search sources (%1/%2)…"
 msgstr ""
 
-#: globalsearchbrowser.lua:388
+#: globalsearchbrowser.lua:422
 #, fuzzy
 msgid "Select all sources"
 msgstr "Hledat ve všech zdrojích"
 
-#: globalsearchbrowser.lua:399
+#: globalsearchbrowser.lua:433
 #, fuzzy
 msgid "Deselect all sources"
 msgstr "Hledat ve všech zdrojích"
 
-#: globalsearchbrowser.lua:410
+#: globalsearchbrowser.lua:444
 msgid "Invert selection"
 msgstr ""
 
-#: globalsearchbrowser.lua:418
+#: globalsearchbrowser.lua:452
 msgid "Back to last results (%1)"
 msgstr ""
 
-#: globalsearchbrowser.lua:488
+#: globalsearchbrowser.lua:522
 msgid "New search with current sources…"
 msgstr ""
 
-#: globalsearchbrowser.lua:495
+#: globalsearchbrowser.lua:529
 msgid "Change selected sources (%1/%2)…"
 msgstr ""
 
-#: globalsearchbrowser.lua:549
+#: globalsearchbrowser.lua:583
 msgid "Select ONLY this source & search…"
 msgstr ""
 
-#: globalsearchbrowser.lua:563
+#: globalsearchbrowser.lua:597
 msgid "Invert all selections"
 msgstr ""
 
-#: globalsearchbrowser.lua:592 mangabrowser.lua:221 searchbrowser.lua:388
+#: globalsearchbrowser.lua:626 mangabrowser.lua:223 searchbrowser.lua:388
 msgid "Could not update library."
 msgstr ""
 
-#: globalsearchbrowser.lua:600 mangabrowser.lua:229 searchbrowser.lua:396
+#: globalsearchbrowser.lua:634 mangabrowser.lua:231 searchbrowser.lua:396
 msgid "Added '%1' to library"
 msgstr "Přidáno do knihovny: '%1'"
 
-#: globalsearchbrowser.lua:600 mangabrowser.lua:229 searchbrowser.lua:396
+#: globalsearchbrowser.lua:634 mangabrowser.lua:231 searchbrowser.lua:396
 msgid "Removed '%1' from library"
 msgstr "Odebráno z knihovny: '%1'"
 
 #: koobonebrowser.lua:48 koobonebrowser.lua:268 koobonebrowser.lua:405
-#: koobonebrowser.lua:543 koobonebrowser.lua:654 settingsbrowser.lua:122
+#: koobonebrowser.lua:543 koobonebrowser.lua:654 settingsbrowser.lua:138
 #: sourcesbrowser.lua:172 sourcesettingsbrowser.lua:252
 msgid "Koobone Bookshelf"
 msgstr ""
@@ -657,7 +686,7 @@ msgstr ""
 msgid "DL…"
 msgstr ""
 
-#: koobonebrowser.lua:239 mangabrowser.lua:483
+#: koobonebrowser.lua:239 mangabrowser.lua:478
 msgid "Queued"
 msgstr ""
 
@@ -688,7 +717,7 @@ msgstr ""
 msgid "» Offline download remaining %1 volume(s)"
 msgstr ""
 
-#: koobonebrowser.lua:306 mangabrowser.lua:453
+#: koobonebrowser.lua:306 mangabrowser.lua:448
 msgid "Sync >"
 msgstr ""
 
@@ -743,7 +772,7 @@ msgstr ""
 msgid "Queued %1 volume(s) of '%2' from Koobone for offline reading."
 msgstr "Žádné kapitoly ke stažení."
 
-#: koobonebrowser.lua:407 mangabrowser.lua:719
+#: koobonebrowser.lua:407 mangabrowser.lua:800
 msgid "Stay Here"
 msgstr ""
 
@@ -773,12 +802,13 @@ msgstr ""
 "Stahování selhalo:\n"
 "%1"
 
-#: koobonebrowser.lua:491 mangabrowser.lua:843
+#: koobonebrowser.lua:491 mangabrowser.lua:947
 #, fuzzy
 msgid "Downloading %1"
 msgstr "Stahování %1/%2: %3"
 
-#: koobonebrowser.lua:508 mangabrowser.lua:852 nextchapter.lua:212
+#: koobonebrowser.lua:508 mangabrowser.lua:956 nextchapter.lua:263
+#: nextchapter.lua:287
 msgid ""
 "Download failed:\n"
 "%1"
@@ -806,7 +836,7 @@ msgstr ""
 msgid "Auto-add synced series to Library"
 msgstr ""
 
-#: koobonebrowser.lua:580 librarybrowser.lua:1078 mangabrowser.lua:286
+#: koobonebrowser.lua:580 librarybrowser.lua:1080 mangabrowser.lua:288
 #, fuzzy
 msgid "Download Manager (%1 active)"
 msgstr "Stáhnout další kapitoly"
@@ -851,104 +881,104 @@ msgstr "Stáhnout znovu"
 msgid "Remove local offline file"
 msgstr ""
 
-#: librarybrowser.lua:63
+#: librarybrowser.lua:65
 msgid "Compact list (title only)"
 msgstr ""
 
-#: librarybrowser.lua:64 settingsbrowser.lua:58
+#: librarybrowser.lua:66 settingsbrowser.lua:58
 msgid "Compact list"
 msgstr ""
 
-#: librarybrowser.lua:68 settingsbrowser.lua:54
+#: librarybrowser.lua:70 settingsbrowser.lua:54
 msgid "List (cover + title)"
 msgstr ""
 
-#: librarybrowser.lua:69
+#: librarybrowser.lua:71
 msgid "List"
 msgstr ""
 
-#: librarybrowser.lua:73
+#: librarybrowser.lua:75
 msgid "Grid (cover + title)"
 msgstr ""
 
-#: librarybrowser.lua:74 settingsbrowser.lua:56
+#: librarybrowser.lua:76 settingsbrowser.lua:56
 msgid "Grid"
 msgstr ""
 
-#: librarybrowser.lua:562 librarybrowser.lua:1005 main.lua:347 main.lua:420
-#: simpleui_bridge.lua:1250 sui_module_tsundoku.lua:251
+#: librarybrowser.lua:564 librarybrowser.lua:1007 main.lua:407 main.lua:480
+#: simpleui_bridge.lua:1381 sui_module_tsundoku.lua:345
 #, fuzzy
 msgid "Manga Library"
 msgstr "Knihovna"
 
-#: librarybrowser.lua:898 settingsbrowser.lua:166
+#: librarybrowser.lua:899 settingsbrowser.lua:187
 msgid "Ephemeral Mode"
 msgstr "Dočasný režim"
 
-#: librarybrowser.lua:902
+#: librarybrowser.lua:903
 #, fuzzy
 msgid "Downloading (%1 in queue)"
 msgstr "Stahování %1/%2: %3"
 
-#: librarybrowser.lua:954
+#: librarybrowser.lua:956
 msgid "DL %1"
 msgstr ""
 
-#: librarybrowser.lua:962
+#: librarybrowser.lua:964
 #, fuzzy
 msgid "Downloaded all (%1 ch)"
 msgstr "Stažené kapitoly"
 
-#: librarybrowser.lua:965 mangabrowser.lua:145
+#: librarybrowser.lua:967 mangabrowser.lua:147
 #, fuzzy
 msgid "Downloaded %1/%2 ch"
 msgstr "Stahování %1/%2: %3"
 
 #. TRANSLATORS: KOReader mirrors the layout for RTL languages, so the menu button is top right there.
-#: librarybrowser.lua:991
+#: librarybrowser.lua:993
 msgid "Library is empty. Use the menu (top left) to find manga."
 msgstr "Knihovna je prázdná. Mangu najdete v nabídce (vlevo nahoře)."
 
-#: librarybrowser.lua:1042 settingsbrowser.lua:132
+#: librarybrowser.lua:1044 settingsbrowser.lua:148
 #, fuzzy
 msgid "Library view"
 msgstr "Knihovna"
 
-#: librarybrowser.lua:1068
+#: librarybrowser.lua:1070
 msgid "Sort: Name"
 msgstr "Řazení: Název"
 
-#: librarybrowser.lua:1069
+#: librarybrowser.lua:1071
 msgid "Sort: Last read"
 msgstr "Řazení: Naposledy čteno"
 
-#: librarybrowser.lua:1070
+#: librarybrowser.lua:1072
 #, fuzzy
 msgid "Sort: Downloaded first"
 msgstr "Řazení: Nejstarší první"
 
-#: librarybrowser.lua:1087
+#: librarybrowser.lua:1089
 msgid "Multi-source Search…"
 msgstr ""
 
-#: librarybrowser.lua:1106 searchbrowser.lua:86
+#: librarybrowser.lua:1108 searchbrowser.lua:86
 msgid "Koobone Bookshelf…"
 msgstr ""
 
-#: librarybrowser.lua:1132
+#: librarybrowser.lua:1134
 msgid "View: %1…"
 msgstr ""
 
-#: librarybrowser.lua:1148 main.lua:457 settingsbrowser.lua:83
-#: settingsbrowser.lua:183
+#: librarybrowser.lua:1150 main.lua:517 settingsbrowser.lua:99
+#: settingsbrowser.lua:204
 msgid "Settings"
 msgstr "Nastavení"
 
-#: librarybrowser.lua:1172
+#: librarybrowser.lua:1174
 msgid "Check for Updates"
 msgstr "Zkontrolovat aktualizace"
 
-#: librarybrowser.lua:1200
+#: librarybrowser.lua:1202
 msgid ""
 "Could not check for updates:\n"
 "%1"
@@ -956,11 +986,11 @@ msgstr ""
 "Aktualizace se nepodařilo zkontrolovat:\n"
 "%1"
 
-#: librarybrowser.lua:1205
+#: librarybrowser.lua:1207
 msgid "Plugin is up to date (%1)."
 msgstr "Plugin je aktuální (%1)."
 
-#: librarybrowser.lua:1213
+#: librarybrowser.lua:1215
 msgid ""
 "Update available: %1\n"
 "Installed: %2"
@@ -968,11 +998,11 @@ msgstr ""
 "Dostupná aktualizace: %1\n"
 "Nainstalováno: %2"
 
-#: librarybrowser.lua:1215
+#: librarybrowser.lua:1217
 msgid "unknown"
 msgstr "neznámá"
 
-#: librarybrowser.lua:1219
+#: librarybrowser.lua:1221
 msgid ""
 "Latest: %1\n"
 "Installed version unknown."
@@ -980,11 +1010,11 @@ msgstr ""
 "Nejnovější: %1\n"
 "Nainstalovaná verze není známa."
 
-#: librarybrowser.lua:1225
+#: librarybrowser.lua:1227
 msgid "Download & Install"
 msgstr "Stáhnout a nainstalovat"
 
-#: librarybrowser.lua:1237
+#: librarybrowser.lua:1239
 msgid ""
 "Update failed:\n"
 "%1"
@@ -992,20 +1022,20 @@ msgstr ""
 "Aktualizace selhala:\n"
 "%1"
 
-#: librarybrowser.lua:1241
+#: librarybrowser.lua:1243
 msgid "Updated to %1. Restart KOReader to apply."
 msgstr "Aktualizováno na %1. Pro použití restartujte KOReader."
 
-#: librarybrowser.lua:1268
+#: librarybrowser.lua:1270
 msgid "'%1' is no longer installed. Hold to remove it."
 msgstr "'%1' již není nainstalováno. Podržením jej odstraníte."
 
-#: librarybrowser.lua:1299
+#: librarybrowser.lua:1301
 #, fuzzy
 msgid "'%1' is no longer installed."
 msgstr "Zdroj již není nainstalován."
 
-#: librarybrowser.lua:1308 mangabrowser.lua:547
+#: librarybrowser.lua:1310 mangabrowser.lua:602
 msgid ""
 "Could not load chapters:\n"
 "%1"
@@ -1013,259 +1043,259 @@ msgstr ""
 "Kapitoly se nepodařilo načíst:\n"
 "%1"
 
-#: librarybrowser.lua:1349 mangabrowser.lua:746
+#: librarybrowser.lua:1363 mangabrowser.lua:827
 msgid "All %1 chapters are already downloaded locally."
 msgstr ""
 
-#: librarybrowser.lua:1362
+#: librarybrowser.lua:1376
 #, fuzzy
 msgid "Queued %1 chapter(s) of '%2' for download."
 msgstr "Žádné kapitoly ke stažení."
 
-#: librarybrowser.lua:1363 mangabrowser.lua:718
+#: librarybrowser.lua:1377 mangabrowser.lua:799
 msgid "View Progress"
 msgstr ""
 
-#: librarybrowser.lua:1364
+#: librarybrowser.lua:1378
 msgid "OK"
 msgstr ""
 
-#: librarybrowser.lua:1390
+#: librarybrowser.lua:1404
 msgid "Open chapter list"
 msgstr ""
 
-#: librarybrowser.lua:1400
+#: librarybrowser.lua:1414
 #, fuzzy
 msgid "Download all chapters"
 msgstr "Stažené kapitoly"
 
-#: librarybrowser.lua:1410
+#: librarybrowser.lua:1424
 #, fuzzy
 msgid "Delete %1 downloaded chapter(s)…"
 msgstr "Stažené kapitoly"
 
-#: librarybrowser.lua:1426
+#: librarybrowser.lua:1440
 #, fuzzy
 msgid "Remove from library…"
 msgstr "Odebráno z knihovny: '%1'"
 
-#: librarybrowser.lua:1430
+#: librarybrowser.lua:1444
 msgid "Remove '%1' from your library?"
 msgstr "Odebrat '%1' z knihovny?"
 
-#: main.lua:325
+#: main.lua:385
 msgid "Open Manga Series"
 msgstr ""
 
-#: main.lua:353 main.lua:426 simpleui_bridge.lua:1257
-#: sui_module_tsundoku.lua:259
+#: main.lua:413 main.lua:486 simpleui_bridge.lua:1388
+#: sui_module_tsundoku.lua:353
 #, fuzzy
 msgid "Search Manga"
 msgstr "Hledat mangu"
 
-#: main.lua:359 main.lua:432 simpleui_bridge.lua:1263
-#: sui_module_tsundoku.lua:267
+#: main.lua:419 main.lua:492 simpleui_bridge.lua:1394
+#: sui_module_tsundoku.lua:361
 msgid "Refresh Koobone"
 msgstr ""
 
-#: main.lua:365 main.lua:438 simpleui_bridge.lua:1277
+#: main.lua:425 main.lua:498 simpleui_bridge.lua:1408
 msgid "Koobone Shelf"
 msgstr ""
 
-#: main.lua:371 main.lua:445 sui_module_tsundoku.lua:283
+#: main.lua:431 main.lua:505 sui_module_tsundoku.lua:377
 #, fuzzy
 msgid "Downloads"
 msgstr "Stáhnout"
 
-#: main.lua:379
+#: main.lua:439
 msgid "aidoku-run binary not found. Rebuild the plugin with koreader/build.sh."
 msgstr ""
 "Program aidoku-run nebyl nalezen. Sestavte plugin znovu pomocí koreader/"
 "build.sh."
 
-#: main.lua:385
+#: main.lua:445
 msgid "Could not open the downloads database. Is storage writable?"
 msgstr "Databázi stažených kapitol nelze otevřít. Je úložiště zapisovatelné?"
 
-#: main.lua:397
+#: main.lua:457
 msgid "Current Manga"
 msgstr ""
 
-#: main.lua:399
+#: main.lua:459
 #, fuzzy
 msgid "Current: %1"
 msgstr "Řazení: %1"
 
-#: main.lua:405
+#: main.lua:465
 #, fuzzy
 msgid "Next Chapter"
 msgstr "Další kapitola zatím není."
 
-#: main.lua:411
+#: main.lua:471
 msgid "Previous Chapter"
 msgstr ""
 
-#: main.lua:451
+#: main.lua:511
 #, fuzzy
 msgid "Manga Sources"
 msgstr "Zdroje"
 
-#: main.lua:565
+#: main.lua:625
 msgid "Please log in to Koobone first."
 msgstr ""
 
-#: main.lua:576
+#: main.lua:636
 #, fuzzy
 msgid "Syncing Koobone subscriptions…"
 msgstr "Načítání cookies…"
 
-#: main.lua:595
+#: main.lua:655
 msgid "Koobone sync is already running…"
 msgstr ""
 
-#: main.lua:604
+#: main.lua:664
 #, fuzzy
 msgid "Koobone sync failed: %1"
 msgstr "Některé zdroje selhaly: %1"
 
-#: main.lua:610
+#: main.lua:670
 msgid "Koobone: queued %1 new chapters."
 msgstr ""
 
-#: main.lua:612
+#: main.lua:672
 #, fuzzy
 msgid "Koobone: added %1 series to library."
 msgstr "Přidáno do knihovny: '%1'"
 
-#: main.lua:614
+#: main.lua:674
 #, fuzzy
 msgid "Koobone is up to date (%1 items)."
 msgstr "Plugin je aktuální (%1)."
 
-#: main.lua:763
+#: main.lua:824 main.lua:850
 #, fuzzy
 msgid "No adjacent downloaded chapters found."
 msgstr "Zatím nejsou stažené žádné kapitoly."
 
-#: main.lua:781
+#: main.lua:832 main.lua:868
 #, fuzzy
 msgid "Already at first downloaded chapter."
 msgstr "Stažené kapitoly"
 
-#: main.lua:781
+#: main.lua:832 main.lua:868
 #, fuzzy
 msgid "Already at latest downloaded chapter."
 msgstr "Zatím nejsou stažené žádné kapitoly."
 
-#: mangabrowser.lua:44
+#: mangabrowser.lua:46
 msgid "Default (Newest chapter first)"
 msgstr ""
 
-#: mangabrowser.lua:44 mangabrowser.lua:58
+#: mangabrowser.lua:46 mangabrowser.lua:60
 msgid "Newest"
 msgstr ""
 
-#: mangabrowser.lua:45
+#: mangabrowser.lua:47
 msgid "Default (Oldest chapter first)"
 msgstr ""
 
-#: mangabrowser.lua:45
+#: mangabrowser.lua:47
 msgid "Oldest"
 msgstr ""
 
-#: mangabrowser.lua:46
+#: mangabrowser.lua:48
 msgid "By Name (A → Z)"
 msgstr ""
 
-#: mangabrowser.lua:46
+#: mangabrowser.lua:48
 msgid "Name ↑"
 msgstr ""
 
-#: mangabrowser.lua:47
+#: mangabrowser.lua:49
 msgid "By Name (Z → A)"
 msgstr ""
 
-#: mangabrowser.lua:47
+#: mangabrowser.lua:49
 msgid "Name ↓"
 msgstr ""
 
-#: mangabrowser.lua:48
+#: mangabrowser.lua:50
 msgid "By Update Time (Latest first)"
 msgstr ""
 
-#: mangabrowser.lua:48
+#: mangabrowser.lua:50
 msgid "Updated ↓"
 msgstr ""
 
-#: mangabrowser.lua:49
+#: mangabrowser.lua:51
 msgid "By Update Time (Earliest first)"
 msgstr ""
 
-#: mangabrowser.lua:49
+#: mangabrowser.lua:51
 msgid "Updated ↑"
 msgstr ""
 
-#: mangabrowser.lua:143
+#: mangabrowser.lua:145
 #, fuzzy
 msgid "✓ All %1 ch downloaded"
 msgstr "Již staženo."
 
-#: mangabrowser.lua:149
+#: mangabrowser.lua:151
 msgid "%1 ch"
 msgstr ""
 
-#: mangabrowser.lua:153
+#: mangabrowser.lua:155
 msgid "Queue %1"
 msgstr ""
 
-#: mangabrowser.lua:186
+#: mangabrowser.lua:188
 #, fuzzy
 msgid "Sort chapters by"
 msgstr "Další kapitola zatím není."
 
-#: mangabrowser.lua:243
+#: mangabrowser.lua:245
 #, fuzzy
 msgid "Sort chapters: %1…"
 msgstr "Načítání kapitol…"
 
-#: mangabrowser.lua:253 mangabrowser.lua:859 mangabrowser.lua:939
+#: mangabrowser.lua:255 mangabrowser.lua:1041
 #, fuzzy
 msgid "Check online chapters"
 msgstr "Stažené kapitoly"
 
-#: mangabrowser.lua:267
+#: mangabrowser.lua:269
 #, fuzzy
 msgid "Download all chapters (%1 remaining)…"
 msgstr "Stáhnout další kapitoly…"
 
-#: mangabrowser.lua:268
+#: mangabrowser.lua:270
 #, fuzzy
 msgid "Download all chapters…"
 msgstr "Stáhnout další kapitoly…"
 
-#: mangabrowser.lua:277
+#: mangabrowser.lua:279
 msgid "Download next chapters…"
 msgstr "Stáhnout další kapitoly…"
 
-#: mangabrowser.lua:298
+#: mangabrowser.lua:300
 msgid "Push all chapters to Koobone…"
 msgstr ""
 
-#: mangabrowser.lua:307
+#: mangabrowser.lua:309
 #, fuzzy
 msgid "Add to library"
 msgstr "Přidáno do knihovny: '%1'"
 
-#: mangabrowser.lua:307
+#: mangabrowser.lua:309
 #, fuzzy
 msgid "Remove from library"
 msgstr "Odebráno z knihovny: '%1'"
 
-#: mangabrowser.lua:315
+#: mangabrowser.lua:317
 msgid "Reset reading progress…"
 msgstr "Resetovat průběh čtení…"
 
-#: mangabrowser.lua:332
+#: mangabrowser.lua:334
 msgid ""
 "Reset progress for %1?\n"
 "\n"
@@ -1275,15 +1305,15 @@ msgstr ""
 "\n"
 "Smaže značky přečtení a pozice stránek."
 
-#: mangabrowser.lua:334
+#: mangabrowser.lua:336
 msgid "Reset"
 msgstr "Resetovat"
 
-#: mangabrowser.lua:365
+#: mangabrowser.lua:367
 msgid "No pushable Kox volumes found."
 msgstr ""
 
-#: mangabrowser.lua:372
+#: mangabrowser.lua:374
 #, fuzzy
 msgid ""
 "Push to Koobone failed:\n"
@@ -1292,96 +1322,96 @@ msgstr ""
 "Aktualizace selhala:\n"
 "%1"
 
-#: mangabrowser.lua:376
+#: mangabrowser.lua:378
 msgid "Pushed to Koobone."
 msgstr ""
 
-#: mangabrowser.lua:389
+#: mangabrowser.lua:391
 msgid "Push all %1 volume(s) of '%2' to Koobone?"
 msgstr ""
 
-#: mangabrowser.lua:390 mangabrowser.lua:1002
+#: mangabrowser.lua:392 mangabrowser.lua:1104
 msgid "Push to Koobone"
 msgstr ""
 
-#: mangabrowser.lua:423
+#: mangabrowser.lua:418
 #, fuzzy
 msgid "▶ Continue: %1"
 msgstr "Pokračovat na '%1'?"
 
-#: mangabrowser.lua:424
+#: mangabrowser.lua:419
 #, fuzzy
 msgid "Read >"
 msgstr "Přečteno"
 
-#: mangabrowser.lua:435
+#: mangabrowser.lua:430
 #, fuzzy
 msgid "▶ Downloading (%1 in queue) · Tap for options"
 msgstr "Stahování %1/%2: %3"
 
-#: mangabrowser.lua:437
+#: mangabrowser.lua:432
 #, fuzzy
 msgid "✓ All %1 chapters downloaded · Options"
 msgstr "Již staženo."
 
-#: mangabrowser.lua:439
+#: mangabrowser.lua:434
 msgid "» Batch Download (%1/%2 left) & Sort…"
 msgstr ""
 
-#: mangabrowser.lua:441
+#: mangabrowser.lua:436
 msgid "» Chapter Sort & Options…"
 msgstr ""
 
-#: mangabrowser.lua:445
+#: mangabrowser.lua:440
 #, fuzzy
 msgid "Sort: %1 >"
 msgstr "Řazení: %1"
 
-#: mangabrowser.lua:452
+#: mangabrowser.lua:447
 #, fuzzy
 msgid "↻ Check online chapters"
 msgstr "Stažené kapitoly"
 
-#: mangabrowser.lua:480
+#: mangabrowser.lua:475
 msgid "▶ DL…"
 msgstr ""
 
-#: mangabrowser.lua:485
+#: mangabrowser.lua:480
 msgid "✗ Failed"
 msgstr ""
 
-#: mangabrowser.lua:629
+#: mangabrowser.lua:685
 msgid "Resume reading from %1?"
 msgstr "Pokračovat ve čtení od %1?"
 
-#: mangabrowser.lua:630
+#: mangabrowser.lua:686
 msgid "Resume"
 msgstr "Pokračovat"
 
-#: mangabrowser.lua:631
+#: mangabrowser.lua:687
 msgid "Not now"
 msgstr "Teď ne"
 
-#: mangabrowser.lua:697
+#: mangabrowser.lua:778
 msgid "All selected chapters are already downloaded."
 msgstr ""
 
-#: mangabrowser.lua:711
+#: mangabrowser.lua:792
 msgid "Chapters are already in the download queue."
 msgstr ""
 
-#: mangabrowser.lua:717
+#: mangabrowser.lua:798
 msgid ""
 "Queued %1 chapter(s) for background download.\n"
 "\n"
 "You can keep browsing or open Download Manager to watch live progress."
 msgstr ""
 
-#: mangabrowser.lua:732 mangabrowser.lua:793
+#: mangabrowser.lua:813 mangabrowser.lua:874
 msgid "Chapters still loading. Try again shortly."
 msgstr "Kapitoly se stále načítají. Zkuste to za chvíli znovu."
 
-#: mangabrowser.lua:754
+#: mangabrowser.lua:835
 msgid ""
 "Download all chapters of '%1'?\n"
 "\n"
@@ -1390,75 +1420,75 @@ msgid ""
 "To download: %4"
 msgstr ""
 
-#: mangabrowser.lua:756
+#: mangabrowser.lua:837
 #, fuzzy
 msgid "Download %1 ch"
 msgstr "Stáhnout"
 
-#: mangabrowser.lua:766
+#: mangabrowser.lua:847
 msgid "No chapters to download."
 msgstr "Žádné kapitoly ke stažení."
 
-#: mangabrowser.lua:784 nextchapter.lua:154
+#: mangabrowser.lua:865 nextchapter.lua:182
 msgid "No next chapter yet."
 msgstr "Další kapitola zatím není."
 
-#: mangabrowser.lua:798
+#: mangabrowser.lua:879
 msgid "Download next chapters"
 msgstr "Stáhnout další kapitoly"
 
-#: mangabrowser.lua:799
+#: mangabrowser.lua:880
 #, fuzzy
 msgid "Chapters to queue in background, starting after the last one read."
 msgstr "Kapitoly ke stažení, počínaje první za naposledy přečtenou."
 
-#: mangabrowser.lua:809
+#: mangabrowser.lua:890
 msgid "Download"
 msgstr "Stáhnout"
 
-#: mangabrowser.lua:924
+#: mangabrowser.lua:1026
 msgid "Mark as read"
 msgstr "Označit jako přečtené"
 
-#: mangabrowser.lua:924
+#: mangabrowser.lua:1026
 msgid "Mark as unread"
 msgstr "Označit jako nepřečtené"
 
-#: mangabrowser.lua:952
+#: mangabrowser.lua:1054
 msgid "Cancel background download"
 msgstr ""
 
-#: mangabrowser.lua:961
+#: mangabrowser.lua:1063
 #, fuzzy
 msgid "Download in background"
 msgstr "Stahování aktualizace…"
 
-#: mangabrowser.lua:979
+#: mangabrowser.lua:1081
 #, fuzzy
 msgid "Download from this chapter onward"
 msgstr "Stáhnout další kapitoly"
 
-#: mangabrowser.lua:1013
+#: mangabrowser.lua:1115
 msgid "Re-download"
 msgstr "Stáhnout znovu"
 
-#: mangabrowser.lua:1020
+#: mangabrowser.lua:1122
 msgid "Remove download"
 msgstr "Odstranit stažení"
 
-#: nextchapter.lua:171 nextchapter.lua:230
+#: nextchapter.lua:201 nextchapter.lua:305
 msgid "Continue to '%1'?"
 msgstr "Pokračovat na '%1'?"
 
-#: nextchapter.lua:172 nextchapter.lua:231
+#: nextchapter.lua:202 nextchapter.lua:306
 msgid "Continue"
 msgstr "Pokračovat"
 
-#: nextchapter.lua:183
+#: nextchapter.lua:213
 msgid "Offline, and the next chapter isn't downloaded."
 msgstr "Offline a další kapitola není stažena."
 
-#: nextchapter.lua:192
+#: nextchapter.lua:222
 msgid ""
 "Could not check for next chapter:\n"
 "%1"
@@ -1466,7 +1496,12 @@ msgstr ""
 "Další kapitolu se nepodařilo zkontrolovat:\n"
 "%1"
 
-#: prefetch.lua:33
+#: nextchapter.lua:260
+#, fuzzy
+msgid "Downloading %1 chapter(s)…"
+msgstr "Stahování kapitoly…"
+
+#: prefetch.lua:34
 msgid "Chapter %1"
 msgstr "Kapitola %1"
 
@@ -1569,11 +1604,12 @@ msgstr ""
 msgid "No results."
 msgstr "Žádné výsledky."
 
-#: settingsbrowser.lua:44 settingsbrowser.lua:167 sourcesettingsbrowser.lua:164
+#: settingsbrowser.lua:44 settingsbrowser.lua:82 settingsbrowser.lua:188
+#: sourcesettingsbrowser.lua:164
 msgid "Off"
 msgstr "Vypnuto"
 
-#: settingsbrowser.lua:46
+#: settingsbrowser.lua:46 settingsbrowser.lua:79
 msgid "Auto"
 msgstr "Automaticky"
 
@@ -1589,124 +1625,152 @@ msgstr ""
 msgid "Auto (System)"
 msgstr ""
 
-#: settingsbrowser.lua:103
+#: settingsbrowser.lua:79
+msgid "Auto (Manga paged / Webtoon scroll)"
+msgstr ""
+
+#: settingsbrowser.lua:80
+msgid "Paged"
+msgstr ""
+
+#: settingsbrowser.lua:80
+msgid "Paged (Single page + Fit page)"
+msgstr ""
+
+#: settingsbrowser.lua:81
+msgid "Webtoon"
+msgstr ""
+
+#: settingsbrowser.lua:81
+msgid "Webtoon (Continuous + Fit width)"
+msgstr ""
+
+#: settingsbrowser.lua:82
+msgid "Off (Use KOReader defaults)"
+msgstr ""
+
+#: settingsbrowser.lua:119
 msgid "N/A"
 msgstr "N/A"
 
-#: settingsbrowser.lua:104 sourcesettingsbrowser.lua:169
+#: settingsbrowser.lua:120 sourcesettingsbrowser.lua:169
 msgid "none"
 msgstr "žádné"
 
-#: settingsbrowser.lua:106
+#: settingsbrowser.lua:122
 msgid " (using %1)"
 msgstr " (použito: %1)"
 
-#: settingsbrowser.lua:110 sourcesettingsbrowser.lua:159
+#: settingsbrowser.lua:126 sourcesettingsbrowser.lua:159
 #: sourcesettingsbrowser.lua:187
 msgid "not set"
 msgstr "nenastaveno"
 
-#: settingsbrowser.lua:112
+#: settingsbrowser.lua:128
 msgid "Custom"
 msgstr "Vlastní"
 
-#: settingsbrowser.lua:112
+#: settingsbrowser.lua:128
 msgid "Default"
 msgstr "Výchozí"
 
-#: settingsbrowser.lua:115
+#: settingsbrowser.lua:131
 msgid "Default (8)"
 msgstr "Výchozí (8)"
 
-#: settingsbrowser.lua:121
+#: settingsbrowser.lua:137
 msgid "Sources"
 msgstr "Zdroje"
 
-#: settingsbrowser.lua:127
+#: settingsbrowser.lua:143
 msgid "Language"
 msgstr ""
 
-#: settingsbrowser.lua:137 settingsbrowser.lua:200
+#: settingsbrowser.lua:153 settingsbrowser.lua:596
+msgid "Comic reader layout"
+msgstr ""
+
+#: settingsbrowser.lua:158 settingsbrowser.lua:221
 msgid "Prefetch next chapters"
 msgstr "Předběžně stahovat další kapitoly"
 
-#: settingsbrowser.lua:144
+#: settingsbrowser.lua:165
 msgid "Auto-advance at chapter end"
 msgstr "Automaticky přejít na konci kapitoly"
 
-#: settingsbrowser.lua:153 sui_module_tsundoku.lua:370
+#: settingsbrowser.lua:174 sui_module_tsundoku.lua:467
 msgid "Home screen series tap"
 msgstr ""
 
-#: settingsbrowser.lua:154
+#: settingsbrowser.lua:175
 #, fuzzy
 msgid "Resume reading"
 msgstr "Pokračovat ve čtení od %1?"
 
-#: settingsbrowser.lua:154
+#: settingsbrowser.lua:175
 #, fuzzy
 msgid "Series chapters"
 msgstr "Další kapitola zatím není."
 
-#: settingsbrowser.lua:159
+#: settingsbrowser.lua:180
 msgid "Storage limit"
 msgstr "Limit úložiště"
 
-#: settingsbrowser.lua:160 settingsbrowser.lua:267
+#: settingsbrowser.lua:181 settingsbrowser.lua:288
 msgid "Source repository URL"
 msgstr "URL repozitáře zdrojů"
 
-#: settingsbrowser.lua:161 settingsbrowser.lua:299
+#: settingsbrowser.lua:182 settingsbrowser.lua:320
 msgid "Network concurrency"
 msgstr "Souběžnost sítě"
 
-#: settingsbrowser.lua:167 sourcesettingsbrowser.lua:164
+#: settingsbrowser.lua:188 sourcesettingsbrowser.lua:164
 msgid "On"
 msgstr "Zapnuto"
 
-#: settingsbrowser.lua:171 settingsbrowser.lua:483
+#: settingsbrowser.lua:192 settingsbrowser.lua:504
 msgid "Ephemeral storage path"
 msgstr "Cesta dočasného úložiště"
 
-#: settingsbrowser.lua:175 settingsbrowser.lua:336
+#: settingsbrowser.lua:196 settingsbrowser.lua:357
 msgid "FlareSolverr host"
 msgstr "Server FlareSolverr"
 
-#: settingsbrowser.lua:176
+#: settingsbrowser.lua:197
 msgid "Import cookies"
 msgstr "Importovat cookies"
 
-#: settingsbrowser.lua:177
+#: settingsbrowser.lua:198
 msgid "Clear stored cookies"
 msgstr "Smazat uložené cookies"
 
-#: settingsbrowser.lua:201
+#: settingsbrowser.lua:222
 msgid "Chapters to download ahead while reading. 0 turns it off."
 msgstr "Počet kapitol stahovaných předem při čtení. 0 vypne."
 
-#: settingsbrowser.lua:211 settingsbrowser.lua:245 settingsbrowser.lua:280
-#: settingsbrowser.lua:310 settingsbrowser.lua:347 settingsbrowser.lua:494
+#: settingsbrowser.lua:232 settingsbrowser.lua:266 settingsbrowser.lua:301
+#: settingsbrowser.lua:331 settingsbrowser.lua:368 settingsbrowser.lua:515
 #: sourcesettingsbrowser.lua:462
 msgid "Set"
 msgstr "Nastavit"
 
-#: settingsbrowser.lua:220 settingsbrowser.lua:323
+#: settingsbrowser.lua:241 settingsbrowser.lua:344
 msgid "Enter a number from 0 to %1."
 msgstr ""
 
-#: settingsbrowser.lua:234
+#: settingsbrowser.lua:255
 msgid "Storage limit (MB)"
 msgstr "Limit úložiště (MB)"
 
-#: settingsbrowser.lua:235
+#: settingsbrowser.lua:256
 msgid "Oldest chapters are deleted first. 0 means no limit."
 msgstr "Nejstarší kapitoly se mažou první. 0 znamená bez limitu."
 
-#: settingsbrowser.lua:254
+#: settingsbrowser.lua:275
 msgid "Enter 0 or a positive number."
 msgstr ""
 
-#: settingsbrowser.lua:269
+#: settingsbrowser.lua:290
 msgid ""
 "Repository index URL. Leave blank for the default:\n"
 "%1"
@@ -1714,7 +1778,7 @@ msgstr ""
 "URL indexu repozitáře. Pro výchozí nechte prázdné:\n"
 "%1"
 
-#: settingsbrowser.lua:300
+#: settingsbrowser.lua:321
 msgid ""
 "Parallel requests per source. Blank or 0 for default (8). Higher uses more "
 "memory."
@@ -1722,30 +1786,30 @@ msgstr ""
 "Paralelní požadavky na zdroj. Prázdné nebo 0 znamená výchozí (8). Vyšší "
 "hodnota spotřebuje více paměti."
 
-#: settingsbrowser.lua:337
+#: settingsbrowser.lua:358
 msgid ""
 "Solves Cloudflare challenges, e.g. localhost:8191. Leave blank to disable."
 msgstr ""
 "Řeší výzvy Cloudflare, např. localhost:8191. Pro vypnutí nechte prázdné."
 
-#: settingsbrowser.lua:339
+#: settingsbrowser.lua:360
 msgid "host:port"
 msgstr "hostitel:port"
 
-#: settingsbrowser.lua:365
+#: settingsbrowser.lua:386
 msgid "Long-press a cookies.txt to import it"
 msgstr "Podržením souboru cookies.txt jej importujete"
 
-#: settingsbrowser.lua:375
+#: settingsbrowser.lua:396
 msgid "No usable (non-expired) cookies found in that file."
 msgstr ""
 
-#: settingsbrowser.lua:379
+#: settingsbrowser.lua:400
 #, fuzzy
 msgid "Imported %1 cookie(s)."
 msgstr "Importovat cookies"
 
-#: settingsbrowser.lua:384
+#: settingsbrowser.lua:405
 msgid ""
 "Import failed:\n"
 "%1"
@@ -1753,19 +1817,19 @@ msgstr ""
 "Import selhal:\n"
 "%1"
 
-#: settingsbrowser.lua:394
+#: settingsbrowser.lua:415
 msgid "Clear cookies for all sources? This can't be undone."
 msgstr "Smazat cookies všech zdrojů? Tuto akci nelze vrátit."
 
-#: settingsbrowser.lua:395
+#: settingsbrowser.lua:416
 msgid "Clear"
 msgstr "Smazat"
 
-#: settingsbrowser.lua:400
+#: settingsbrowser.lua:421
 msgid "Cookies cleared."
 msgstr "Cookies smazány."
 
-#: settingsbrowser.lua:402
+#: settingsbrowser.lua:423
 msgid ""
 "Could not clear cookies:\n"
 "%1"
@@ -1773,50 +1837,50 @@ msgstr ""
 "Cookies se nepodařilo smazat:\n"
 "%1"
 
-#: settingsbrowser.lua:470
+#: settingsbrowser.lua:491
 msgid "%1 doesn't exist or isn't writable."
 msgstr "%1 neexistuje nebo není zapisovatelné."
 
-#: settingsbrowser.lua:476
+#: settingsbrowser.lua:497
 msgid ""
 "The Ephemeral storage path can't be, contain, or be inside the normal "
 "downloads folder."
 msgstr ""
 
-#: settingsbrowser.lua:484
+#: settingsbrowser.lua:505
 msgid "Where chapters are stored in Ephemeral Mode."
 msgstr "Kde se kapitoly ukládají v dočasném režimu."
 
-#: settingsbrowser.lua:550
+#: settingsbrowser.lua:571
 #, fuzzy
 msgid "Select Language"
 msgstr "Hledat ve všech zdrojích"
 
-#: settingsbrowser.lua:637
+#: settingsbrowser.lua:685
 msgid "Ephemeral Mode limits prefetch to 1 chapter."
 msgstr "Dočasný režim omezuje předběžné stahování na 1 kapitolu."
 
-#: settingsbrowser.lua:651
+#: settingsbrowser.lua:699
 msgid "Storage limit is off in Ephemeral Mode."
 msgstr "V dočasném režimu je limit úložiště vypnutý."
 
-#: simpleui_bridge.lua:703 sui_module_tsundoku.lua:385
+#: simpleui_bridge.lua:789 sui_module_tsundoku.lua:482
 msgid "Resume active chapter"
 msgstr ""
 
-#: simpleui_bridge.lua:714 sui_module_tsundoku.lua:373
+#: simpleui_bridge.lua:800 sui_module_tsundoku.lua:470
 msgid "Open series chapter list"
 msgstr ""
 
-#: simpleui_bridge.lua:792
+#: simpleui_bridge.lua:878
 msgid "Chapter file not found on storage."
 msgstr ""
 
-#: simpleui_bridge.lua:1078
+#: simpleui_bridge.lua:1191
 msgid "%1/%2 ch"
 msgstr ""
 
-#: simpleui_bridge.lua:1283
+#: simpleui_bridge.lua:1414
 #, fuzzy
 msgid "Manga Downloads"
 msgstr "Stáhnout znovu"
@@ -2025,59 +2089,55 @@ msgid ""
 "cookies."
 msgstr ""
 
-#: subprocess.lua:126
+#: subprocess.lua:135
 msgid "command produced no output"
 msgstr "příkaz nevytvořil žádný výstup"
 
-#: subprocess.lua:351
+#: subprocess.lua:409
 msgid "%1 (%2/%3 pages, %4%)"
 msgstr ""
 
-#: subprocess.lua:392
-msgid "Invalid response from aidoku-run"
-msgstr ""
-
-#: sui_module_tsundoku.lua:210 sui_module_tsundoku.lua:267
+#: sui_module_tsundoku.lua:304 sui_module_tsundoku.lua:361
 #, fuzzy
 msgid "Syncing…"
 msgstr "Hledání…"
 
-#: sui_module_tsundoku.lua:212
+#: sui_module_tsundoku.lua:306
 msgid "↓ %1 queued"
 msgstr ""
 
-#: sui_module_tsundoku.lua:214
+#: sui_module_tsundoku.lua:308
 #, fuzzy
 msgid "%1 series"
 msgstr "Nastavení: %1"
 
-#: sui_module_tsundoku.lua:282
+#: sui_module_tsundoku.lua:376
 #, fuzzy
 msgid "Downloads (%1)"
 msgstr "Stahování %1/%2: %3"
 
-#: sui_module_tsundoku.lua:349
+#: sui_module_tsundoku.lua:446
 msgid "Show Status Header"
 msgstr ""
 
-#: sui_module_tsundoku.lua:358
+#: sui_module_tsundoku.lua:455
 #, fuzzy
 msgid "Show Downloads Tile"
 msgstr "Řazení: Nejstarší první"
 
-#: sui_module_tsundoku.lua:425
+#: sui_module_tsundoku.lua:534
 msgid "Manga Series"
 msgstr ""
 
-#: sui_module_tsundoku.lua:428
+#: sui_module_tsundoku.lua:537
 msgid "Label"
 msgstr ""
 
-#: sui_module_tsundoku.lua:463
+#: sui_module_tsundoku.lua:574
 msgid "No manga series yet  —  long press to configure"
 msgstr ""
 
-#: sui_module_tsundoku.lua:464
+#: sui_module_tsundoku.lua:575
 msgid "No manga series yet"
 msgstr ""
 

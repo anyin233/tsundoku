@@ -8,6 +8,7 @@ doesn't interrupt whatever the user is doing with a visible dialog.
 ]]
 
 local ChapterOrder = require("chapterorder")
+local EpubHelper = require("epubhelper")
 local Trapper = require("ui/trapper")
 local util = require("util")
 local T = require("ffi/util").template
@@ -35,6 +36,20 @@ function Prefetch.chapterLabel(chapter)
     return chapter.Key
 end
 
+function Prefetch.canonicalKeys(chapters)
+    if type(chapters) ~= "table" or #chapters == 0 then
+        return nil
+    end
+    local ordered = ChapterOrder.orderedByReading(chapters)
+    local keys = {}
+    for _idx, c in ipairs(ordered) do
+        if type(c.Key) == "string" and c.Key ~= "" then
+            table.insert(keys, c.Key)
+        end
+    end
+    return #keys > 0 and keys or nil
+end
+
 -- ahead silently downloads up to ctx.store:effectiveBufferChapters() upcoming
 -- chapters (reading order, not display sort) after chapter_key, so they're
 -- likely already local by the time the reader reaches them.
@@ -57,26 +72,75 @@ function Prefetch.ahead(ctx, chapters, chapter_key, on_downloaded, on_complete)
     if n <= 0 then
         return
     end
+    local dl_map = ctx.downloads_engine:downloadedPathsMap(ctx.source_key, ctx.manga.Key, Prefetch.mangaLabel(ctx.manga))
     local upcoming = ChapterOrder.after(chapters, chapter_key, n, function(c)
-        return ctx.downloads_engine:path(ctx.source_key, ctx.manga.Key, c.Key) ~= ""
+        return dl_map[c.Key] ~= nil
     end)
     if #upcoming == 0 then
         return
     end
+    local canonical_keys = Prefetch.canonicalKeys(chapters)
     Trapper:wrap(function()
         local any_new = false
-        for _idx, c in ipairs(upcoming) do
-            if ctx.downloads_engine:path(ctx.source_key, ctx.manga.Key, c.Key) == "" then
-                local chapter_filename = util.getSafeFilename(
-                    Prefetch.chapterLabel(c) .. ".cbz", ctx.downloads_dir)
-                local out_path = ctx.downloads_dir .. "/" .. chapter_filename
+        local new_paths = {}
+        local existing_epub = ""
+        if ctx.downloads_engine.mangaEpubPath then
+            existing_epub = ctx.downloads_engine:mangaEpubPath(ctx.source_key, ctx.manga.Key)
+        end
+        if ctx.source_key == "zh.biquge" or existing_epub ~= "" then
+            local to_fetch = {}
+            for _idx, c in ipairs(upcoming) do
+                if not dl_map[c.Key] then
+                    table.insert(to_fetch, c)
+                end
+            end
+            if #to_fetch > 0 then
                 local manga_dir_name = Prefetch.mangaLabel(ctx.manga) .. " [" .. ctx.source_key .. "]"
-                local path = ctx.engine:download(
-                    ctx.source_path, ctx.manga.Key, c.Key, out_path, ctx.downloads_dir, true, nil, manga_dir_name, false, ctx.manga, c)
+                local old_keys = (existing_epub ~= "" and not EpubHelper.usesAdjacentSidecar(existing_epub))
+                    and EpubHelper.manifestKeys(EpubHelper.readManifest(existing_epub))
+                    or nil
+                local path = ctx.engine:batchDownload({
+                    source_path = ctx.source_path,
+                    manga = ctx.manga,
+                    chapters = to_fetch,
+                    canonical_keys = canonical_keys,
+                    out_path = existing_epub ~= "" and existing_epub or nil,
+                    downloads_dir = ctx.downloads_dir,
+                    manga_dir_name = manga_dir_name,
+                    silent = true,
+                })
                 if path then
                     any_new = true
+                    new_paths[path] = true
+                    if EpubHelper.isEpub(path) then
+                        EpubHelper.invalidateCache(path)
+                        if old_keys and #old_keys > 0 and not EpubHelper.usesAdjacentSidecar(path) then
+                            local new_keys = EpubHelper.manifestKeys(EpubHelper.readManifest(path))
+                            EpubHelper.remapDocSettings(path, old_keys, new_keys)
+                        end
+                    end
                     if on_downloaded then
-                        on_downloaded(c, path)
+                        for _j, c in ipairs(to_fetch) do
+                            on_downloaded(c, path)
+                        end
+                    end
+                end
+            end
+        else
+            for _idx, c in ipairs(upcoming) do
+                if not dl_map[c.Key] then
+                    local chapter_filename = util.getSafeFilename(
+                        Prefetch.chapterLabel(c) .. ".cbz", ctx.downloads_dir)
+                    local out_path = ctx.downloads_dir .. "/" .. chapter_filename
+                    local manga_dir_name = Prefetch.mangaLabel(ctx.manga) .. " [" .. ctx.source_key .. "]"
+                    local path = ctx.engine:download(
+                        ctx.source_path, ctx.manga.Key, c.Key, out_path, ctx.downloads_dir, true, nil, manga_dir_name, false, ctx.manga, c, nil, canonical_keys)
+                    if path then
+                        any_new = true
+                        new_paths[path] = true
+                        if on_downloaded then
+                            on_downloaded(c, path)
+                        end
                     end
                 end
             end
@@ -100,12 +164,15 @@ function Prefetch.ahead(ctx, chapters, chapter_key, on_downloaded, on_complete)
         -- The chapters just prefetched are kept too: pruning them under a
         -- tight limit would only re-download them when the reader arrives.
         if any_new and not ctx.store:isEphemeralMode() then
-            local keep = {}
+            local keep = new_paths
             for _idx, c in ipairs(upcoming) do
-                keep[ctx.downloads_engine:path(ctx.source_key, ctx.manga.Key, c.Key)] = true
+                if dl_map[c.Key] then
+                    keep[dl_map[c.Key]] = true
+                end
             end
-            keep[ctx.downloads_engine:path(ctx.source_key, ctx.manga.Key, chapter_key)] = true
-            keep[""] = nil
+            if dl_map[chapter_key] then
+                keep[dl_map[chapter_key]] = true
+            end
             ctx.downloads_engine:prune(ctx.store:downloadLimitBytes(), keep)
         end
         if on_complete then

@@ -29,6 +29,7 @@ local DataStorage = require("datastorage")
 local Device = require("device")
 local DownloadQueue = require("downloadqueue")
 local DownloadsEngine = require("downloadsengine")
+local EpubHelper = require("epubhelper")
 local FileManager = require("apps/filemanager/filemanager")
 local InfoMessage = require("ui/widget/infomessage")
 local InstalledSources = require("installedsources")
@@ -38,6 +39,7 @@ local Notification = require("ui/widget/notification")
 local OpenWidgets = require("openwidgets")
 local ReadHistory = require("readhistory")
 local RenderImage = require("ui/renderimage")
+local Store = require("store")
 local UIManager = require("ui/uimanager")
 local lfs = require("libs/libkoreader-lfs")
 local logger = require("logger")
@@ -138,11 +140,22 @@ local function chapterStem(fp)
     return fp:match("([^/]+)%.[^%.]+$") or fp:match("([^/]+)$") or fp
 end
 
-local function findSeriesDiskCover(covers_dir, source_key, manga_key, dl_group, manga_dir)
+local function coverFileExists(path, covers_dir, covers_set)
+    if covers_set and covers_dir and covers_dir ~= "" then
+        local prefix = covers_dir:gsub("/+$", "") .. "/"
+        if path:sub(1, #prefix) == prefix then
+            local fname = path:sub(#prefix + 1)
+            return covers_set[fname] == true
+        end
+    end
+    return lfs.attributes(path, "mode") == "file"
+end
+
+local function findSeriesDiskCover(covers_dir, source_key, manga_key, dl_group, manga_dir, covers_set)
     if covers_dir and covers_dir ~= "" then
         if source_key and source_key ~= "" and manga_key and manga_key ~= "" then
             local cc = CoverCache.diskPath(covers_dir, source_key, manga_key)
-            if lfs.attributes(cc, "mode") == "file" then
+            if coverFileExists(cc, covers_dir, covers_set) then
                 if manga_dir and lfs.attributes(manga_dir, "mode") == "directory" then
                     local folder_cov = manga_dir .. "/.cover.jpg"
                     if lfs.attributes(folder_cov, "mode") ~= "file" then
@@ -154,7 +167,7 @@ local function findSeriesDiskCover(covers_dir, source_key, manga_key, dl_group, 
         end
         if dl_group and dl_group.sourceKey and dl_group.mangaKey then
             local cc2 = CoverCache.diskPath(covers_dir, dl_group.sourceKey, dl_group.mangaKey)
-            if lfs.attributes(cc2, "mode") == "file" then
+            if coverFileExists(cc2, covers_dir, covers_set) then
                 if manga_dir and lfs.attributes(manga_dir, "mode") == "directory" then
                     local folder_cov = manga_dir .. "/.cover.jpg"
                     if lfs.attributes(folder_cov, "mode") ~= "file" then
@@ -172,6 +185,15 @@ local function findSeriesDiskCover(covers_dir, source_key, manga_key, dl_group, 
         end
     end
     return nil
+end
+
+local function targetDisplayBBType(fallback_type)
+    if Screen and type(Screen.isColorEnabled) == "function" and not Screen:isColorEnabled()
+        and Blitbuffer.TYPE_BB8
+    then
+        return Blitbuffer.TYPE_BB8
+    end
+    return fallback_type
 end
 
 local function makeCropKey(cover_path, w, h, align)
@@ -213,25 +235,22 @@ local function buildCroppedCoverBB(cover_path, w, h, align)
     local scaled_w = math.max(w, math.floor(src_w * scale + 0.5))
     local scaled_h = math.max(h, math.floor(src_h * scale + 0.5))
 
-    local ok_cp, work_bb = pcall(Blitbuffer.new, src_w, src_h, raw_bb:getType())
-    if not (ok_cp and work_bb) then
-        pcall(raw_bb.free, raw_bb)
-        return nil
-    end
-    pcall(work_bb.blitFrom, work_bb, raw_bb, 0, 0, 0, 0, src_w, src_h)
-    pcall(raw_bb.free, raw_bb)
-
-    local ok_sc, scaled_bb = pcall(RenderImage.scaleBlitBuffer, RenderImage, work_bb, scaled_w, scaled_h)
-    if scaled_bb ~= work_bb then
-        pcall(work_bb.free, work_bb)
-    end
-    if not (ok_sc and scaled_bb) then
-        return nil
+    local scaled_bb = raw_bb
+    if scaled_w ~= src_w or scaled_h ~= src_h then
+        local ok_sc, res_bb = pcall(RenderImage.scaleBlitBuffer, RenderImage, raw_bb, scaled_w, scaled_h)
+        if res_bb ~= raw_bb then
+            pcall(raw_bb.free, raw_bb)
+        end
+        if not (ok_sc and res_bb) then
+            return nil
+        end
+        scaled_bb = res_bb
     end
 
+    local dst_type = targetDisplayBBType(scaled_bb:getType())
     local final_bb = scaled_bb
     if scaled_w ~= w or scaled_h ~= h then
-        local ok_slot, slot_bb = pcall(Blitbuffer.new, w, h, scaled_bb:getType())
+        local ok_slot, slot_bb = pcall(Blitbuffer.new, w, h, dst_type)
         if ok_slot and slot_bb then
             local src_x = align == "left" and 0
                 or (align == "right" and (scaled_w - w) or math.floor((scaled_w - w) / 2))
@@ -241,6 +260,13 @@ local function buildCroppedCoverBB(cover_path, w, h, align)
             pcall(slot_bb.blitFrom, slot_bb, scaled_bb, 0, 0, src_x, src_y, w, h)
             pcall(scaled_bb.free, scaled_bb)
             final_bb = slot_bb
+        end
+    elseif scaled_bb:getType() ~= dst_type then
+        local ok_conv, conv_bb = pcall(Blitbuffer.new, w, h, dst_type)
+        if ok_conv and conv_bb then
+            pcall(conv_bb.blitFrom, conv_bb, scaled_bb, 0, 0, 0, 0, w, h)
+            pcall(scaled_bb.free, scaled_bb)
+            final_bb = conv_bb
         end
     end
 
@@ -319,10 +345,22 @@ function SimpleUIBridge._buildIndex()
 
     local downloads_dir = DownloadsEngine.normalizePath(host.downloads_dir or "")
     local covers_dir = host.covers_dir or ""
-    local dl_entries = host.downloads_engine:list() or {}
-    local dl_stats = host.downloads_engine:mangaDownloadStats(dl_entries)
+    local dl_stats = host.downloads_engine:mangaDownloadStats()
     local meta_map = host.store:getMangaMetaMap() or {}
     local bookmarks = host.store:libraryEntries() or {}
+
+    local covers_set = nil
+    if covers_dir ~= "" and lfs.attributes(covers_dir, "mode") == "directory" then
+        covers_set = {}
+        local ok_cd, iter, dir_obj = pcall(lfs.dir, covers_dir)
+        if ok_cd and iter then
+            for fname in iter, dir_obj do
+                if fname ~= "." and fname ~= ".." then
+                    covers_set[fname] = true
+                end
+            end
+        end
+    end
 
     local SH = safeRequire("modules/module_books_shared")
 
@@ -359,12 +397,12 @@ function SimpleUIBridge._buildIndex()
         end
     end
 
-    local function attachSeriesData(s, entries)
+    local function attachSeriesData(s, entries, entries_verified)
         local sorted = {}
         local manga_dir
         for _idx, e in ipairs(entries or {}) do
-            local nfp = DownloadsEngine.normalizePath(e.path or "")
-            if nfp ~= "" and lfs.attributes(nfp, "mode") == "file" then
+            local nfp = entries_verified and e.path or DownloadsEngine.normalizePath(e.path or "")
+            if nfp ~= "" and (entries_verified or lfs.attributes(nfp, "mode") == "file") then
                 e.path = nfp
                 table.insert(sorted, e)
                 if not manga_dir and DownloadsEngine.isUnder(nfp, downloads_dir) then
@@ -385,16 +423,31 @@ function SimpleUIBridge._buildIndex()
         local active_fp
         local active_entry
 
+        local seen_paths = {}
+        local synced_epubs = {}
+        for _idx, e in ipairs(sorted) do
+            if not seen_paths[e.path] then
+                seen_paths[e.path] = true
+                table.insert(s.all_paths, e.path)
+                registerSeriesPath(e.path, s, e)
+                if EpubHelper.isEpub(e.path) and not synced_epubs[e.path] then
+                    synced_epubs[e.path] = true
+                    local sk = e.sourceKey ~= "" and e.sourceKey or s.source_key
+                    local mk = e.mangaKey ~= "" and e.mangaKey or s.manga_key
+                    EpubHelper.syncReadChapters(e.path, host.store, sk, mk)
+                end
+            end
+        end
+
+        local read_map = host.store:getReadChaptersMap()
         local read_flags = {}
         for idx, e in ipairs(sorted) do
-            table.insert(s.all_paths, e.path)
-            registerSeriesPath(e.path, s, e)
-
-            local is_read = host.store:isChapterRead(e.sourceKey, e.mangaKey, e.chapterKey)
+            local hi = hist_info[e.path]
+            local is_read = Store.isChapterReadInMap(read_map, e.sourceKey, e.mangaKey, e.chapterKey)
             if not is_read and s.source_key ~= "" and s.manga_key ~= "" then
-                is_read = host.store:isChapterRead(s.source_key, s.manga_key, e.chapterKey)
+                is_read = Store.isChapterReadInMap(read_map, s.source_key, s.manga_key, e.chapterKey)
             end
-            if not is_read and SH and Orig.isFinished then
+            if not is_read and hi and not EpubHelper.isEpub(e.path) and SH and Orig.isFinished then
                 is_read = Orig.isFinished(e.path)
             end
             read_flags[idx] = is_read and true or false
@@ -406,7 +459,6 @@ function SimpleUIBridge._buildIndex()
                 latest_dl_at = e.downloadedAt
             end
 
-            local hi = hist_info[e.path]
             if hi and (not latest_hist_rank or hi.rank < latest_hist_rank) then
                 latest_hist_rank = hi.rank
                 latest_hist_time = hi.time
@@ -430,9 +482,26 @@ function SimpleUIBridge._buildIndex()
             end
         end
 
+        if active_fp and EpubHelper.isEpub(active_fp) then
+            local cur_xp = EpubHelper.currentXPointer(active_fp)
+            local frag_idx = EpubHelper.parseDocFragmentIndex(cur_xp)
+            if frag_idx then
+                local manifest = EpubHelper.readManifest(active_fp)
+                local cur_ch = EpubHelper.chapterAtDocFragmentIndex(manifest, frag_idx)
+                if cur_ch and cur_ch.key then
+                    for _idx, e in ipairs(sorted) do
+                        if e.chapterKey == cur_ch.key then
+                            active_entry = e
+                            break
+                        end
+                    end
+                end
+            end
+        end
+
         -- Partial progress inside active chapter if it is not yet completed.
         local partial = 0
-        if active_fp and SH and SH.sidecarData then
+        if active_fp and not EpubHelper.isEpub(active_fp) and SH and SH.sidecarData then
             local active_is_read = false
             for idx, e in ipairs(sorted) do
                 if e.path == active_fp then
@@ -478,7 +547,7 @@ function SimpleUIBridge._buildIndex()
         end
 
         s.manga_dir = manga_dir
-        s.cover_disk_path = findSeriesDiskCover(covers_dir, s.source_key, s.manga_key, s.dl_group, manga_dir)
+        s.cover_disk_path = findSeriesDiskCover(covers_dir, s.source_key, s.manga_key, s.dl_group, manga_dir, covers_set)
     end
 
     -- 1. All bookmarked series (unified with any local download group).
@@ -505,7 +574,7 @@ function SimpleUIBridge._buildIndex()
                 added_at = bm.added_at or 0,
                 dl_group = group,
             }
-            attachSeriesData(s, group and group.chapters or {})
+            attachSeriesData(s, group and group.chapters or {}, group ~= nil)
             by_key[key] = s
             table.insert(list, s)
         end
@@ -528,7 +597,7 @@ function SimpleUIBridge._buildIndex()
                     added_at = group.latestAt or 0,
                     dl_group = group,
                 }
-                attachSeriesData(s, group.chapters or {})
+                attachSeriesData(s, group.chapters or {}, true)
                 by_key[key] = s
                 table.insert(list, s)
             end
@@ -611,18 +680,31 @@ function SimpleUIBridge._ensureIndex()
     local hist = ReadHistory and ReadHistory.hist or {}
     local top = hist[1]
     local dl_dir = (host and host.downloads_dir) or ""
+    local dl_token = (host and host.downloads_engine and host.downloads_engine:stateToken()) or ""
+    local store_rev = (host and host.store and host.store:revision()) or 0
     local rev = SimpleUIBridge._revision
     local n_hist = #hist
     local top_fp = top and top.file or ""
     local top_t = top and top.time or 0
+    local top_sc_mtime = 0
+    if top_fp ~= "" and top_t > 0 then
+        local DocSettings = safeRequire("docsettings")
+        local sc_file = DocSettings and DocSettings.findSidecarFile and DocSettings:findSidecarFile(top_fp)
+        if sc_file then
+            top_sc_mtime = lfs.attributes(sc_file, "modification") or 0
+        end
+    end
 
     local fp = SimpleUIBridge._index_fp
     if SimpleUIBridge._index and fp
             and fp.rev == rev
             and fp.dl_dir == dl_dir
+            and fp.dl_token == dl_token
+            and fp.store_rev == store_rev
             and fp.n_hist == n_hist
             and fp.top_fp == top_fp
-            and fp.top_t == top_t then
+            and fp.top_t == top_t
+            and fp.top_sc_mtime == top_sc_mtime then
         return SimpleUIBridge._index
     end
 
@@ -631,9 +713,12 @@ function SimpleUIBridge._ensureIndex()
     SimpleUIBridge._index_fp = {
         rev = rev,
         dl_dir = dl_dir,
+        dl_token = dl_token,
+        store_rev = store_rev,
         n_hist = n_hist,
         top_fp = top_fp,
         top_t = top_t,
+        top_sc_mtime = top_sc_mtime,
     }
     return idx
 end
@@ -1385,7 +1470,6 @@ function SimpleUIBridge._registerIntegrations()
             end,
             before = function()
                 OpenWidgets.closeAll()
-                SimpleUIBridge.invalidate()
             end,
         })
     end
@@ -1462,7 +1546,10 @@ function SimpleUIBridge.setup(aidoku)
     if not aidoku.document then
         SimpleUIBridge._fm_host = aidoku
     end
-    SimpleUIBridge.invalidate()
+    if not SimpleUIBridge._initialized or SimpleUIBridge._last_dl_dir ~= aidoku.downloads_dir then
+        SimpleUIBridge._last_dl_dir = aidoku.downloads_dir
+        SimpleUIBridge.invalidate()
+    end
 
     if isSimpleUIDisabled() then
         SimpleUIBridge._active = false

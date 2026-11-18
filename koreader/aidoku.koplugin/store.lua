@@ -12,6 +12,39 @@ local util = require("util")
 local Store = {}
 Store.__index = Store
 
+local _state_by_dir = {}
+
+local function getStateForDir(data_dir)
+    local st = _state_by_dir[data_dir]
+    if not st then
+        st = { rev = 1 }
+        _state_by_dir[data_dir] = st
+    end
+    return st
+end
+
+local function invalidateState(self, ...)
+    local st = self and self._state
+    if not st then
+        return
+    end
+    st.rev = st.rev + 1
+    local n = select("#", ...)
+    if n == 0 then
+        st.bookmarks = nil
+        st.bookmark_map = nil
+        st.meta_map = nil
+        st.meta_viewer_prefix = nil
+        st.last_read_map = nil
+        st.read_map = nil
+        return
+    end
+    for i = 1, n do
+        local field = select(i, ...)
+        st[field] = nil
+    end
+end
+
 local LIBRARY_SCHEMA = [[
     CREATE TABLE IF NOT EXISTS library (
         source_key   TEXT NOT NULL,
@@ -40,6 +73,7 @@ local LIBRARY_SCHEMA = [[
         canonical_key TEXT NOT NULL DEFAULT '',
         chapter_count INTEGER NOT NULL DEFAULT 0,
         updated_at    INTEGER NOT NULL DEFAULT 0,
+        viewer        INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY (source_key, manga_key)
     );
 ]]
@@ -134,6 +168,19 @@ function Store.new(data_dir)
             db:exec("PRAGMA journal_mode=TRUNCATE;")
         end
         db:exec(LIBRARY_SCHEMA)
+        local has_viewer = false
+        local info_stmt = db:prepare("PRAGMA table_info(manga_meta)")
+        local info_row = {}
+        while info_stmt:step(info_row) do
+            if info_row[2] == "viewer" then
+                has_viewer = true
+                break
+            end
+        end
+        info_stmt:close()
+        if not has_viewer then
+            db:exec("ALTER TABLE manga_meta ADD COLUMN viewer INTEGER NOT NULL DEFAULT 0;")
+        end
         return db
     end)
     if not ok then
@@ -143,31 +190,71 @@ function Store.new(data_dir)
 
     migrateLegacyData(settings, db)
 
-    return setmetatable({ settings = settings, db = db }, Store)
+    return setmetatable({
+        settings = settings,
+        db = db,
+        data_dir = data_dir,
+        _state = getStateForDir(data_dir),
+    }, Store)
+end
+
+function Store:revision()
+    return (self._state and self._state.rev) or 0
+end
+
+function Store:invalidateCache()
+    invalidateState(self)
 end
 
 -- ===== Library (bookmarked manga) =====
 
+function Store:getBookmarkedMap()
+    local st = self._state
+    if st and st.bookmark_map then
+        return st.bookmark_map
+    end
+    local entries = self:libraryEntries()
+    local exact = {}
+    local by_prefix = {}
+    for _idx, e in ipairs(entries) do
+        local sk = e.source_key or ""
+        local mk = e.manga_key or ""
+        if sk ~= "" and mk ~= "" then
+            exact[sk .. "\0" .. mk] = true
+            local pos = 1
+            while true do
+                local slash = mk:find("/", pos, true)
+                if not slash then
+                    break
+                end
+                if slash > 1 then
+                    by_prefix[sk .. "\0" .. mk:sub(1, slash - 1)] = true
+                end
+                pos = slash + 1
+            end
+        end
+    end
+    local map = { exact = exact, by_prefix = by_prefix }
+    if st then
+        st.bookmark_map = map
+    end
+    return map
+end
+
 function Store:isBookmarked(source_key, manga_key)
-    return pstep(false, function()
-        local stmt = self.db:prepare("SELECT 1 FROM library WHERE source_key=? AND (manga_key=? OR manga_key LIKE ?) LIMIT 1")
-        stmt:bind(source_key, manga_key, tostring(manga_key) .. "/%")
-        local row = stmt:step()
-        stmt:close()
-        if row ~= nil then
-            return true
-        end
-        -- Also match if manga_key is a canonical "<slug>/<id>" form of a bookmarked "<slug>"
-        local slug = type(manga_key) == "string" and manga_key:match("^([^/]+)/") or nil
-        if slug and slug ~= "" then
-            local s2 = self.db:prepare("SELECT 1 FROM library WHERE source_key=? AND manga_key=? LIMIT 1")
-            s2:bind(source_key, slug)
-            local r2 = s2:step()
-            s2:close()
-            return r2 ~= nil
-        end
+    if not source_key or source_key == "" or not manga_key or manga_key == "" then
         return false
-    end)
+    end
+    local map = self:getBookmarkedMap()
+    local k = source_key .. "\0" .. manga_key
+    if map.exact[k] or map.by_prefix[k] then
+        return true
+    end
+    local slug = type(manga_key) == "string" and manga_key:match("^([^/]+)/") or nil
+    if slug and slug ~= "" then
+        return map.exact[source_key .. "\0" .. slug] == true
+    end
+    return false
 end
 
 function Store:addBookmark(source_key, source_path, manga_key, title, cover)
@@ -182,6 +269,7 @@ function Store:addBookmark(source_key, source_path, manga_key, title, cover)
         stmt:bind(source_key, manga_key, source_path, title, cover, os.time())
         stmt:step()
         stmt:close()
+        invalidateState(self, "bookmarks", "bookmark_map")
         return true
     end)
 end
@@ -204,6 +292,7 @@ function Store:updateBookmarkCover(source_key, manga_key, cover)
             s2:step()
             s2:close()
         end
+        invalidateState(self, "bookmarks", "bookmark_map")
         return true
     end)
 end
@@ -221,18 +310,27 @@ function Store:removeBookmark(source_key, manga_key)
             s2:step()
             s2:close()
         end
+        invalidateState(self, "bookmarks", "bookmark_map")
         return true
     end)
 end
 
 function Store:libraryEntries()
-    return pstep({}, function()
+    local st = self._state
+    if st and st.bookmarks then
+        local copy = {}
+        for i = 1, #st.bookmarks do
+            copy[i] = st.bookmarks[i]
+        end
+        return copy
+    end
+    local entries = pstep(nil, function()
         local stmt = self.db:prepare(
             "SELECT source_key, manga_key, source_path, title, cover, added_at FROM library ORDER BY added_at ASC")
-        local entries = {}
+        local out = {}
         local row = {}
         while stmt:step(row) do
-            table.insert(entries, {
+            table.insert(out, {
                 source_key = row[1],
                 manga_key = row[2],
                 source_path = row[3],
@@ -242,54 +340,123 @@ function Store:libraryEntries()
             })
         end
         stmt:close()
-        return entries
+        return out
     end)
+    if not entries then
+        return {}
+    end
+    if st then
+        st.bookmarks = entries
+    end
+    local copy = {}
+    for i = 1, #entries do
+        copy[i] = entries[i]
+    end
+    return copy
 end
 
 -- ===== Manga metadata (known chapter counts & canonical keys) =====
 
-function Store:recordMangaMeta(source_key, manga_key, canonical_key, chapter_count)
+function Store:recordMangaMeta(source_key, manga_key, canonical_key, chapter_count, viewer)
     if not source_key or not manga_key then
         return false
     end
     canonical_key = canonical_key or manga_key
     chapter_count = tonumber(chapter_count) or 0
+    viewer = (type(viewer) == "number" and viewer >= 0) and math.floor(viewer) or (tonumber(viewer) or 0)
     return pstep(false, function()
         local stmt = self.db:prepare([[
-            INSERT INTO manga_meta (source_key, manga_key, canonical_key, chapter_count, updated_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO manga_meta (source_key, manga_key, canonical_key, chapter_count, updated_at, viewer)
+            VALUES (?, ?, ?, ?, ?, ?)
             ON CONFLICT (source_key, manga_key) DO UPDATE SET
                 canonical_key=excluded.canonical_key,
                 chapter_count=excluded.chapter_count,
-                updated_at=excluded.updated_at
+                updated_at=excluded.updated_at,
+                viewer=CASE WHEN excluded.viewer > 0 THEN excluded.viewer ELSE manga_meta.viewer END
         ]])
         local now = os.time()
-        stmt:bind(source_key, manga_key, canonical_key, chapter_count, now)
+        stmt:bind(source_key, manga_key, canonical_key, chapter_count, now, viewer)
         stmt:step()
         stmt:reset()
         if canonical_key ~= "" and canonical_key ~= manga_key then
-            stmt:bind(source_key, canonical_key, canonical_key, chapter_count, now)
+            stmt:bind(source_key, canonical_key, canonical_key, chapter_count, now, viewer)
             stmt:step()
         end
         stmt:close()
+        invalidateState(self, "meta_map", "meta_viewer_prefix")
         return true
     end)
 end
 
 function Store:getMangaMetaMap()
-    return pstep({}, function()
-        local stmt = self.db:prepare("SELECT source_key, manga_key, canonical_key, chapter_count FROM manga_meta")
+    local st = self._state
+    if st and st.meta_map then
+        return st.meta_map
+    end
+    local loaded = pstep(nil, function()
+        local stmt = self.db:prepare("SELECT source_key, manga_key, canonical_key, chapter_count, viewer FROM manga_meta")
         local map = {}
+        local pview = {}
         local row = {}
         while stmt:step(row) do
-            map[row[1] .. "\0" .. row[2]] = {
+            local sk = row[1]
+            local mk = row[2]
+            local v = tonumber(row[5]) or 0
+            map[sk .. "\0" .. mk] = {
                 canonical_key = row[3] or "",
                 chapter_count = tonumber(row[4]) or 0,
+                viewer = v,
             }
+            if v > 0 and type(mk) == "string" then
+                local pos = 1
+                while true do
+                    local slash = mk:find("/", pos, true)
+                    if not slash then
+                        break
+                    end
+                    if slash > 1 then
+                        local pk = sk .. "\0" .. mk:sub(1, slash - 1)
+                        if v > (pview[pk] or 0) then
+                            pview[pk] = v
+                        end
+                    end
+                    pos = slash + 1
+                end
+            end
         end
         stmt:close()
-        return map
+        return { map = map, pview = pview }
     end)
+    if not loaded then
+        return {}
+    end
+    if st then
+        st.meta_map = loaded.map
+        st.meta_viewer_prefix = loaded.pview
+    end
+    return loaded.map
+end
+
+function Store:mangaViewer(source_key, manga_key)
+    if not source_key or source_key == "" or not manga_key or manga_key == "" then
+        return 0
+    end
+    local map = self:getMangaMetaMap()
+    local k = source_key .. "\0" .. manga_key
+    local v = (map[k] and map[k].viewer) or 0
+    local pview = self._state and self._state.meta_viewer_prefix
+    if pview and (pview[k] or 0) > v then
+        v = pview[k]
+    end
+    if v > 0 then
+        return v
+    end
+    local slug = type(manga_key) == "string" and manga_key:match("^([^/]+)/") or nil
+    if slug and slug ~= "" then
+        local m = map[source_key .. "\0" .. slug]
+        return (m and m.viewer) or 0
+    end
+    return 0
 end
 
 function Store:librarySortOrder()
@@ -354,25 +521,72 @@ function Store:setLibraryViewMode(mode)
     self.settings:flush()
 end
 
-function Store:lastReadAt(source_key, manga_key)
-    return pstep(0, function()
-        local stmt = self.db:prepare("SELECT last_read_at FROM last_read WHERE source_key=? AND manga_key=?")
-        stmt:bind(source_key, manga_key)
-        local row = stmt:step()
-        stmt:close()
-        if row and tonumber(row[1]) then
-            return tonumber(row[1])
-        end
-        local slug = type(manga_key) == "string" and manga_key:match("^([^/]+)/") or nil
-        if slug and slug ~= "" then
-            local s2 = self.db:prepare("SELECT last_read_at FROM last_read WHERE source_key=? AND manga_key=?")
-            s2:bind(source_key, slug)
-            local r2 = s2:step()
-            s2:close()
-            return (r2 and tonumber(r2[1])) or 0
-        end
+Store.COMIC_READER_MODES = {
+    auto = true,
+    paged = true,
+    webtoon = true,
+    off = true,
+}
+
+-- comicReaderMode returns one of:
+--   "auto" (paged vs webtoon adaptive) | "paged" | "webtoon" | "off"
+function Store:comicReaderMode()
+    local mode = self.settings:readSetting("comic_reader_mode", "auto")
+    if Store.COMIC_READER_MODES[mode] then
+        return mode
+    end
+    return "auto"
+end
+
+function Store:setComicReaderMode(mode)
+    if not Store.COMIC_READER_MODES[mode] then
+        mode = "auto"
+    end
+    self.settings:saveSetting("comic_reader_mode", mode)
+    self.settings:flush()
+end
+
+function Store.lookupLastRead(map, source_key, manga_key)
+    if not map or not source_key or source_key == "" or not manga_key or manga_key == "" then
         return 0
+    end
+    local ts = map[source_key .. "\0" .. manga_key]
+    if ts then
+        return ts
+    end
+    local slug = type(manga_key) == "string" and manga_key:match("^([^/]+)/") or nil
+    if slug and slug ~= "" then
+        return map[source_key .. "\0" .. slug] or 0
+    end
+    return 0
+end
+
+function Store:getLastReadMap()
+    local st = self._state
+    if st and st.last_read_map then
+        return st.last_read_map
+    end
+    local loaded = pstep(nil, function()
+        local stmt = self.db:prepare("SELECT source_key, manga_key, last_read_at FROM last_read")
+        local map = {}
+        local row = {}
+        while stmt:step(row) do
+            map[row[1] .. "\0" .. row[2]] = tonumber(row[3]) or 0
+        end
+        stmt:close()
+        return map
     end)
+    if not loaded then
+        return {}
+    end
+    if st then
+        st.last_read_map = loaded
+    end
+    return loaded
+end
+
+function Store:lastReadAt(source_key, manga_key)
+    return Store.lookupLastRead(self:getLastReadMap(), source_key, manga_key)
 end
 
 function Store:markLastRead(source_key, manga_key)
@@ -391,33 +605,63 @@ function Store:markLastRead(source_key, manga_key)
             stmt:step()
         end
         stmt:close()
+        invalidateState(self, "last_read_map")
         return true
     end)
 end
 
 -- ===== Read chapters =====
 
-function Store:isChapterRead(source_key, manga_key, chapter_key)
-    return pstep(false, function()
-        local stmt = self.db:prepare(
-            "SELECT 1 FROM read_chapters WHERE source_key=? AND manga_key=? AND chapter_key=? LIMIT 1")
-        stmt:bind(source_key, manga_key, chapter_key)
-        local row = stmt:step()
-        stmt:close()
-        if row ~= nil then
+function Store.isChapterReadInMap(map, source_key, manga_key, chapter_key)
+    if not map or not source_key or not manga_key or not chapter_key then
+        return false
+    end
+    local bucket = map[source_key .. "\0" .. manga_key]
+    if bucket and bucket[chapter_key] then
+        return true
+    end
+    local slug = type(manga_key) == "string" and manga_key:match("^([^/]+)/") or nil
+    if slug and slug ~= "" then
+        local sb = map[source_key .. "\0" .. slug]
+        if sb and sb[chapter_key] then
             return true
         end
-        local slug = type(manga_key) == "string" and manga_key:match("^([^/]+)/") or nil
-        if slug and slug ~= "" then
-            local s2 = self.db:prepare(
-                "SELECT 1 FROM read_chapters WHERE source_key=? AND manga_key=? AND chapter_key=? LIMIT 1")
-            s2:bind(source_key, slug, chapter_key)
-            local r2 = s2:step()
-            s2:close()
-            return r2 ~= nil
+    end
+    return false
+end
+
+function Store:getReadChaptersMap()
+    local st = self._state
+    if st and st.read_map then
+        return st.read_map
+    end
+    local loaded = pstep(nil, function()
+        local stmt = self.db:prepare("SELECT source_key, manga_key, chapter_key FROM read_chapters")
+        local map = {}
+        local row = {}
+        while stmt:step(row) do
+            local bk = row[1] .. "\0" .. row[2]
+            local bucket = map[bk]
+            if not bucket then
+                bucket = {}
+                map[bk] = bucket
+            end
+            bucket[row[3]] = true
         end
-        return false
+        stmt:close()
+        return map
     end)
+    if not loaded then
+        return {}
+    end
+    if st then
+        st.read_map = loaded
+    end
+    return loaded
+end
+
+function Store:isChapterRead(source_key, manga_key, chapter_key)
+    return Store.isChapterReadInMap(self:getReadChaptersMap(), source_key, manga_key, chapter_key)
 end
 
 function Store:markChapterRead(source_key, manga_key, chapter_key)
@@ -427,6 +671,37 @@ function Store:markChapterRead(source_key, manga_key, chapter_key)
         stmt:bind(source_key, manga_key, chapter_key)
         stmt:step()
         stmt:close()
+        invalidateState(self, "read_map")
+        return true
+    end)
+end
+
+function Store:markChaptersReadBatch(source_key, manga_key, chapter_keys)
+    if type(chapter_keys) ~= "table" or #chapter_keys == 0 then
+        return true
+    end
+    return pstep(false, function()
+        self.db:exec("BEGIN IMMEDIATE")
+        local ok, err = pcall(function()
+            local stmt = self.db:prepare(
+                "INSERT OR IGNORE INTO read_chapters (source_key, manga_key, chapter_key) VALUES (?, ?, ?)")
+            for i, key in ipairs(chapter_keys) do
+                if type(key) == "string" and key ~= "" then
+                    if i > 1 then
+                        stmt:reset()
+                    end
+                    stmt:bind(source_key, manga_key, key)
+                    stmt:step()
+                end
+            end
+            stmt:close()
+        end)
+        if not ok then
+            pcall(function() self.db:exec("ROLLBACK") end)
+            error(err)
+        end
+        self.db:exec("COMMIT")
+        invalidateState(self, "read_map")
         return true
     end)
 end
@@ -444,6 +719,7 @@ function Store:markChapterUnread(source_key, manga_key, chapter_key)
             stmt:step()
         end
         stmt:close()
+        invalidateState(self, "read_map")
         return true
     end)
 end
@@ -460,6 +736,7 @@ function Store:resetReadChapters(source_key, manga_key)
             stmt:step()
         end
         stmt:close()
+        invalidateState(self, "read_map")
         return true
     end)
 end

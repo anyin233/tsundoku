@@ -18,9 +18,11 @@ local _ = require("aidoku_l10n")
 
 local ChapterCache = require("chaptercache")
 local ChapterOrder = require("chapterorder")
+local ComicLayout = require("comiclayout")
 local DownloadQueue = require("downloadqueue")
 local DownloadsEngine = require("downloadsengine")
 local Engine = require("engine")
+local EpubHelper = require("epubhelper")
 local InstalledSources = require("installedsources")
 local KooboneSync = require("koobonesync")
 local OpenWidgets = require("openwidgets")
@@ -109,6 +111,9 @@ function Aidoku:init()
     -- Must run after self.store exists -- see refreshDownloadsDir()'s own doc
     -- comment for why this isn't just done once here.
     self:refreshDownloadsDir()
+    if self.document and self.ui and self.ui.doc_settings then
+        self:applyAdaptiveComicSettings(self.ui.doc_settings, self.document)
+    end
     self:ensureBuiltinSources()
 
     self:onDispatcherRegisterActions()
@@ -133,7 +138,7 @@ function Aidoku:refreshDownloadsDir()
     self.downloads_dir = self.store:isEphemeralMode()
         and self.store:ephemeralPath() or self.persistent_downloads_dir
     util.makePath(self.downloads_dir)
-    self.downloads_engine = DownloadsEngine.new(self.downloads_dir)
+    self.downloads_engine = DownloadsEngine.new(self.downloads_dir, self.engine)
     DownloadQueue:setContext({
         engine = self.engine,
         store = self.store,
@@ -142,10 +147,35 @@ function Aidoku:refreshDownloadsDir()
     })
 end
 
+-- applyAdaptiveComicSettings seeds sane KOReader paging/zoom defaults onto
+-- unopened comic archives (CBZ/CBR/CBT/CB7) regardless of whether they were
+-- opened from Tsundoku or KOReader's built-in library/FileManager.
+function Aidoku:applyAdaptiveComicSettings(doc_settings, document)
+    return ComicLayout.applyToDocSettings(doc_settings, document, {
+        store = self.store,
+        downloads_engine = self.downloads_engine,
+        downloads_dir = self.downloads_dir,
+        persistent_downloads_dir = self.persistent_downloads_dir,
+    })
+end
+
+-- Also hook DocSettingsLoad idempotently without returning true so downstream
+-- plugins (such as docsettingtweak.koplugin) continue receiving the event.
+function Aidoku:onDocSettingsLoad(doc_settings, document)
+    self:applyAdaptiveComicSettings(doc_settings, document)
+end
+
+local _builtin_sources_checked = {}
+
 -- ensureBuiltinSources copies bundled first-party Aidoku sources (such as
 -- `kox-v1.aix`) from `<plugin>/builtin_sources/` into `<data_dir>/aidoku/sources/`
 -- when not yet installed or when a newer built-in version ships with an update.
-function Aidoku:ensureBuiltinSources()
+function Aidoku:ensureBuiltinSources(force)
+    local cache_key = tostring(self.path) .. "\0" .. tostring(self.sources_dir)
+    if not force and _builtin_sources_checked[cache_key] then
+        return
+    end
+    _builtin_sources_checked[cache_key] = true
     local lfs = require("libs/libkoreader-lfs")
     local builtin_dir = self.path .. "/builtin_sources"
     if lfs.attributes(builtin_dir, "mode") ~= "directory" then
@@ -203,9 +233,30 @@ end
 -- threaded through NextChapter.handle(). downloads_engine:byPath() is a
 -- synchronous SQLite read (see downloadsengine.lua), so no Trapper:wrap()
 -- coroutine is needed here.
+function Aidoku:syncCurrentEpubProgress(inclusive)
+    local file = self.document and self.document.file
+    if not file or not EpubHelper.isEpub(file) or not DownloadsEngine.isUnder(file, self.downloads_dir) then
+        return
+    end
+    local entry = self.downloads_engine and self.downloads_engine:byPath(file)
+    if entry then
+        local synced = EpubHelper.syncReadChapters(file, self.store, entry.sourceKey, entry.mangaKey, {
+            inclusive = inclusive,
+            ui = self.ui,
+        })
+        if synced and synced > 0 then
+            SimpleUIBridge.invalidate()
+        end
+    end
+end
+
 function Aidoku:markCurrentChapterRead()
     local file = self.document and self.document.file
     if not file or not DownloadsEngine.isUnder(file, self.downloads_dir) then
+        return
+    end
+    if EpubHelper.isEpub(file) then
+        self:syncCurrentEpubProgress(true)
         return
     end
     local entry = self.downloads_engine:byPath(file)
@@ -237,7 +288,16 @@ function Aidoku:hookEndOfBook()
             downloads_engine = self.downloads_engine,
             downloads_dir = self.downloads_dir,
             sources_dir = self.sources_dir,
+            ui = self.ui,
             open_callback = function(path) self.ui:switchDocument(path) end,
+            reload_callback = function(xp)
+                if self.ui.reloadDocument then
+                    self.ui:reloadDocument()
+                end
+                if xp then
+                    EpubHelper.jumpOpenDocument(self.ui, xp)
+                end
+            end,
         }, self.document.file)
         if handled then
             return true
@@ -265,7 +325,7 @@ function Aidoku:hookShowFileManager()
     end
     local original_show_file_manager = self.ui.showFileManager
     self.ui.showFileManager = function(ui_self, file, ...)
-        SimpleUIBridge.invalidate()
+        self:syncCurrentEpubProgress(false)
         file = file or (self.document and self.document.file)
         local pending = require("pendinglibrary")
         local from_tsundoku = pending.from_tsundoku
@@ -291,7 +351,7 @@ end
 function Aidoku:hookClose()
     local original_on_close = self.ui.onClose
     self.ui.onClose = function(ui_self, ...)
-        SimpleUIBridge.invalidate()
+        self:syncCurrentEpubProgress(false)
         OpenWidgets.closeAll()
         return original_on_close(ui_self, ...)
     end
@@ -756,6 +816,33 @@ end
 
 function Aidoku:stepCurrentMangaChapter(delta)
     if not self.document or not self.document.file then
+        return
+    end
+    if EpubHelper.isEpub(self.document.file) then
+        local manifest = EpubHelper.readManifest(self.document.file)
+        if not manifest or type(manifest.chapters) ~= "table" or #manifest.chapters == 0 then
+            UIManager:show(InfoMessage:new{ text = _("No adjacent downloaded chapters found."), timeout = 2 })
+            return
+        end
+        local xp = EpubHelper.currentXPointer(self.document.file, self.ui)
+        local cur_idx = EpubHelper.parseDocFragmentIndex(xp) or 1
+        local target_idx = cur_idx + (delta or 1)
+        if target_idx < 1 or target_idx > #manifest.chapters then
+            UIManager:show(Notification:new{
+                text = (delta or 1) > 0 and _("Already at latest downloaded chapter.") or _("Already at first downloaded chapter."),
+                timeout = 2,
+            })
+            return
+        end
+        if (delta or 1) > 0 then
+            local cur_ch = manifest.chapters[cur_idx]
+            local entry = self.downloads_engine and self.downloads_engine:byPath(self.document.file)
+            if cur_ch and cur_ch.key and cur_ch.key ~= "" and entry then
+                self.store:markChapterRead(entry.sourceKey, entry.mangaKey, cur_ch.key)
+                SimpleUIBridge.invalidate()
+            end
+        end
+        EpubHelper.jumpOpenDocument(self.ui, string.format("/body/DocFragment[%d]/body", target_idx))
         return
     end
     local series = SimpleUIBridge.findSeriesByPath(self.document.file)

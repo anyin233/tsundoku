@@ -11,11 +11,13 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/ohaiibuzzle/aidokurunner-go/cbz"
+	"github.com/ohaiibuzzle/aidokurunner-go/epub"
 	"github.com/ohaiibuzzle/aidokurunner-go/models"
 	"github.com/ohaiibuzzle/aidokurunner-go/runtime/host"
 )
@@ -115,10 +117,17 @@ func (s *Source) DownloadChapterCBZ(ctx context.Context, manga models.Manga, cha
 	if err != nil {
 		return "", fmt.Errorf("source: getting page list: %w", err)
 	}
+	return s.WriteChapterCBZFromPages(ctx, manga, chapter, pages, outputPath, mangaDirName, onProgress)
+}
+
+// WriteChapterCBZFromPages downloads image pages from an already-fetched page
+// list and streams them into a CBZ archive at outputPath.
+func (s *Source) WriteChapterCBZFromPages(ctx context.Context, manga models.Manga, chapter models.Chapter, pages []models.Page, outputPath, mangaDirName string, onProgress func(current, total int)) (string, error) {
 	if len(pages) == 0 {
 		return "", fmt.Errorf("source: chapter %q has no pages", chapter.Key)
 	}
 
+	var err error
 	outputPath, err = ResolveOutputPath(outputPath, mangaDirName, manga, chapter)
 	if err != nil {
 		return "", err
@@ -160,15 +169,177 @@ func (s *Source) DownloadChapterCBZ(ctx context.Context, manga models.Manga, cha
 	return outputPath, nil
 }
 
+// IsTextPages reports whether a chapter's pages carry text content rather than
+// downloadable images.
+func IsTextPages(pages []models.Page) bool {
+	if len(pages) == 0 {
+		return false
+	}
+	for _, p := range pages {
+		if p.Content.Kind != models.PageContentKindText {
+			return false
+		}
+	}
+	return true
+}
+
+// JoinTextPages concatenates PageContentKindText pages into a single chapter body.
+func JoinTextPages(pages []models.Page) string {
+	var parts []string
+	for _, p := range pages {
+		if p.Content.Kind == models.PageContentKindText && p.Content.Text != "" {
+			parts = append(parts, p.Content.Text)
+		}
+	}
+	return strings.Join(parts, "\n")
+}
+
+// ResolveBookEPUBPath computes the canonical single-book EPUB path for manga:
+// <outputDir>/<sanitized mangaDirName>/<sanitized mangaLabel>.epub.
+func ResolveBookEPUBPath(outputPath, mangaDirName string, manga models.Manga) (string, error) {
+	base := sanitizeFilename(MangaLabel(manga))
+	if base == "" {
+		base = "book"
+	}
+	filename := base + ".epub"
+
+	var dir string
+	if outputPath != "" {
+		dir, _ = filepath.Split(outputPath)
+	}
+	if mangaDirName != "" {
+		dir = filepath.Join(dir, sanitizeFilename(mangaDirName))
+	}
+	fullPath := filepath.Join(dir, filename)
+	if parent := filepath.Dir(fullPath); parent != "." && parent != "" {
+		if err := os.MkdirAll(parent, 0o755); err != nil {
+			return "", fmt.Errorf("source: creating %s: %w", parent, err)
+		}
+	}
+	return fullPath, nil
+}
+
+// CanonicalReadingKeys mirrors chapterorder.lua's orderedByReading to return
+// chapter keys in ascending reading order (oldest-first).
+func CanonicalReadingKeys(chapters []models.Chapter) []string {
+	n := len(chapters)
+	if n == 0 {
+		return nil
+	}
+	positional := make([]models.Chapter, n)
+	for i := 0; i < n; i++ {
+		positional[i] = chapters[n-1-i]
+	}
+
+	type indexedChapter struct {
+		ch  models.Chapter
+		pos int
+	}
+	var numbered []indexedChapter
+	for i, c := range positional {
+		if c.ChapterNumber != nil {
+			numbered = append(numbered, indexedChapter{ch: c, pos: i})
+		}
+	}
+	sort.Slice(numbered, func(i, j int) bool {
+		ni, nj := *numbered[i].ch.ChapterNumber, *numbered[j].ch.ChapterNumber
+		if ni != nj {
+			return ni < nj
+		}
+		return numbered[i].pos < numbered[j].pos
+	})
+
+	keys := make([]string, 0, n)
+	ni := 0
+	for _, c := range positional {
+		if c.ChapterNumber != nil {
+			keys = append(keys, numbered[ni].ch.Key)
+			ni++
+		} else {
+			keys = append(keys, c.Key)
+		}
+	}
+	return keys
+}
+
+// BuildEPUBMeta converts a models.Manga into epub.BookMeta.
+func BuildEPUBMeta(sourceKey string, manga models.Manga) epub.BookMeta {
+	meta := epub.BookMeta{
+		SourceKey: sourceKey,
+		MangaKey:  manga.Key,
+		Title:     MangaLabel(manga),
+		Authors:   manga.Authors,
+		Language:  "zh",
+	}
+	if manga.Description != nil {
+		meta.Description = *manga.Description
+	}
+	return meta
+}
+
+// BuildChapterInput converts a models.Chapter and text body into an epub.ChapterInput.
+func BuildChapterInput(chapter models.Chapter, text string, tocOrder int) epub.ChapterInput {
+	var dateUploaded *int64
+	if chapter.DateUploaded != nil {
+		ts := chapter.DateUploaded.Unix()
+		dateUploaded = &ts
+	}
+	return epub.ChapterInput{
+		Key:           chapter.Key,
+		Title:         ChapterLabel(chapter),
+		Text:          text,
+		ChapterNumber: chapter.ChapterNumber,
+		VolumeNumber:  chapter.VolumeNumber,
+		DateUploaded:  dateUploaded,
+		TOCOrder:      tocOrder,
+	}
+}
+
+var webtoonTagKeywords = []string{
+	"webtoon",
+	"long strip",
+	"longstrip",
+	"条漫",
+	"條漫",
+}
+
+// EffectiveViewer returns manga.Viewer when known, or infers ViewerWebtoon
+// from manga.Tags when the source left ViewerUnknown.
+func EffectiveViewer(manga models.Manga) models.Viewer {
+	if manga.Viewer != models.ViewerUnknown {
+		return manga.Viewer
+	}
+	for _, tag := range manga.Tags {
+		norm := strings.ToLower(strings.TrimSpace(tag))
+		if norm == "" {
+			continue
+		}
+		for _, kw := range webtoonTagKeywords {
+			if strings.Contains(norm, kw) {
+				return models.ViewerWebtoon
+			}
+		}
+	}
+	return models.ViewerUnknown
+}
+
 // buildComicInfo maps the manga/chapter fields that translate onto
-// ComicInfo.xml honestly -- see cbz.ComicInfo's doc comment for which
-// fields are deliberately left out and why.
+// ComicInfo.xml honestly -- see cbz.ComicInfo's doc comment for how
+// EffectiveViewer maps onto Format and Manga.
 func buildComicInfo(manga models.Manga, chapter models.Chapter, pageCount int) cbz.ComicInfo {
 	info := cbz.ComicInfo{
 		Series:    manga.Title,
 		Genre:     strings.Join(manga.Tags, ", "),
 		Writer:    strings.Join(manga.Authors, ", "),
 		PageCount: pageCount,
+	}
+	switch EffectiveViewer(manga) {
+	case models.ViewerRightToLeft:
+		info.Manga = "YesAndRightToLeft"
+	case models.ViewerLeftToRight:
+		info.Manga = "No"
+	case models.ViewerVertical, models.ViewerWebtoon:
+		info.Format = "Webtoon"
 	}
 	if chapter.Title != nil {
 		info.Title = *chapter.Title

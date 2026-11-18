@@ -170,3 +170,87 @@ func TestResolveOutputPath_SanitizesAndCapsExtension(t *testing.T) {
 		t.Errorf("not idempotent: %q -> %q", got, again)
 	}
 }
+
+func TestEffectiveViewerAndBuildComicInfo(t *testing.T) {
+	tests := []struct {
+		name       string
+		manga      models.Manga
+		wantViewer models.Viewer
+		wantFormat string
+		wantManga  string
+	}{
+		{
+			name:       "explicit_rtl",
+			manga:      models.Manga{Title: "Manga", Viewer: models.ViewerRightToLeft},
+			wantViewer: models.ViewerRightToLeft,
+			wantManga:  "YesAndRightToLeft",
+		},
+		{
+			name:       "explicit_ltr",
+			manga:      models.Manga{Title: "Comic", Viewer: models.ViewerLeftToRight},
+			wantViewer: models.ViewerLeftToRight,
+			wantManga:  "No",
+		},
+		{
+			name:       "explicit_vertical",
+			manga:      models.Manga{Title: "Vertical", Viewer: models.ViewerVertical},
+			wantViewer: models.ViewerVertical,
+			wantFormat: "Webtoon",
+		},
+		{
+			name:       "explicit_webtoon",
+			manga:      models.Manga{Title: "Webtoon", Viewer: models.ViewerWebtoon},
+			wantViewer: models.ViewerWebtoon,
+			wantFormat: "Webtoon",
+		},
+		{
+			name:       "tag_inferred_webtoon_en",
+			manga:      models.Manga{Title: "Strip", Viewer: models.ViewerUnknown, Tags: []string{"Action", " Long Strip "}},
+			wantViewer: models.ViewerWebtoon,
+			wantFormat: "Webtoon",
+		},
+		{
+			name:       "tag_inferred_webtoon_zh",
+			manga:      models.Manga{Title: "StripZH", Viewer: models.ViewerUnknown, Tags: []string{"条漫"}},
+			wantViewer: models.ViewerWebtoon,
+			wantFormat: "Webtoon",
+		},
+		{
+			name:       "unknown_no_webtoon_tag",
+			manga:      models.Manga{Title: "Unknown", Viewer: models.ViewerUnknown, Tags: []string{"Fantasy", "Comedy"}},
+			wantViewer: models.ViewerUnknown,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := EffectiveViewer(tt.manga); got != tt.wantViewer {
+				t.Errorf("EffectiveViewer = %v, want %v", got, tt.wantViewer)
+			}
+			ci := buildComicInfo(tt.manga, models.Chapter{Key: "ch1"}, 12)
+			if ci.Format != tt.wantFormat {
+				t.Errorf("ComicInfo.Format = %q, want %q", ci.Format, tt.wantFormat)
+			}
+			if ci.Manga != tt.wantManga {
+				t.Errorf("ComicInfo.Manga = %q, want %q", ci.Manga, tt.wantManga)
+			}
+			xmlBytes, err := ci.Marshal()
+			if err != nil {
+				t.Fatalf("Marshal: %v", err)
+			}
+			xmlStr := string(xmlBytes)
+			if tt.wantFormat != "" && !strings.Contains(xmlStr, "<Format>"+tt.wantFormat+"</Format>") {
+				t.Errorf("marshaled XML missing <Format>%s</Format>: %s", tt.wantFormat, xmlStr)
+			}
+			if tt.wantFormat == "" && strings.Contains(xmlStr, "<Format>") {
+				t.Errorf("marshaled XML unexpectedly contains <Format>: %s", xmlStr)
+			}
+			if tt.wantManga != "" && !strings.Contains(xmlStr, "<Manga>"+tt.wantManga+"</Manga>") {
+				t.Errorf("marshaled XML missing <Manga>%s</Manga>: %s", tt.wantManga, xmlStr)
+			}
+			if tt.wantManga == "" && strings.Contains(xmlStr, "<Manga>") {
+				t.Errorf("marshaled XML unexpectedly contains <Manga>: %s", xmlStr)
+			}
+		})
+	}
+}

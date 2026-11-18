@@ -8,7 +8,15 @@ about Trapper:wrap().
 
 local Runner = require("subprocess")
 local json = require("json")
+local T = require("ffi/util").template
 local _ = require("aidoku_l10n")
+
+local function invalidateDownloadsCache(downloads_dir)
+    local ok_de, DownloadsEngine = pcall(require, "downloadsengine")
+    if ok_de and DownloadsEngine and type(DownloadsEngine.invalidateCache) == "function" then
+        DownloadsEngine.invalidateCache(downloads_dir)
+    end
+end
 
 local Engine = {}
 Engine.__index = Engine
@@ -254,9 +262,41 @@ end
 -- downloading one chapter. When manga_obj and chapter_obj are provided, uses
 -- `download-payload` so aidoku-run skips a redundant network GetMangaUpdate
 -- call per chapter during batch downloads.
-function Engine:prepareDownloadArgs(source_path, manga_key, chapter_key, out_path, downloads_dir, manga_dir_name, redownload, manga_obj, chapter_obj, koobone_vol)
+local function slimManga(manga_obj)
+    if type(manga_obj) ~= "table" then
+        return manga_obj
+    end
+    local slim = {}
+    for k, v in pairs(manga_obj) do
+        if k ~= "Chapters" then
+            slim[k] = v
+        end
+    end
+    return slim
+end
+
+local function writeJSONPayload(payload)
+    local cleaned = sanitizeForJSON(payload)
+    local ok_enc, encoded = pcall(json.encode, cleaned)
+    if not ok_enc or not encoded then
+        return nil, _("Could not encode request payload")
+    end
+    local payload_path = os.tmpname()
+    local f = io.open(payload_path, "w")
+    local ok_write = f and f:write(encoded)
+    if f then
+        ok_write = f:close() and ok_write
+    end
+    if not ok_write then
+        os.remove(payload_path)
+        return nil, _("Could not write request payload")
+    end
+    return payload_path
+end
+
+function Engine:prepareDownloadArgs(source_path, manga_key, chapter_key, out_path, downloads_dir, manga_dir_name, redownload, manga_obj, chapter_obj, koobone_vol, canonical_keys)
     if type(koobone_vol) == "table" and koobone_vol.file_md5 and koobone_vol.file_md5 ~= "" then
-        local payload = sanitizeForJSON({
+        local payload_path = writeJSONPayload({
             volume = koobone_vol,
             sourcePath = source_path or "",
             outputPath = out_path or "",
@@ -264,48 +304,23 @@ function Engine:prepareDownloadArgs(source_path, manga_key, chapter_key, out_pat
             mangaDirName = manga_dir_name or "",
             redownload = redownload and true or false,
         })
-        local ok_enc, encoded = pcall(json.encode, payload)
-        if ok_enc and encoded then
-            local payload_path = os.tmpname()
-            local f = io.open(payload_path, "w")
-            local ok_write = f and f:write(encoded)
-            if f then
-                ok_write = f:close() and ok_write
-            end
-            if ok_write then
-                return { "-", "koobone", "download-payload", payload_path }, { payload_path }
-            end
-            os.remove(payload_path)
+        if payload_path then
+            return { "-", "koobone", "download-payload", payload_path }, { payload_path }
         end
     end
 
     if type(manga_obj) == "table" and type(chapter_obj) == "table" and manga_obj.Key and chapter_obj.Key then
-        local manga_slim = {}
-        for k, v in pairs(manga_obj) do
-            if k ~= "Chapters" then
-                manga_slim[k] = v
-            end
-        end
-        local payload = sanitizeForJSON({
-            manga = manga_slim,
+        local payload_path = writeJSONPayload({
+            manga = slimManga(manga_obj),
             chapter = chapter_obj,
+            canonicalKeys = type(canonical_keys) == "table" and canonical_keys or nil,
             outputPath = out_path or "",
             downloadsDir = downloads_dir or "",
             mangaDirName = manga_dir_name or "",
             redownload = redownload and true or false,
         })
-        local ok_enc, encoded = pcall(json.encode, payload)
-        if ok_enc and encoded then
-            local payload_path = os.tmpname()
-            local f = io.open(payload_path, "w")
-            local ok_write = f and f:write(encoded)
-            if f then
-                ok_write = f:close() and ok_write
-            end
-            if ok_write then
-                return { source_path, "download-payload", payload_path }, { payload_path }
-            end
-            os.remove(payload_path)
+        if payload_path then
+            return { source_path, "download-payload", payload_path }, { payload_path }
         end
     end
 
@@ -319,21 +334,28 @@ function Engine:prepareDownloadArgs(source_path, manga_key, chapter_key, out_pat
     return args, nil
 end
 
-function Engine:download(source_path, manga_key, chapter_key, out_path, downloads_dir, silent, progress_text_override, manga_dir_name, redownload, manga_obj, chapter_obj, koobone_vol)
+function Engine:download(source_path, manga_key, chapter_key, out_path, downloads_dir, silent, progress_text_override, manga_dir_name, redownload, manga_obj, chapter_obj, koobone_vol, canonical_keys)
     local progress_text = progress_text_override or _("Downloading chapter…")
     if silent then
         progress_text = nil
     end
     local args, cleanup = self:prepareDownloadArgs(
-        source_path, manga_key, chapter_key, out_path, downloads_dir, manga_dir_name, redownload, manga_obj, chapter_obj, koobone_vol)
+        source_path, manga_key, chapter_key, out_path, downloads_dir, manga_dir_name, redownload, manga_obj, chapter_obj, koobone_vol, canonical_keys)
     if silent then
         local out, err = self.runner:exec(args, nil, self:sourceEnv(), true)
         for _idx, p in ipairs(cleanup or {}) do
             os.remove(p)
         end
+        if out then
+            invalidateDownloadsCache(downloads_dir)
+        end
         return out, err
     end
-    return self.runner:execDownload(args, progress_text, self:sourceEnv(), false, cleanup)
+    local out, err = self.runner:execDownload(args, progress_text, self:sourceEnv(), false, cleanup)
+    if out then
+        invalidateDownloadsCache(downloads_dir)
+    end
+    return out, err
 end
 
 -- spawnDownload starts a non-blocking background download subprocess for
@@ -349,28 +371,127 @@ function Engine:spawnDownload(opts)
         opts.redownload,
         opts.manga,
         opts.chapter,
-        opts.koobone_vol
+        opts.koobone_vol,
+        opts.canonical_keys
     )
     return self.runner:spawnAsync(args, self:sourceEnv(), true, cleanup)
+end
+
+function Engine:prepareBatchDownloadArgs(opts)
+    local payload_path, err = writeJSONPayload({
+        manga = slimManga(opts.manga),
+        chapters = opts.chapters or {},
+        canonicalKeys = type(opts.canonical_keys) == "table" and opts.canonical_keys or nil,
+        outputPath = opts.out_path or "",
+        downloadsDir = opts.downloads_dir or "",
+        mangaDirName = opts.manga_dir_name or "",
+        redownload = opts.redownload and true or false,
+    })
+    if not payload_path then
+        return nil, nil, err
+    end
+    return { opts.source_path, "download-batch", payload_path }, { payload_path }
+end
+
+function Engine:batchDownload(opts)
+    local args, cleanup, err = self:prepareBatchDownloadArgs(opts)
+    if not args then
+        return nil, err
+    end
+    if opts.silent then
+        local out, exec_err = self.runner:exec(args, nil, self:sourceEnv(), true)
+        for _idx, p in ipairs(cleanup or {}) do
+            os.remove(p)
+        end
+        if out then
+            invalidateDownloadsCache(opts.downloads_dir)
+        end
+        return out, exec_err
+    end
+    local progress_text = opts.progress_text or _("Downloading chapters…")
+    local out, exec_err = self.runner:execDownload(args, progress_text, self:sourceEnv(), false, cleanup)
+    if out then
+        invalidateDownloadsCache(opts.downloads_dir)
+    end
+    return out, exec_err
+end
+
+function Engine:searchBatch(target_sources, query, page)
+    local specs = {}
+    for _idx, src in ipairs(target_sources or {}) do
+        table.insert(specs, {
+            key = src.key or "",
+            name = src.name or src.text or src.key or "",
+            path = src.path or "",
+        })
+    end
+    local payload_path, err = writeJSONPayload({
+        query = query or "",
+        page = page or 1,
+        sources = specs,
+    })
+    if not payload_path then
+        return nil, err
+    end
+    local total = #specs
+    local first_name = specs[1] and specs[1].name or ""
+    local initial_msg = total > 0
+        and T(_("Searching (%1/%2): %3…"), 0, total, first_name)
+        or _("Searching…")
+    local out, exec_err = self.runner:execSearchBatch(
+        { "-", "search-batch", payload_path },
+        initial_msg,
+        self:sourceEnv(),
+        { payload_path }
+    )
+    if not out then
+        return nil, exec_err
+    end
+    local ok_dec, decoded = pcall(json.decode, out)
+    if not ok_dec or type(decoded) ~= "table" then
+        return nil, _("Invalid response from aidoku-run")
+    end
+    return decoded
+end
+
+function Engine:spawnBatchDownload(opts)
+    local args, cleanup, err = self:prepareBatchDownloadArgs(opts)
+    if not args then
+        return nil, err
+    end
+    return self.runner:spawnAsync(args, self:sourceEnv(), true, cleanup)
+end
+
+-- Removes chapter_keys from a shared EPUB archive and repacks it via Go.
+function Engine:epubRemove(opts)
+    local payload_path, err = writeJSONPayload({
+        epubPath = opts.epub_path or "",
+        downloadsDir = opts.downloads_dir or "",
+        sourceKey = opts.source_key or "",
+        mangaKey = opts.manga_key or "",
+        chapterKeys = opts.chapter_keys or {},
+    })
+    if not payload_path then
+        return nil, err
+    end
+    local out, exec_err = self.runner:exec({ "-", "epub-remove", payload_path }, nil, nil, true)
+    os.remove(payload_path)
+    if not out then
+        return nil, exec_err
+    end
+    local ok_dec, decoded = pcall(json.decode, out)
+    if not ok_dec or type(decoded) ~= "table" then
+        return nil, _("Could not decode epub-remove result")
+    end
+    return decoded
 end
 
 -- spawnCovers starts a non-blocking background cover batch subprocess for
 -- CoverCache and returns its pollable handle.
 function Engine:spawnCovers(payload)
-    local cleaned = sanitizeForJSON(payload)
-    local ok_enc, encoded = pcall(json.encode, cleaned)
-    if not ok_enc or not encoded then
-        return nil, _("Could not encode cover request")
-    end
-    local payload_path = os.tmpname()
-    local f = io.open(payload_path, "w")
-    local ok_write = f and f:write(encoded)
-    if f then
-        ok_write = f:close() and ok_write
-    end
-    if not ok_write then
-        os.remove(payload_path)
-        return nil, _("Could not write cover request")
+    local payload_path, err = writeJSONPayload(payload)
+    if not payload_path then
+        return nil, err or _("Could not write cover request")
     end
     return self.runner:spawnAsync({ "-", "covers", payload_path }, self:sourceEnv(), true, { payload_path })
 end

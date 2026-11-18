@@ -6,6 +6,7 @@ import (
 
 	"github.com/andybalholm/cascadia"
 	nethtml "golang.org/x/net/html"
+	"golang.org/x/text/encoding/simplifiedchinese"
 )
 
 func parseTestDoc(t *testing.T, src string) *nethtml.Node {
@@ -368,5 +369,79 @@ func TestParseHTMLWithNoBaseURLRegistersNoCleanup(t *testing.T) {
 	}
 	if n := len(store.cleanup[descriptor]); n != 0 {
 		t.Fatalf("expected no cleanup hooks for a document with no base URL, got %d", n)
+	}
+}
+
+func TestParseHTMLCharsetAutoDecoding(t *testing.T) {
+	enc := simplifiedchinese.GB18030.NewEncoder()
+	gbkBytes := func(s string) []byte {
+		b, err := enc.Bytes([]byte(s))
+		if err != nil {
+			t.Fatalf("encode GB18030: %v", err)
+		}
+		return b
+	}
+
+	cases := []struct {
+		name        string
+		data        []byte
+		contentType string
+		want        string
+	}{
+		{
+			name:        "GBK meta tag",
+			data:        gbkBytes(`<html><head><meta http-equiv="Content-Type" content="text/html; charset=gbk"></head><body><h1>凡人修仙传</h1></body></html>`),
+			contentType: "",
+			want:        "凡人修仙传",
+		},
+		{
+			name:        "GB2312 Content-Type header",
+			data:        gbkBytes(`<html><body><h1>第一章 七玄门</h1></body></html>`),
+			contentType: "text/html; charset=gb2312",
+			want:        "第一章 七玄门",
+		},
+		{
+			name:        "Raw GB18030 without declaration",
+			data:        gbkBytes(`<html><body><h1>笔趣阁小说正文</h1></body></html>`),
+			contentType: "",
+			want:        "笔趣阁小说正文",
+		},
+		{
+			name:        "Short GBK colliding with UTF-8",
+			data:        gbkBytes(`<html><head><meta charset="gbk"></head><body><h1>小</h1></body></html>`),
+			contentType: "",
+			want:        "小",
+		},
+		{
+			name:        "UTF-8 with stale meta charset gbk",
+			data:        []byte(`<html><head><meta charset="gbk"></head><body><h1>诡秘之主</h1></body></html>`),
+			contentType: "",
+			want:        "诡秘之主",
+		},
+		{
+			name:        "Standard UTF-8",
+			data:        []byte(`<html><head><meta charset="utf-8"></head><body><h1>剑来</h1></body></html>`),
+			contentType: "text/html; charset=utf-8",
+			want:        "剑来",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			store := NewStore()
+			h := NewHtml(store)
+			desc, err := h.ParseHTMLWithContentType(tc.data, "https://example.com/", tc.contentType)
+			if err != nil {
+				t.Fatalf("ParseHTMLWithContentType: %v", err)
+			}
+			root := store.Fetch(desc).(*nethtml.Node)
+			nodes := selectTestNodes(t, root, "h1")
+			if len(nodes) != 1 {
+				t.Fatalf("expected 1 h1 node, got %d", len(nodes))
+			}
+			if got := domText(nodes[0], true); got != tc.want {
+				t.Fatalf("got %q, want %q", got, tc.want)
+			}
+		})
 	}
 }

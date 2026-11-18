@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	goruntime "runtime"
 	"slices"
 	"sort"
 	"strconv"
@@ -21,6 +22,7 @@ import (
 
 	"github.com/ohaiibuzzle/aidokurunner-go/cbz"
 	"github.com/ohaiibuzzle/aidokurunner-go/downloads"
+	"github.com/ohaiibuzzle/aidokurunner-go/epub"
 	"github.com/ohaiibuzzle/aidokurunner-go/internal/fsutil"
 	"github.com/ohaiibuzzle/aidokurunner-go/models"
 	"github.com/ohaiibuzzle/aidokurunner-go/repo"
@@ -59,9 +61,13 @@ commands:
                                      info/search/etc. for callers that only need a source's
                                      identity and display name (e.g. listing installed sources)
   manifests <sources-dir>           read source.json from every .aix in <sources-dir> in one pass
+  search-batch <payload.json>       search multiple .aix sources concurrently from one process
   covers <payload.json>             batch-fetch and thumbnail manga covers to disk
   download-payload <payload.json>   download one chapter from a JSON payload carrying pre-fetched
                                      manga + chapter metadata (avoids a GetMangaUpdate round-trip)
+  download-batch <payload.json>     download a batch of chapters on one WASM runtime (appends text
+                                     chapters into a single-book EPUB, or writes CBZs for manga)
+  epub-remove <payload.json>        remove chapter(s) from a single-book EPUB and repack atomically
   info                              print source metadata and detected features (default)
   search <query> [page] [filters.json]
                                      call get_search_manga_list; filters.json, if given, is a JSON array
@@ -133,7 +139,7 @@ const (
 func run(dir, command string, args []string) (err error) {
 	timeout := defaultCommandTimeout
 	switch command {
-	case "download", "redownload", "download-payload", "update":
+	case "download", "redownload", "download-payload", "download-batch", "epub-remove", "update":
 		timeout = longCommandTimeout
 	case "koobone":
 		if len(args) > 0 && args[0] == "download-payload" {
@@ -182,6 +188,9 @@ func run(dir, command string, args []string) (err error) {
 	if command == "manifests" {
 		return handleManifests(dir, args)
 	}
+	if command == "search-batch" {
+		return handleSearchBatch(ctx, settings, cookiePath, args)
+	}
 	if command == "covers" {
 		return handleCovers(ctx, settings, cookiePath, args)
 	}
@@ -194,19 +203,16 @@ func run(dir, command string, args []string) (err error) {
 	if command == "koobone" {
 		return handleKoobone(ctx, settings, args)
 	}
-
-	// Every aidoku-run is a fresh process, so only an on-disk cache saves
-	// recompiling main.wasm per command. Purely an optimization: failing to
-	// open it just means compiling from scratch.
-	cacheDir := filepath.Join(os.TempDir(), "aidoku-run-wazero-cache")
-	if dir := os.Getenv("AIDOKU_SETTINGS_DIR"); dir != "" {
-		cacheDir = filepath.Join(dir, "wazero-cache")
+	if command == "epub-remove" {
+		return handleEpubRemove(ctx, args)
 	}
-	compilationCache, err := wazero.NewCompilationCacheWithDir(cacheDir)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "warning: wazero compilation cache unavailable: %v\n", err)
-		compilationCache = nil
-	} else {
+
+	// Only use an on-disk wazero compilation cache on AOT compiler platforms
+	// (amd64/arm64). On 32-bit arm/armv6/armv7 Kindles, wazero runs in pure
+	// interpreter mode, so initializing a compilation cache directory on FUSE
+	// flash only wastes ~45 ms per CLI launch with zero benefit.
+	compilationCache, cacheDir := openCompilationCache()
+	if compilationCache != nil {
 		defer compilationCache.Close(ctx)
 	}
 
@@ -228,6 +234,7 @@ func run(dir, command string, args []string) (err error) {
 		NetworkConcurrency: host.NetworkConcurrencyFromEnv(),
 	}
 	src, err := source.LoadPath(ctx, dir, interpConfig, settings)
+	// Remove cache on compile failure and retry without it.
 	if errors.Is(err, runtime.ErrCompile) && compilationCache != nil {
 		// wazero fails compilation on a corrupt cache entry (checksum
 		// mismatch) instead of recompiling, and never deletes it -- so one
@@ -237,7 +244,9 @@ func run(dir, command string, args []string) (err error) {
 		// on every load error (missing main.wasm, a start() trap) would
 		// rewrite the whole cache to flash each run for nothing.
 		fmt.Fprintf(os.Stderr, "warning: retrying without wazero compilation cache: %v\n", err)
-		_ = os.RemoveAll(cacheDir)
+		if cacheDir != "" {
+			_ = os.RemoveAll(cacheDir)
+		}
 		interpConfig.CompilationCache = nil
 		src, err = source.LoadPath(ctx, dir, interpConfig, settings)
 	}
@@ -467,7 +476,7 @@ func run(dir, command string, args []string) (err error) {
 		if len(args) > 4 {
 			mangaDirName = args[4]
 		}
-		return executeDownload(ctx, src, dir, *updated, *chapter, outputPath, downloadsDir, mangaDirName, redownload, false)
+		return executeDownload(ctx, src, dir, *updated, *chapter, outputPath, downloadsDir, mangaDirName, redownload, false, source.CanonicalReadingKeys(updated.Chapters))
 
 	case "download-payload":
 		if len(args) < 1 {
@@ -484,7 +493,24 @@ func run(dir, command string, args []string) (err error) {
 		if p.Manga.Key == "" || p.Chapter.Key == "" {
 			return fmt.Errorf("download payload requires manga.Key and chapter.Key")
 		}
-		return executeDownload(ctx, src, dir, p.Manga, p.Chapter, p.OutputPath, p.DownloadsDir, p.MangaDirName, p.Redownload, true)
+		return executeDownload(ctx, src, dir, p.Manga, p.Chapter, p.OutputPath, p.DownloadsDir, p.MangaDirName, p.Redownload, true, p.CanonicalKeys)
+
+	case "download-batch":
+		if len(args) < 1 {
+			return fmt.Errorf("usage: download-batch <payload.json>")
+		}
+		data, err := os.ReadFile(args[0])
+		if err != nil {
+			return fmt.Errorf("reading download-batch payload: %w", err)
+		}
+		var p downloadBatchPayload
+		if err := json.Unmarshal(data, &p); err != nil {
+			return fmt.Errorf("parsing download-batch payload: %w", err)
+		}
+		if p.Manga.Key == "" || len(p.Chapters) == 0 {
+			return fmt.Errorf("download-batch payload requires manga.Key and non-empty chapters")
+		}
+		return executeBatchDownload(ctx, src, dir, p)
 
 	case "login":
 		if len(args) < 3 {
@@ -532,12 +558,31 @@ func run(dir, command string, args []string) (err error) {
 }
 
 type downloadPayload struct {
-	Manga        models.Manga   `json:"manga"`
-	Chapter      models.Chapter `json:"chapter"`
-	OutputPath   string         `json:"outputPath"`
-	DownloadsDir string         `json:"downloadsDir"`
-	MangaDirName string         `json:"mangaDirName"`
-	Redownload   bool           `json:"redownload"`
+	Manga         models.Manga   `json:"manga"`
+	Chapter       models.Chapter `json:"chapter"`
+	CanonicalKeys []string       `json:"canonicalKeys"`
+	OutputPath    string         `json:"outputPath"`
+	DownloadsDir  string         `json:"downloadsDir"`
+	MangaDirName  string         `json:"mangaDirName"`
+	Redownload    bool           `json:"redownload"`
+}
+
+type downloadBatchPayload struct {
+	Manga         models.Manga     `json:"manga"`
+	Chapters      []models.Chapter `json:"chapters"`
+	CanonicalKeys []string         `json:"canonicalKeys"`
+	OutputPath    string           `json:"outputPath"`
+	DownloadsDir  string           `json:"downloadsDir"`
+	MangaDirName  string           `json:"mangaDirName"`
+	Redownload    bool             `json:"redownload"`
+}
+
+type epubRemovePayload struct {
+	EPUBPath     string   `json:"epubPath"`
+	DownloadsDir string   `json:"downloadsDir"`
+	SourceKey    string   `json:"sourceKey"`
+	MangaKey     string   `json:"mangaKey"`
+	ChapterKeys  []string `json:"chapterKeys"`
 }
 
 func chapterEpoch(c models.Chapter) *int64 {
@@ -548,70 +593,210 @@ func chapterEpoch(c models.Chapter) *int64 {
 	return &ts
 }
 
-// executeDownload runs the indexed (or bare) chapter CBZ download. When
-// fallbackUpdate is true (download-payload) and DownloadChapterCBZ fails on
-// the caller-supplied Manga/Chapter metadata, it retries once after fetching
-// fresh metadata via GetMangaUpdate, so sources that require runtime state
-// populated during GetMangaUpdate still succeed seamlessly.
-func executeDownload(ctx context.Context, src *source.Source, dir string, manga models.Manga, chapter models.Chapter, outputPath, downloadsDir, mangaDirName string, redownload, fallbackUpdate bool) error {
-	downloadOnce := func(m models.Manga, c models.Chapter, out, mDir string) (string, models.Manga, models.Chapter, error) {
-		p, err := src.DownloadChapterCBZ(ctx, m, c, out, mDir, printDownloadProgress)
-		if err == nil || !fallbackUpdate {
-			return p, m, c, err
+func handleEpubRemove(ctx context.Context, args []string) error {
+	if len(args) < 1 {
+		return fmt.Errorf("usage: epub-remove <payload.json>")
+	}
+	data, err := os.ReadFile(args[0])
+	if err != nil {
+		return fmt.Errorf("reading epub-remove payload: %w", err)
+	}
+	var p epubRemovePayload
+	if err := json.Unmarshal(data, &p); err != nil {
+		return fmt.Errorf("parsing epub-remove payload: %w", err)
+	}
+	if p.EPUBPath == "" {
+		return fmt.Errorf("epub-remove requires epubPath")
+	}
+	if p.SourceKey != "" && p.MangaKey != "" {
+		bookLock, err := downloads.AcquireBookLock(ctx, p.SourceKey, p.MangaKey)
+		if err != nil {
+			return fmt.Errorf("acquiring book lock: %w", err)
 		}
-		updated, uerr := src.GetMangaUpdate(ctx, models.Manga{Key: m.Key}, true, true, nil)
-		if uerr != nil {
-			return "", m, c, err
+		defer bookLock.Release()
+	}
+	pathLock, err := downloads.AcquirePathLock(ctx, p.EPUBPath)
+	if err != nil {
+		return fmt.Errorf("acquiring epub path lock: %w", err)
+	}
+	defer pathLock.Release()
+
+	res, err := epub.RemoveChapters(p.EPUBPath, p.ChapterKeys)
+	if err != nil {
+		return err
+	}
+	if p.DownloadsDir != "" {
+		store, err := downloads.Open(p.DownloadsDir)
+		if err != nil {
+			return fmt.Errorf("opening downloads index: %w", err)
 		}
-		var found *models.Chapter
-		for i := range updated.Chapters {
-			if updated.Chapters[i].Key == c.Key {
-				found = &updated.Chapters[i]
-				break
+		defer store.Close()
+		if err := store.DeleteBookChapterRows(p.SourceKey, p.MangaKey, p.EPUBPath, p.ChapterKeys); err != nil {
+			return err
+		}
+	}
+	return printJSON(map[string]any{
+		"ok":          true,
+		"remaining":   res.TotalChapters,
+		"oldKeys":     res.OldKeys,
+		"newKeys":     res.NewKeys,
+		"sdrRemapped": res.SDRRemapped,
+	})
+}
+
+func fetchPagesWithFallback(ctx context.Context, src *source.Source, manga models.Manga, chapter models.Chapter, fallbackUpdate bool) ([]models.Page, models.Manga, models.Chapter, []string, error) {
+	pages, err := src.GetPageList(ctx, manga, chapter)
+	if err == nil && len(pages) > 0 {
+		return pages, manga, chapter, nil, nil
+	}
+	if !fallbackUpdate {
+		if err == nil {
+			err = fmt.Errorf("source: chapter %q has no pages", chapter.Key)
+		}
+		return nil, manga, chapter, nil, err
+	}
+	updated, uerr := src.GetMangaUpdate(ctx, models.Manga{Key: manga.Key}, true, true, nil)
+	if uerr != nil {
+		if err == nil {
+			err = uerr
+		}
+		return nil, manga, chapter, nil, err
+	}
+	var found *models.Chapter
+	for i := range updated.Chapters {
+		if updated.Chapters[i].Key == chapter.Key {
+			found = &updated.Chapters[i]
+			break
+		}
+	}
+	if found == nil {
+		if err == nil {
+			err = fmt.Errorf("chapter %q not found on manga %q", chapter.Key, manga.Key)
+		}
+		return nil, manga, chapter, nil, err
+	}
+	pages2, err2 := src.GetPageList(ctx, *updated, *found)
+	if err2 == nil && len(pages2) == 0 {
+		err2 = fmt.Errorf("source: chapter %q has no pages", found.Key)
+	}
+	return pages2, *updated, *found, source.CanonicalReadingKeys(updated.Chapters), err2
+}
+
+func buildBookMetaWithSource(src *source.Source, manga models.Manga) epub.BookMeta {
+	meta := source.BuildEPUBMeta(src.Key, manga)
+	if len(src.Languages) > 0 && src.Languages[0] != "" {
+		meta.Language = src.Languages[0]
+	}
+	return meta
+}
+
+func canonicalOrderMap(keys []string) map[string]int {
+	m := make(map[string]int, len(keys))
+	for i, k := range keys {
+		if k != "" {
+			if _, exists := m[k]; !exists {
+				m[k] = i + 1
 			}
 		}
-		if found == nil {
-			return "", m, c, err
+	}
+	return m
+}
+
+// executeDownload runs the indexed (or bare) chapter download, emitting an
+// incremental single-book EPUB for text-page chapters or a CBZ archive for
+// image chapters.
+func executeDownload(ctx context.Context, src *source.Source, dir string, manga models.Manga, chapter models.Chapter, outputPath, downloadsDir, mangaDirName string, redownload, fallbackUpdate bool, canonicalKeys []string) error {
+	var lock *downloads.Lock
+	var store *downloads.Store
+	var existing string
+
+	if downloadsDir != "" {
+		var err error
+		lock, err = downloads.AcquireLock(ctx, src.Key, manga.Key, chapter.Key)
+		if err != nil {
+			return fmt.Errorf("acquiring download lock: %w", err)
 		}
-		p2, err2 := src.DownloadChapterCBZ(ctx, *updated, *found, out, mDir, printDownloadProgress)
-		return p2, *updated, *found, err2
+		defer lock.Release()
+
+		store, err = downloads.Open(downloadsDir)
+		if err != nil {
+			return fmt.Errorf("opening downloads index: %w", err)
+		}
+		defer store.Close()
+
+		existing, err = store.Path(src.Key, manga.Key, chapter.Key)
+		if err != nil {
+			return err
+		}
+		if existing != "" && !redownload {
+			if _, statErr := os.Stat(existing); statErr == nil {
+				fmt.Println(existing)
+				return nil
+			}
+		}
 	}
 
-	// A bare, non-indexed download (downloadsDir == "") has nothing to
-	// deduplicate against or record into, so it skips all of the below.
-	if downloadsDir == "" {
-		path, _, _, err := downloadOnce(manga, chapter, outputPath, mangaDirName)
+	pages, manga, chapter, fetchedKeys, err := fetchPagesWithFallback(ctx, src, manga, chapter, fallbackUpdate)
+	if err != nil {
+		return err
+	}
+	if len(canonicalKeys) == 0 && len(fetchedKeys) > 0 {
+		canonicalKeys = fetchedKeys
+	}
+
+	if source.IsTextPages(pages) {
+		baseOut := outputPath
+		if baseOut == "" && downloadsDir != "" {
+			baseOut = filepath.Join(downloadsDir, "book.epub")
+		}
+		epubPath, err := source.ResolveBookEPUBPath(baseOut, mangaDirName, manga)
+		if err != nil {
+			return err
+		}
+		if downloadsDir != "" {
+			bookLock, err := downloads.AcquireBookLock(ctx, src.Key, manga.Key)
+			if err != nil {
+				return fmt.Errorf("acquiring book lock: %w", err)
+			}
+			defer bookLock.Release()
+		}
+		pathLock, err := downloads.AcquirePathLock(ctx, epubPath)
+		if err != nil {
+			return fmt.Errorf("acquiring output path lock: %w", err)
+		}
+		defer pathLock.Release()
+
+		epub.RemoveStaleTemps(filepath.Dir(epubPath), time.Hour)
+		orderMap := canonicalOrderMap(canonicalKeys)
+		chInput := source.BuildChapterInput(chapter, source.JoinTextPages(pages), orderMap[chapter.Key])
+		if _, err := epub.UpsertChapters(epubPath, buildBookMetaWithSource(src, manga), []epub.ChapterInput{chInput}, canonicalKeys); err != nil {
+			return err
+		}
+		printDownloadProgress(1, 1)
+
+		if store != nil {
+			rec := downloads.BookChapterRecord{
+				ChapterKey:    chapter.Key,
+				ChapterTitle:  source.ChapterLabel(chapter),
+				ChapterNumber: chapter.ChapterNumber,
+				VolumeNumber:  chapter.VolumeNumber,
+				DateUploaded:  chapterEpoch(chapter),
+			}
+			if _, err := store.RecordBookChapters(src.Key, dir, manga.Key, epubPath, source.MangaLabel(manga), []downloads.BookChapterRecord{rec}, uint8(source.EffectiveViewer(manga))); err != nil {
+				return fmt.Errorf("recording download: %w", err)
+			}
+		}
+		fmt.Println(epubPath)
+		return nil
+	}
+
+	if store == nil {
+		path, err := src.WriteChapterCBZFromPages(ctx, manga, chapter, pages, outputPath, mangaDirName, printDownloadProgress)
 		if err != nil {
 			return err
 		}
 		fmt.Println(path)
 		return nil
-	}
-
-	// The cross-process lock exists purely to stop two invocations
-	// downloading the same indexed chapter at once -- see
-	// downloads.AcquireLock's doc.
-	lock, err := downloads.AcquireLock(ctx, src.Key, manga.Key, chapter.Key)
-	if err != nil {
-		return fmt.Errorf("acquiring download lock: %w", err)
-	}
-	defer lock.Release()
-
-	store, err := downloads.Open(downloadsDir)
-	if err != nil {
-		return fmt.Errorf("opening downloads index: %w", err)
-	}
-	defer store.Close()
-
-	existing, err := store.Path(src.Key, manga.Key, chapter.Key)
-	if err != nil {
-		return err
-	}
-	if existing != "" && !redownload {
-		if _, statErr := os.Stat(existing); statErr == nil {
-			fmt.Println(existing)
-			return nil
-		}
 	}
 
 	path, err := source.ResolveOutputPath(outputPath, mangaDirName, manga, chapter)
@@ -627,11 +812,11 @@ func executeDownload(ctx context.Context, src *source.Source, dir string, manga 
 		return err
 	}
 	cbz.RemoveStaleTemps(filepath.Dir(path), time.Hour)
-	path, manga, chapter, err = downloadOnce(manga, chapter, path, "")
+	path, err = src.WriteChapterCBZFromPages(ctx, manga, chapter, pages, path, "", printDownloadProgress)
 	if err != nil {
 		return err
 	}
-	entry, err := store.RecordWithDate(src.Key, dir, manga.Key, chapter.Key, path, source.MangaLabel(manga), source.ChapterLabel(chapter), chapter.ChapterNumber, chapter.VolumeNumber, chapterEpoch(chapter))
+	entry, err := store.RecordWithViewer(src.Key, dir, manga.Key, chapter.Key, path, source.MangaLabel(manga), source.ChapterLabel(chapter), chapter.ChapterNumber, chapter.VolumeNumber, chapterEpoch(chapter), uint8(source.EffectiveViewer(manga)))
 	if err != nil {
 		return fmt.Errorf("recording download: %w", err)
 	}
@@ -639,6 +824,150 @@ func executeDownload(ctx context.Context, src *source.Source, dir string, manga 
 		_ = os.Remove(existing) // the title (and so its filename) changed since
 	}
 	fmt.Println(entry.Path)
+	return nil
+}
+
+func executeBatchDownload(ctx context.Context, src *source.Source, dir string, p downloadBatchPayload) error {
+	manga := p.Manga
+	canonicalKeys := p.CanonicalKeys
+	total := len(p.Chapters)
+
+	type fetchedChapter struct {
+		ch    models.Chapter
+		pages []models.Page
+	}
+	fetched := make([]fetchedChapter, 0, total)
+	var updatedManga *models.Manga
+
+	for i, ch := range p.Chapters {
+		var pages []models.Page
+		var err error
+		if i == 0 {
+			var fetchedKeys []string
+			pages, manga, ch, fetchedKeys, err = fetchPagesWithFallback(ctx, src, manga, ch, true)
+			if len(canonicalKeys) == 0 && len(fetchedKeys) > 0 {
+				canonicalKeys = fetchedKeys
+			}
+			if manga.Title != "" {
+				updatedManga = &manga
+			}
+		} else {
+			pages, err = src.GetPageList(ctx, manga, ch)
+			if (err != nil || len(pages) == 0) && updatedManga == nil {
+				var fetchedKeys []string
+				pages, manga, ch, fetchedKeys, err = fetchPagesWithFallback(ctx, src, manga, ch, true)
+				if len(canonicalKeys) == 0 && len(fetchedKeys) > 0 {
+					canonicalKeys = fetchedKeys
+				}
+				updatedManga = &manga
+			} else if err == nil && len(pages) == 0 {
+				err = fmt.Errorf("source: chapter %q has no pages", ch.Key)
+			}
+		}
+		if err != nil {
+			return fmt.Errorf("downloading chapter %d/%d (%s): %w", i+1, total, source.ChapterLabel(ch), err)
+		}
+		fetched = append(fetched, fetchedChapter{ch: ch, pages: pages})
+		if source.IsTextPages(pages) {
+			printDownloadProgress(i+1, total)
+		}
+	}
+
+	if len(fetched) == 0 {
+		return fmt.Errorf("no chapters fetched")
+	}
+
+	if source.IsTextPages(fetched[0].pages) {
+		baseOut := p.OutputPath
+		if baseOut == "" && p.DownloadsDir != "" {
+			baseOut = filepath.Join(p.DownloadsDir, "book.epub")
+		}
+		epubPath, err := source.ResolveBookEPUBPath(baseOut, p.MangaDirName, manga)
+		if err != nil {
+			return err
+		}
+		if p.DownloadsDir != "" {
+			bookLock, err := downloads.AcquireBookLock(ctx, src.Key, manga.Key)
+			if err != nil {
+				return fmt.Errorf("acquiring book lock: %w", err)
+			}
+			defer bookLock.Release()
+		}
+		pathLock, err := downloads.AcquirePathLock(ctx, epubPath)
+		if err != nil {
+			return fmt.Errorf("acquiring output path lock: %w", err)
+		}
+		defer pathLock.Release()
+
+		epub.RemoveStaleTemps(filepath.Dir(epubPath), time.Hour)
+		orderMap := canonicalOrderMap(canonicalKeys)
+		inputs := make([]epub.ChapterInput, 0, len(fetched))
+		recs := make([]downloads.BookChapterRecord, 0, len(fetched))
+		for _, item := range fetched {
+			if !source.IsTextPages(item.pages) {
+				return fmt.Errorf("mixed text and image chapters in download-batch for %q", item.ch.Key)
+			}
+			inputs = append(inputs, source.BuildChapterInput(item.ch, source.JoinTextPages(item.pages), orderMap[item.ch.Key]))
+			recs = append(recs, downloads.BookChapterRecord{
+				ChapterKey:    item.ch.Key,
+				ChapterTitle:  source.ChapterLabel(item.ch),
+				ChapterNumber: item.ch.ChapterNumber,
+				VolumeNumber:  item.ch.VolumeNumber,
+				DateUploaded:  chapterEpoch(item.ch),
+			})
+		}
+		if _, err := epub.UpsertChapters(epubPath, buildBookMetaWithSource(src, manga), inputs, canonicalKeys); err != nil {
+			return err
+		}
+		if p.DownloadsDir != "" {
+			store, err := downloads.Open(p.DownloadsDir)
+			if err != nil {
+				return fmt.Errorf("opening downloads index: %w", err)
+			}
+			defer store.Close()
+			if _, err := store.RecordBookChapters(src.Key, dir, manga.Key, epubPath, source.MangaLabel(manga), recs, uint8(source.EffectiveViewer(manga))); err != nil {
+				return fmt.Errorf("recording batch download: %w", err)
+			}
+		}
+		fmt.Println(epubPath)
+		return nil
+	}
+
+	// Non-text fallback: write each chapter as a CBZ archive.
+	var lastPath string
+	var store *downloads.Store
+	if p.DownloadsDir != "" {
+		var err error
+		store, err = downloads.Open(p.DownloadsDir)
+		if err != nil {
+			return fmt.Errorf("opening downloads index: %w", err)
+		}
+		defer store.Close()
+	}
+	for i, item := range fetched {
+		path, err := source.ResolveOutputPath(p.OutputPath, p.MangaDirName, manga, item.ch)
+		if err != nil {
+			return err
+		}
+		if store != nil {
+			if path, err = store.UnusedPath(src.Key, manga.Key, item.ch.Key, path); err != nil {
+				return err
+			}
+		}
+		cbz.RemoveStaleTemps(filepath.Dir(path), time.Hour)
+		written, err := src.WriteChapterCBZFromPages(ctx, manga, item.ch, item.pages, path, "", printDownloadProgress)
+		if err != nil {
+			return err
+		}
+		lastPath = written
+		if store != nil {
+			if _, err := store.RecordWithViewer(src.Key, dir, manga.Key, item.ch.Key, written, source.MangaLabel(manga), source.ChapterLabel(item.ch), item.ch.ChapterNumber, item.ch.VolumeNumber, chapterEpoch(item.ch), uint8(source.EffectiveViewer(manga))); err != nil {
+				return fmt.Errorf("recording download: %w", err)
+			}
+		}
+		_ = i
+	}
+	fmt.Println(lastPath)
 	return nil
 }
 
@@ -659,6 +988,28 @@ func findSettingNotification(settings []models.Setting, key string) string {
 		}
 	}
 	return ""
+}
+
+func openCompilationCache() (wazero.CompilationCache, string) {
+	if goruntime.GOARCH != "amd64" && goruntime.GOARCH != "arm64" {
+		return nil, ""
+	}
+	if st, err := os.Stat("/dev/shm"); err == nil && st.IsDir() {
+		shmDir := "/dev/shm/aidoku-run-wazero-cache"
+		if cc, err := wazero.NewCompilationCacheWithDir(shmDir); err == nil {
+			return cc, shmDir
+		}
+	}
+	cacheDir := filepath.Join(os.TempDir(), "aidoku-run-wazero-cache")
+	if dir := os.Getenv("AIDOKU_SETTINGS_DIR"); dir != "" {
+		cacheDir = filepath.Join(dir, "wazero-cache")
+	}
+	cc, err := wazero.NewCompilationCacheWithDir(cacheDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: wazero compilation cache unavailable: %v\n", err)
+		return nil, ""
+	}
+	return cc, cacheDir
 }
 
 func printDownloadProgress(current, total int) {
