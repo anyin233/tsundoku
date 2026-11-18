@@ -156,6 +156,19 @@ local function buildTask(self, id, spec)
     return task
 end
 
+local function isCompletedStillOnDisk(self, existing, spec)
+    if self.downloads_engine and self.downloads_engine.path then
+        return self.downloads_engine:path(spec.source_key, spec.manga_key, spec.chapter_key) ~= ""
+    end
+    if type(existing.result_path) == "string" and existing.result_path ~= "" then
+        local ok, lfs = pcall(require, "libs/libkoreader-lfs")
+        if ok and lfs then
+            return lfs.attributes(existing.result_path, "mode") == "file"
+        end
+    end
+    return false
+end
+
 -- enqueue adds one chapter download task (or re-queues a failed/cancelled one).
 -- Returns (task, was_added).
 function DownloadQueue:enqueue(spec)
@@ -166,7 +179,8 @@ function DownloadQueue:enqueue(spec)
             return existing, false
         end
         -- Re-activate a previously failed/cancelled/completed entry if explicitly requested
-        if existing.status == "completed" and not spec.redownload then
+        -- or if the previously recorded file is no longer indexed/present on disk.
+        if existing.status == "completed" and not spec.redownload and isCompletedStillOnDisk(self, existing, spec) then
             return existing, false
         end
         reactivateTask(existing, spec)
@@ -190,7 +204,10 @@ function DownloadQueue:enqueueBatch(specs, ctx)
         local id = makeId(spec.source_key, spec.manga_key, spec.chapter_key)
         local existing = self.by_id[id]
         if existing then
-            if existing.status == "failed" or existing.status == "cancelled" or (existing.status == "completed" and spec.redownload) then
+            if existing.status == "failed"
+                or existing.status == "cancelled"
+                or (existing.status == "completed" and (spec.redownload or not isCompletedStillOnDisk(self, existing, spec)))
+            then
                 reactivateTask(existing, spec)
                 added = added + 1
             end

@@ -42,7 +42,14 @@ local function mangaCover(manga)
     return manga and type(manga.Cover) == "string" and manga.Cover or nil
 end
 
-local SORT_OPTIONS = {
+local NOVEL_SOURCES = {
+    ["zh.biquge"] = true,
+    ["zh.bilinovel"] = true,
+    ["zh.wenku8"] = true,
+    ["zh.zaimanhuanovel"] = true,
+}
+
+local MANGA_SORT_OPTIONS = {
     { id = "source_desc", label = function() return _("Default (Newest chapter first)") end, short = function() return _("Newest") end },
     { id = "source_asc",  label = function() return _("Default (Oldest chapter first)") end, short = function() return _("Oldest") end },
     { id = "name_asc",    label = function() return _("By Name (A → Z)") end,                short = function() return _("Name ↑") end },
@@ -51,8 +58,22 @@ local SORT_OPTIONS = {
     { id = "date_asc",    label = function() return _("By Update Time (Earliest first)") end,short = function() return _("Updated ↑") end },
 }
 
+local NOVEL_SORT_OPTIONS = {
+    { id = "toc_asc",   label = function() return _("Original TOC (Ascending 1 → N)") end,   short = function() return _("Original TOC ↑") end },
+    { id = "toc_desc",  label = function() return _("Original TOC (Descending N → 1)") end,  short = function() return _("Original TOC ↓") end },
+    { id = "name_asc",  label = function() return _("By Name (A → Z)") end,                  short = function() return _("Name ↑") end },
+    { id = "name_desc", label = function() return _("By Name (Z → A)") end,                  short = function() return _("Name ↓") end },
+    { id = "date_desc", label = function() return _("By Update Time (Latest first)") end,    short = function() return _("Updated ↓") end },
+    { id = "date_asc",  label = function() return _("By Update Time (Earliest first)") end,  short = function() return _("Updated ↑") end },
+}
+
 local function sortShortLabel(mode)
-    for _idx, opt in ipairs(SORT_OPTIONS) do
+    for _idx, opt in ipairs(NOVEL_SORT_OPTIONS) do
+        if opt.id == mode then
+            return opt.short()
+        end
+    end
+    for _idx, opt in ipairs(MANGA_SORT_OPTIONS) do
         if opt.id == mode then
             return opt.short()
         end
@@ -135,7 +156,7 @@ function MangaBrowser:downloadedCount()
 end
 
 function MangaBrowser:updateHeaderSubtitle()
-    local sort_mode = self.store:chapterSortMode()
+    local sort_mode = self:effectiveSortMode()
     local total = #self.chapters
     local dl = self:downloadedCount()
     local active, queued = DownloadQueue:getMangaTaskStats(self.source_key, self.initial_manga_key, self.manga.Key)
@@ -168,17 +189,17 @@ function MangaBrowser:updateHeaderSubtitle()
 end
 
 function MangaBrowser:promptSortMenu()
-    local current = self.store:chapterSortMode()
+    local current = self:effectiveSortMode()
     local dialog
     local buttons = {}
-    for _idx, opt in ipairs(SORT_OPTIONS) do
+    for _idx, opt in ipairs(self:sortOptions()) do
         local is_cur = (opt.id == current)
         local mode_id = opt.id
         table.insert(buttons, {{
             text = (is_cur and "✓ " or "") .. opt.label(),
             callback = function()
                 UIManager:close(dialog)
-                self.store:setChapterSortMode(mode_id)
+                self:setEffectiveSortMode(mode_id)
                 self.page = 1
                 self:refresh()
             end,
@@ -234,7 +255,7 @@ function MangaBrowser:toggleBookmark()
 end
 
 function MangaBrowser:onLeftButtonTap()
-    local sort_mode = self.store:chapterSortMode()
+    local sort_mode = self:effectiveSortMode()
     local qstats = DownloadQueue:getStats()
     local is_bm = self.store:isBookmarked(self.source_key, self.manga.Key)
         or self.store:isBookmarked(self.source_key, self.initial_manga_key)
@@ -407,7 +428,7 @@ end
 
 function MangaBrowser:genItemTable()
     local item_table = {}
-    local sort_mode = self.store:chapterSortMode()
+    local sort_mode = self:effectiveSortMode()
     local ordered = ChapterOrder.sortForDisplay(self.chapters, sort_mode, chapterLabel)
     local is_date_sort = (sort_mode == "date_desc" or sort_mode == "date_asc")
 
@@ -563,7 +584,36 @@ function MangaBrowser:mangaEpubPath()
 end
 
 function MangaBrowser:isNovel()
-    return self.source_key == "zh.biquge" or self:mangaEpubPath() ~= ""
+    if NOVEL_SOURCES[self.source_key] == true or self:mangaEpubPath() ~= "" then
+        return true
+    end
+    return type(self.manga) == "table" and tonumber(self.manga.Viewer) == 3
+end
+
+function MangaBrowser:sortOptions()
+    return self:isNovel() and NOVEL_SORT_OPTIONS or MANGA_SORT_OPTIONS
+end
+
+function MangaBrowser:effectiveSortMode()
+    if self:isNovel() then
+        return self.store:novelChapterSortMode()
+    end
+    return self.store:chapterSortMode()
+end
+
+function MangaBrowser:setEffectiveSortMode(mode)
+    if self:isNovel() then
+        self.store:setNovelChapterSortMode(mode)
+    else
+        self.store:setChapterSortMode(mode)
+    end
+end
+
+function MangaBrowser:readingOrderedChapters()
+    if self:isNovel() then
+        return ChapterOrder.orderedByOriginalTOC(self.chapters)
+    end
+    return ChapterOrder.orderedByReading(self.chapters)
 end
 
 function MangaBrowser:syncEpubReadChapters()
@@ -635,7 +685,7 @@ function MangaBrowser:reload()
 end
 
 function MangaBrowser:resumeLocalChapter()
-    local ordered = ChapterOrder.orderedByReading(self.chapters)
+    local ordered = self:readingOrderedChapters()
     if #ordered == 0 then
         return nil
     end
@@ -765,7 +815,7 @@ function MangaBrowser:enqueueChaptersList(chapters_list)
         manga_title = mtitle,
         manga_dir_name = mtitle .. " [" .. self.source_key .. "]",
         epub_path = epub_path,
-        is_novel = self.source_key == "zh.biquge" or epub_path ~= "",
+        is_novel = self:isNovel(),
         canonical_keys = self:canonicalKeys(),
     }
     local to_queue = {}
@@ -814,7 +864,7 @@ function MangaBrowser:promptDownloadAllChapters()
         return
     end
 
-    local ordered = ChapterOrder.orderedByReading(self.chapters)
+    local ordered = self:readingOrderedChapters()
     local pending = {}
     for _idx, c in ipairs(ordered) do
         if self:downloadedPath(c.Key) == "" then
@@ -842,7 +892,7 @@ function MangaBrowser:promptDownloadAllChapters()
 end
 
 function MangaBrowser:downloadNext(n)
-    local ordered = ChapterOrder.orderedByReading(self.chapters)
+    local ordered = self:readingOrderedChapters()
     if #ordered == 0 then
         UIManager:show(InfoMessage:new{ text = _("No chapters to download."), timeout = 2 })
         return
@@ -1081,7 +1131,7 @@ function MangaBrowser:onMenuHold(item)
             text = _("Download from this chapter onward"),
             callback = function()
                 UIManager:close(dialog)
-                local ordered = ChapterOrder.orderedByReading(self.chapters)
+                local ordered = self:readingOrderedChapters()
                 local slice = {}
                 local started = false
                 for _idx, c in ipairs(ordered) do

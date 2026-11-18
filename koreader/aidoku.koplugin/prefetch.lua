@@ -40,7 +40,7 @@ function Prefetch.canonicalKeys(chapters)
     if type(chapters) ~= "table" or #chapters == 0 then
         return nil
     end
-    local ordered = ChapterOrder.orderedByReading(chapters)
+    local ordered = ChapterOrder.orderedByOriginalTOC(chapters)
     local keys = {}
     for _idx, c in ipairs(ordered) do
         if type(c.Key) == "string" and c.Key ~= "" then

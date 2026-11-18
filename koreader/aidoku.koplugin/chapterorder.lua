@@ -139,6 +139,8 @@ function ChapterOrder.naturalCompare(a, b)
 end
 
 -- sortForDisplay returns a new array of chapters ordered according to mode:
+--   "toc_asc"     (original TOC reading order, 1 -> N without cross-volume interleaving)
+--   "toc_desc"    (reversed original TOC order, N -> 1)
 --   "source_desc" (default source order, newest first)
 --   "source_asc"  (reversed source order, oldest first)
 --   "name_asc"    (chapter name A -> Z)
@@ -147,7 +149,16 @@ end
 --   "date_asc"    (DateUploaded oldest -> newest; undated last)
 function ChapterOrder.sortForDisplay(chapters, mode, label_fn)
     mode = mode or "source_desc"
-    if mode == "source_desc" then
+    if mode == "toc_asc" then
+        return ChapterOrder.orderedByOriginalTOC(chapters)
+    elseif mode == "toc_desc" then
+        local asc = ChapterOrder.orderedByOriginalTOC(chapters)
+        local rev = {}
+        for i = #asc, 1, -1 do
+            table.insert(rev, asc[i])
+        end
+        return rev
+    elseif mode == "source_desc" then
         local copy = {}
         for i, c in ipairs(chapters) do
             copy[i] = c
@@ -219,6 +230,34 @@ function ChapterOrder.sortForDisplay(chapters, mode, label_fn)
         out[i] = d.chapter
     end
     return out
+end
+
+-- orderedByOriginalTOC returns chapters in 1 -> N original TOC reading order.
+-- Only sorts by ChapterNumber when every entry has a distinct numeric index
+-- (so partial offline lists restore order, while multi-volume novels whose
+-- volumes restart from Chapter 1 keep their raw positional order intact).
+function ChapterOrder.orderedByOriginalTOC(chapters)
+    local positional = {}
+    for i = #chapters, 1, -1 do
+        table.insert(positional, chapters[i])
+    end
+
+    local all_unique = (#positional > 0)
+    local seen = {}
+    for _idx, c in ipairs(positional) do
+        local num = ChapterOrder.number(c)
+        if not num or seen[num] then
+            all_unique = false
+            break
+        end
+        seen[num] = true
+    end
+    if all_unique then
+        table.sort(positional, function(a, b)
+            return a.ChapterNumber < b.ChapterNumber
+        end)
+    end
+    return positional
 end
 
 function ChapterOrder.orderedByReading(chapters)

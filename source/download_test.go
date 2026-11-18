@@ -254,3 +254,70 @@ func TestEffectiveViewerAndBuildComicInfo(t *testing.T) {
 		})
 	}
 }
+
+func TestResolveBookEPUBPath_IdempotentWithMangaDirName(t *testing.T) {
+	dir := t.TempDir()
+	manga := models.Manga{Title: "道与碳基猴子饲养守则"}
+	mangaDirName := "道与碳基猴子饲养守则 [zh.biquge]"
+
+	firstPath, err := ResolveBookEPUBPath(filepath.Join(dir, "ch1.cbz"), mangaDirName, manga)
+	if err != nil {
+		t.Fatalf("first ResolveBookEPUBPath: %v", err)
+	}
+	wantPath := filepath.Join(dir, mangaDirName, "道与碳基猴子饲养守则.epub")
+	if firstPath != wantPath {
+		t.Fatalf("firstPath = %q, want %q", firstPath, wantPath)
+	}
+
+	// Idempotent before the .epub file is written on disk.
+	secondBeforeWrite, err := ResolveBookEPUBPath(firstPath, mangaDirName, manga)
+	if err != nil {
+		t.Fatalf("second ResolveBookEPUBPath (before write): %v", err)
+	}
+	if secondBeforeWrite != wantPath {
+		t.Fatalf("secondBeforeWrite = %q, want %q", secondBeforeWrite, wantPath)
+	}
+
+	// Idempotent after the .epub file exists on disk (even if Title changed).
+	if err := os.WriteFile(firstPath, []byte("epub"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	mangaRenamed := models.Manga{Title: "Renamed Novel"}
+	secondAfterWrite, err := ResolveBookEPUBPath(firstPath, mangaDirName, mangaRenamed)
+	if err != nil {
+		t.Fatalf("second ResolveBookEPUBPath (after write): %v", err)
+	}
+	if secondAfterWrite != wantPath {
+		t.Fatalf("secondAfterWrite = %q, want %q", secondAfterWrite, wantPath)
+	}
+}
+
+func TestCanonicalReadingKeys_DuplicateChapterNumbersKeepPositionalOrder(t *testing.T) {
+	f32 := func(v float32) *float32 { return &v }
+
+	// Aidoku convention: newest first. Volume 2 restarts ChapterNumber at 1..2.
+	multiVolume := []models.Chapter{
+		{Key: "v2_c2", ChapterNumber: f32(2)},
+		{Key: "v2_c1", ChapterNumber: f32(1)},
+		{Key: "v1_c2", ChapterNumber: f32(2)},
+		{Key: "v1_c1", ChapterNumber: f32(1)},
+		{Key: "notice", ChapterNumber: nil},
+	}
+	gotMulti := CanonicalReadingKeys(multiVolume)
+	wantMulti := []string{"notice", "v1_c1", "v1_c2", "v2_c1", "v2_c2"}
+	if strings.Join(gotMulti, ",") != strings.Join(wantMulti, ",") {
+		t.Fatalf("CanonicalReadingKeys(multiVolume) = %v, want %v", gotMulti, wantMulti)
+	}
+
+	// Unique chapter numbers out of positional order still sort ascending.
+	unique := []models.Chapter{
+		{Key: "c1", ChapterNumber: f32(1)},
+		{Key: "c3", ChapterNumber: f32(3)},
+		{Key: "c2", ChapterNumber: f32(2)},
+	}
+	gotUnique := CanonicalReadingKeys(unique)
+	wantUnique := []string{"c1", "c2", "c3"}
+	if strings.Join(gotUnique, ",") != strings.Join(wantUnique, ",") {
+		t.Fatalf("CanonicalReadingKeys(unique) = %v, want %v", gotUnique, wantUnique)
+	}
+}

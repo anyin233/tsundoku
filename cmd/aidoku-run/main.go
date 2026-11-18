@@ -746,6 +746,13 @@ func executeDownload(ctx context.Context, src *source.Source, dir string, manga 
 
 	if source.IsTextPages(pages) {
 		baseOut := outputPath
+		if (baseOut == "" || !strings.EqualFold(filepath.Ext(baseOut), ".epub")) && store != nil {
+			if existingBook, berr := store.BookEPUBPath(src.Key, manga.Key); berr == nil && existingBook != "" {
+				if st, serr := os.Stat(existingBook); serr == nil && !st.IsDir() {
+					baseOut = existingBook
+				}
+			}
+		}
 		if baseOut == "" && downloadsDir != "" {
 			baseOut = filepath.Join(downloadsDir, "book.epub")
 		}
@@ -878,7 +885,23 @@ func executeBatchDownload(ctx context.Context, src *source.Source, dir string, p
 	}
 
 	if source.IsTextPages(fetched[0].pages) {
+		var store *downloads.Store
+		if p.DownloadsDir != "" {
+			var err error
+			store, err = downloads.Open(p.DownloadsDir)
+			if err != nil {
+				return fmt.Errorf("opening downloads index: %w", err)
+			}
+			defer store.Close()
+		}
 		baseOut := p.OutputPath
+		if (baseOut == "" || !strings.EqualFold(filepath.Ext(baseOut), ".epub")) && store != nil {
+			if existingBook, berr := store.BookEPUBPath(src.Key, manga.Key); berr == nil && existingBook != "" {
+				if st, serr := os.Stat(existingBook); serr == nil && !st.IsDir() {
+					baseOut = existingBook
+				}
+			}
+		}
 		if baseOut == "" && p.DownloadsDir != "" {
 			baseOut = filepath.Join(p.DownloadsDir, "book.epub")
 		}
@@ -919,12 +942,7 @@ func executeBatchDownload(ctx context.Context, src *source.Source, dir string, p
 		if _, err := epub.UpsertChapters(epubPath, buildBookMetaWithSource(src, manga), inputs, canonicalKeys); err != nil {
 			return err
 		}
-		if p.DownloadsDir != "" {
-			store, err := downloads.Open(p.DownloadsDir)
-			if err != nil {
-				return fmt.Errorf("opening downloads index: %w", err)
-			}
-			defer store.Close()
+		if store != nil {
 			if _, err := store.RecordBookChapters(src.Key, dir, manga.Key, epubPath, source.MangaLabel(manga), recs, uint8(source.EffectiveViewer(manga))); err != nil {
 				return fmt.Errorf("recording batch download: %w", err)
 			}

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -242,15 +243,30 @@ func TestBiqugeSourceEndToEndEPUBWorkflow(t *testing.T) {
 		t.Fatalf("expected ad and pagination lines stripped, got:\n%s", ch1XHTML)
 	}
 
-	// 5. Incrementally append chapters 3 & 4
+	// 5. Incrementally append chapters 3 & 4 passing OutputPath: epubPath +
+	// MangaDirName (matching KOReader Lua's incremental download payload).
 	if err := executeBatchDownload(ctx, src, aixPath, downloadBatchPayload{
 		Manga:         *manga,
 		Chapters:      []models.Chapter{manga.Chapters[1], manga.Chapters[0]}, // Ch 3, Ch 4
 		CanonicalKeys: canonical,
+		OutputPath:    epubPath,
 		DownloadsDir:  downloadsDir,
 		MangaDirName:  mangaDir,
 	}); err != nil {
 		t.Fatalf("executeBatchDownload (ch 3-4): %v", err)
+	}
+
+	var epubFiles []string
+	if err := filepath.WalkDir(downloadsDir, func(path string, d fs.DirEntry, err error) error {
+		if err == nil && !d.IsDir() && strings.EqualFold(filepath.Ext(d.Name()), ".epub") {
+			epubFiles = append(epubFiles, path)
+		}
+		return err
+	}); err != nil {
+		t.Fatalf("WalkDir(downloadsDir): %v", err)
+	}
+	if len(epubFiles) != 1 || epubFiles[0] != epubPath {
+		t.Fatalf("expected strictly 1 epub at %q, found %v", epubPath, epubFiles)
 	}
 
 	manifest2, err := epub.ReadManifest(epubPath)

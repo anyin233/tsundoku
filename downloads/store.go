@@ -515,6 +515,23 @@ func (s *Store) Path(sourceKey, mangaKey, chapterKey string) (string, error) {
 	return path, nil
 }
 
+// BookEPUBPath returns an existing .epub path recorded for (sourceKey, mangaKey),
+// or "" if none is indexed.
+func (s *Store) BookEPUBPath(sourceKey, mangaKey string) (string, error) {
+	var path string
+	err := s.db.QueryRow(
+		`SELECT path FROM downloads WHERE source_key=? AND manga_key=? AND LOWER(path) LIKE '%.epub' ORDER BY downloaded_at DESC LIMIT 1`,
+		sourceKey, mangaKey,
+	).Scan(&path)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("downloads: querying book epub path: %w", err)
+	}
+	return path, nil
+}
+
 // nullFloat32 converts a nullable REAL column scan into the *float32
 // pointer-means-absent representation Entry uses (matching models.Chapter).
 func nullFloat32(n sql.NullFloat64) *float32 {

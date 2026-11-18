@@ -196,7 +196,21 @@ func JoinTextPages(pages []models.Page) string {
 
 // ResolveBookEPUBPath computes the canonical single-book EPUB path for manga:
 // <outputDir>/<sanitized mangaDirName>/<sanitized mangaLabel>.epub.
+// If outputPath already points to an existing .epub file or already ends in
+// <sanitized mangaDirName>/<filename>, it returns that path idempotently
+// without nesting mangaDirName a second time.
 func ResolveBookEPUBPath(outputPath, mangaDirName string, manga models.Manga) (string, error) {
+	sub := sanitizeFilename(mangaDirName)
+	if outputPath != "" && strings.EqualFold(filepath.Ext(outputPath), ".epub") {
+		cleanOut := filepath.Clean(outputPath)
+		isRootPlaceholder := filepath.Base(cleanOut) == "book.epub" && mangaDirName != "" && sub != "" && filepath.Base(filepath.Dir(cleanOut)) != sub
+		if !isRootPlaceholder {
+			if st, err := os.Stat(cleanOut); err == nil && !st.IsDir() {
+				return cleanOut, nil
+			}
+		}
+	}
+
 	base := sanitizeFilename(MangaLabel(manga))
 	if base == "" {
 		base = "book"
@@ -207,8 +221,13 @@ func ResolveBookEPUBPath(outputPath, mangaDirName string, manga models.Manga) (s
 	if outputPath != "" {
 		dir, _ = filepath.Split(outputPath)
 	}
-	if mangaDirName != "" {
-		dir = filepath.Join(dir, sanitizeFilename(mangaDirName))
+	if mangaDirName != "" && sub != "" {
+		cleanDir := filepath.Clean(dir)
+		if filepath.Base(cleanDir) != sub {
+			dir = filepath.Join(dir, sub)
+		} else {
+			dir = cleanDir
+		}
 	}
 	fullPath := filepath.Join(dir, filename)
 	if parent := filepath.Dir(fullPath); parent != "." && parent != "" {
@@ -219,8 +238,11 @@ func ResolveBookEPUBPath(outputPath, mangaDirName string, manga models.Manga) (s
 	return fullPath, nil
 }
 
-// CanonicalReadingKeys mirrors chapterorder.lua's orderedByReading to return
-// chapter keys in ascending reading order (oldest-first).
+// CanonicalReadingKeys mirrors chapterorder.lua's orderedByOriginalTOC to
+// return chapter keys in ascending reading order (oldest-first). When
+// numbered chapters contain duplicate ChapterNumber values (e.g., multi-volume
+// web novels that restart numbering per volume), raw positional 1 -> N order is
+// preserved so volumes do not interleave.
 func CanonicalReadingKeys(chapters []models.Chapter) []string {
 	n := len(chapters)
 	if n == 0 {
@@ -236,11 +258,27 @@ func CanonicalReadingKeys(chapters []models.Chapter) []string {
 		pos int
 	}
 	var numbered []indexedChapter
+	seen := make(map[float32]struct{}, n)
+	allUnique := true
 	for i, c := range positional {
 		if c.ChapterNumber != nil {
+			if _, dup := seen[*c.ChapterNumber]; dup {
+				allUnique = false
+				break
+			}
+			seen[*c.ChapterNumber] = struct{}{}
 			numbered = append(numbered, indexedChapter{ch: c, pos: i})
 		}
 	}
+
+	if !allUnique || len(numbered) == 0 {
+		keys := make([]string, n)
+		for i, c := range positional {
+			keys[i] = c.Key
+		}
+		return keys
+	}
+
 	sort.Slice(numbered, func(i, j int) bool {
 		ni, nj := *numbered[i].ch.ChapterNumber, *numbered[j].ch.ChapterNumber
 		if ni != nj {
