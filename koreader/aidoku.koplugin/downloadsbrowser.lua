@@ -520,12 +520,12 @@ function DownloadsBrowser:openChapterFile(source_key, manga_key, path, chapter_k
     end
     self.store:markLastRead(source_key, manga_key)
     require("pendinglibrary").from_tsundoku = true
+    OpenWidgets.closeAll()
+    UIManager:close(self)
     if EpubHelper.isEpub(path)
         and self.ui.document
         and DownloadsEngine.normalizePath(self.ui.document.file) == DownloadsEngine.normalizePath(path)
     then
-        OpenWidgets.closeAll()
-        UIManager:close(self)
         if jump_xp then
             EpubHelper.jumpOpenDocument(self.ui, jump_xp)
         end

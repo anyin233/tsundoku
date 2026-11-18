@@ -963,6 +963,7 @@ function MangaBrowser:openLocal(path, chapter_key, preserve_scroll, needs_reload
     end
     self.store:markLastRead(self.source_key, self.manga.Key)
     require("pendinglibrary").from_tsundoku = true
+    OpenWidgets.closeAll()
     UIManager:close(self)
     if EpubHelper.isEpub(path)
         and self.ui.document

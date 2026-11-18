@@ -35,6 +35,10 @@ function M.closeAll()
     local UIManager = require("ui/uimanager")
     while #stack > 0 do
         local widget = table.remove(stack)
+        if type(widget) == "table" then
+            widget._navbar_closing_intentionally = true
+            widget._sui_closing_for_reader = true
+        end
         UIManager:close(widget)
     end
 end

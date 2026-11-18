@@ -584,6 +584,18 @@ function EpubHelper.prepareJumpToChapter(epub_path, chapter_key, opts)
     if ok_ds and DocSettings and DocSettings.open then
         local ok_open, ds = pcall(DocSettings.open, DocSettings, epub_path)
         if ok_open and ds then
+            if ds:readSetting("cre_dom_version") == nil then
+                local ok_cre, cre_doc = pcall(require, "document/credocument")
+                if ok_cre and cre_doc and type(cre_doc.engineInit) == "function" then
+                    local ok_init, cre = pcall(cre_doc.engineInit, cre_doc)
+                    if ok_init and cre and type(cre.getLatestDomVersion) == "function" then
+                        local ok_ver, latest_ver = pcall(cre.getLatestDomVersion)
+                        if ok_ver and type(latest_ver) == "number" and latest_ver > 0 then
+                            ds:saveSetting("cre_dom_version", latest_ver)
+                        end
+                    end
+                end
+            end
             ds:saveSetting("last_xpointer", target_xp)
             if ds.flush then
                 pcall(ds.flush, ds)
