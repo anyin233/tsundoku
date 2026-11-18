@@ -199,12 +199,20 @@ function Aidoku:ensureBuiltinSources(force)
                     end
                 end
             end
-            if installed_max < builtin_ver then
+            local dst_path = self.sources_dir .. "/" .. entry
+            local needs_sync = installed_max < builtin_ver
+            if not needs_sync and installed_max == builtin_ver then
+                local src_size = lfs.attributes(builtin_dir .. "/" .. entry, "size")
+                local dst_size = lfs.attributes(dst_path, "size")
+                if src_size and src_size ~= dst_size then
+                    needs_sync = true
+                end
+            end
+            if needs_sync then
                 local src_f = io.open(builtin_dir .. "/" .. entry, "rb")
                 if src_f then
                     local data = src_f:read("*a")
                     src_f:close()
-                    local dst_path = self.sources_dir .. "/" .. entry
                     local tmp_path = dst_path .. ".tmp"
                     local dst_f = io.open(tmp_path, "wb")
                     if dst_f then

@@ -22,6 +22,33 @@ local _manifest_order = {}
 local _sidecar_cache = {}
 local _sidecar_order = {}
 
+local function u16(s, idx)
+    local b1, b2 = s:byte(idx, idx + 1)
+    if not b2 then
+        return nil
+    end
+    return b1 + b2 * 256
+end
+
+local function u32(s, idx)
+    local b1, b2, b3, b4 = s:byte(idx, idx + 3)
+    if not b4 then
+        return nil
+    end
+    return b1 + b2 * 256 + b3 * 65536 + b4 * 16777216
+end
+
+local function normalizePath(path)
+    if type(path) ~= "string" then
+        return ""
+    end
+    local clean = path:gsub("//+", "/")
+    if #clean > 1 and clean:sub(-1) == "/" then
+        clean = clean:sub(1, -2)
+    end
+    return clean
+end
+
 local function cachePut(cache, order, key, entry)
     if not cache[key] then
         while #order >= MAX_MANIFEST_CACHE do
@@ -58,33 +85,6 @@ function EpubHelper.invalidateCache(epub_path)
         _sidecar_cache[norm] = nil
         removeOrderKey(_sidecar_order, norm)
     end
-end
-
-local function u16(s, idx)
-    local b1, b2 = s:byte(idx, idx + 1)
-    if not b2 then
-        return nil
-    end
-    return b1 + b2 * 256
-end
-
-local function u32(s, idx)
-    local b1, b2, b3, b4 = s:byte(idx, idx + 3)
-    if not b4 then
-        return nil
-    end
-    return b1 + b2 * 256 + b3 * 65536 + b4 * 16777216
-end
-
-local function normalizePath(path)
-    if type(path) ~= "string" then
-        return ""
-    end
-    local clean = path:gsub("//+", "/")
-    if #clean > 1 and clean:sub(-1) == "/" then
-        clean = clean:sub(1, -2)
-    end
-    return clean
 end
 
 function EpubHelper.isEpub(path)
