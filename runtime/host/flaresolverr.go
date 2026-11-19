@@ -174,11 +174,7 @@ func ReadAllLimited(r io.Reader, max int64) ([]byte, error) {
 	return data, err
 }
 
-// doHTTPRequest performs httpReq and fully reads its body, closing it
-// before returning. Shared by net.go's Net.send and webview.go's
-// webviewContext.doRequest, both of which need the same
-// do-then-buffer-the-body shape to run FlareSolverr detection/retry on top.
-func doHTTPRequest(client *http.Client, httpReq *http.Request) (*http.Response, []byte, error) {
+func doSingleHTTPRequest(client *http.Client, httpReq *http.Request) (*http.Response, []byte, error) {
 	resp, err := client.Do(httpReq)
 	if err != nil {
 		return nil, nil, err
@@ -189,6 +185,68 @@ func doHTTPRequest(client *http.Client, httpReq *http.Request) (*http.Response, 
 		return nil, nil, err
 	}
 	return resp, data, nil
+}
+
+func isRetryableHTTPStatus(resp *http.Response, body []byte) bool {
+	if resp == nil {
+		return false
+	}
+	if resp.StatusCode == http.StatusBadGateway || resp.StatusCode == http.StatusGatewayTimeout {
+		return true
+	}
+	return resp.StatusCode == http.StatusServiceUnavailable && !isCloudflareChallenge(resp, body)
+}
+
+// doHTTPRequest performs httpReq and fully reads its body, closing it
+// before returning. Shared by net.go's Net.send and webview.go's
+// webviewContext.doRequest, both of which need the same
+// do-then-buffer-the-body shape to run FlareSolverr detection/retry on top.
+// Idempotent body-less GET/HEAD requests retry once over a fresh connection on
+// transient transport errors or 502/503(non-CF)/504 gateway responses.
+func doHTTPRequest(client *http.Client, httpReq *http.Request) (*http.Response, []byte, error) {
+	idempotent := httpReq != nil &&
+		(httpReq.Method == http.MethodGet || httpReq.Method == http.MethodHead) &&
+		(httpReq.Body == nil || httpReq.Body == http.NoBody)
+	maxAttempts := 1
+	if idempotent {
+		maxAttempts = 2
+	}
+
+	var lastResp *http.Response
+	var lastData []byte
+	var lastErr error
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		reqAttempt := httpReq
+		if attempt > 0 {
+			timer := time.NewTimer(250 * time.Millisecond)
+			select {
+			case <-timer.C:
+			case <-httpReq.Context().Done():
+				timer.Stop()
+				if lastErr != nil {
+					return nil, nil, lastErr
+				}
+				return lastResp, lastData, nil
+			}
+			reqAttempt = httpReq.Clone(httpReq.Context())
+			reqAttempt.Close = true
+		}
+
+		resp, data, err := doSingleHTTPRequest(client, reqAttempt)
+		if err != nil {
+			lastResp, lastData, lastErr = nil, nil, err
+			if httpReq.Context().Err() != nil || strings.Contains(err.Error(), "response larger than") {
+				return nil, nil, err
+			}
+			continue
+		}
+		if attempt+1 < maxAttempts && isRetryableHTTPStatus(resp, data) {
+			lastResp, lastData, lastErr = resp, data, nil
+			continue
+		}
+		return resp, data, nil
+	}
+	return lastResp, lastData, lastErr
 }
 
 // flareSolverrRetryer bundles what's needed to detect a Cloudflare

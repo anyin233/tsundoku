@@ -13,9 +13,20 @@ pub const USER_AGENT: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Ap
 const MIRROR_URL_KEY: &str = "mirror_url";
 pub const PRESET_MIRROR_KEY: &str = "preset_mirror";
 pub const DEFAULT_PRESET_MIRROR: &str = "https://www.bqg9.xyz";
+const MIRROR_FALLBACK_KEY: &str = "mirror_fallback";
+const FALLBACK_MIRRORS_KEY: &str = "fallback_mirrors";
 const CHARSET_KEY: &str = "charset";
 const SEARCH_RULE_KEY: &str = "search_rule";
 const PROBE_PREFIX: &str = "probe.v1.";
+
+pub const BUILTIN_MIRRORS: &[&str] = &[
+	"https://www.bqg6.xyz",
+	"https://www.bqg9.xyz",
+	"https://www.myxyjs.com",
+	"https://www.biquge123.uk",
+	"https://www.piaotia.com",
+	"https://www.biqiuge8.net",
+];
 
 pub fn resolve_base_url(custom_raw: &str, preset_raw: Option<&str>) -> Result<String> {
 	if let Some(u) = normalize_base_url(custom_raw) {
@@ -64,6 +75,28 @@ pub fn custom_search_rule() -> Option<String> {
 	defaults_get::<String>(SEARCH_RULE_KEY)
 		.map(|s| String::from(s.trim()))
 		.filter(|s| !s.is_empty())
+}
+
+pub fn mirror_fallback_enabled() -> bool {
+	defaults_get::<bool>(MIRROR_FALLBACK_KEY).unwrap_or(true)
+}
+
+pub fn parse_fallback_mirrors(raw: &str) -> Vec<String> {
+	let mut out = Vec::new();
+	for part in raw.split([',', ';', ' ', '\t', '\n', '\r']) {
+		if let Some(norm) = normalize_base_url(part) {
+			if !out.iter().any(|u: &String| u.eq_ignore_ascii_case(&norm)) {
+				out.push(norm);
+			}
+		}
+	}
+	out
+}
+
+pub fn configured_fallback_mirrors() -> Vec<String> {
+	defaults_get::<String>(FALLBACK_MIRRORS_KEY)
+		.map(|s| parse_fallback_mirrors(&s))
+		.unwrap_or_default()
 }
 
 pub fn probe_cache_key(base: &str) -> String {
@@ -116,6 +149,10 @@ pub fn resolve_href(base: &str, current_url: &str, href: &str) -> String {
 	if h.is_empty() || h.starts_with('#') || h.starts_with("javascript:") || h.starts_with("mailto:") {
 		return String::new();
 	}
+	let h = h.split('#').next().unwrap_or(h).trim();
+	if h.is_empty() {
+		return String::new();
+	}
 	if h.starts_with("http://") || h.starts_with("https://") {
 		return String::from(h);
 	}
@@ -128,6 +165,9 @@ pub fn resolve_href(base: &str, current_url: &str, href: &str) -> String {
 		return format!("{origin}{h}");
 	}
 	let cur_no_query = current_url.split(['?', '#']).next().unwrap_or(current_url);
+	if h.starts_with('?') {
+		return format!("{cur_no_query}{h}");
+	}
 	let base_dir = match cur_no_query.rfind('/') {
 		Some(idx) if idx >= origin.len() => &cur_no_query[..=idx],
 		_ => origin,

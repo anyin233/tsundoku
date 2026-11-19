@@ -327,7 +327,7 @@ pub fn looks_like_book_href(href: &str) -> bool {
 		&& segs[0].chars().any(|c| c.is_ascii_digit())
 		&& !matches!(
 			segs[0],
-			"book" | "bookinfo" | "html" | "xiaoshuo" | "xs" | "shu" | "info" | "read" | "biquge"
+			"book" | "books" | "bookinfo" | "html" | "xiaoshuo" | "xs" | "shu" | "info" | "read" | "biquge"
 		)
 	{
 		return false;
@@ -567,6 +567,8 @@ pub fn extract_toc_from_doc(doc: &Document, base: &str, page_url: &str) -> Vec<(
 		".zjlist a[href]",
 		".mulu a[href]",
 		"#chapters-list a[href]",
+		"#directory a[href]",
+		"a[href*='/chapters/']",
 	];
 	for sel in list_selectors {
 		if let Some(links) = doc.select(sel) {
@@ -586,7 +588,12 @@ fn collect_toc_links<I: IntoIterator<Item = Element>>(links: I, base: &str, page
 		let title = trim_cjk_space(&title);
 		let abs = element_href(&a, base, page_url);
 		let key = config::normalize_key(&abs, base);
-		if !title.is_empty() && !key.is_empty() && !title.contains("全部章节") && !title.contains("下一页") {
+		if !title.is_empty()
+			&& !key.is_empty()
+			&& !title.contains("全部章节")
+			&& !title.contains("下一页")
+			&& !matches!(title, "开始阅读" | "查看目录")
+		{
 			items.push((key, String::from(title)));
 		}
 	}
@@ -712,33 +719,48 @@ pub fn find_next_page_url(doc: &Document, base: &str, page_url: &str) -> Option<
 
 pub fn fetch_manga_update(manga: Manga, needs_details: bool, needs_chapters: bool) -> Result<Manga> {
 	let base = config::base_url()?;
-	let book_url = config::make_full_url(&base, &manga.key);
+	fetch_manga_update_on_base(&base, manga, needs_details, needs_chapters)
+}
+
+pub fn fetch_manga_update_on_base(
+	base: &str,
+	manga: Manga,
+	needs_details: bool,
+	needs_chapters: bool,
+) -> Result<Manga> {
+	let book_url = config::make_full_url(base, &manga.key);
 	let req = config::apply_headers(Request::get(&book_url)?, &format!("{base}/"));
 	let resp = req.send()?;
+	let status = resp.status_code();
+	if !(200..400).contains(&status) {
+		return Err(error!("HTTP {status} fetching {book_url}"));
+	}
 	let final_url = resp.get_url().unwrap_or_else(|| book_url.clone());
 	let doc = resp.get_html()?;
 
 	let mut out = if needs_details {
-		parse_manga_details_from_doc(&doc, &base, &final_url, &manga.key)
+		parse_manga_details_from_doc(&doc, base, &final_url, &manga.key)
 	} else {
 		manga
 	};
 
 	if needs_chapters {
-		let mut toc_items = extract_toc_from_doc(&doc, &base, &final_url);
-		let mut toc_doc_next = find_next_page_url(&doc, &base, &final_url);
+		let mut toc_items = extract_toc_from_doc(&doc, base, &final_url);
+		let mut toc_doc_next = find_next_page_url(&doc, base, &final_url);
 
 		if (toc_items.is_empty() || toc_items.len() <= 20)
-			&& let Some(full_toc_url) = find_full_toc_url(&doc, &base, &final_url)
+			&& let Some(full_toc_url) = find_full_toc_url(&doc, base, &final_url)
 		{
 			if let Ok(req2) = Request::get(&full_toc_url) {
 				if let Ok(resp2) = config::apply_headers(req2, &final_url).send() {
-					let f2 = resp2.get_url().unwrap_or_else(|| full_toc_url.clone());
-					if let Ok(doc2) = resp2.get_html() {
-						let items2 = extract_toc_from_doc(&doc2, &base, &f2);
-						if items2.len() >= toc_items.len() {
-							toc_items = items2;
-							toc_doc_next = find_next_page_url(&doc2, &base, &f2);
+					if (200..400).contains(&resp2.status_code()) {
+						let f2 = resp2.get_url().unwrap_or_else(|| full_toc_url.clone());
+						if let Ok(doc2) = resp2.get_html() {
+							let items2 = extract_toc_from_doc(&doc2, base, &f2);
+							if items2.len() >= toc_items.len() {
+								toc_items = items2;
+								toc_doc_next = find_next_page_url(&doc2, base, &f2);
+							}
 						}
 					}
 				}
@@ -755,14 +777,17 @@ pub fn fetch_manga_update(manga: Manga, needs_details: bool, needs_chapters: boo
 			visited.push(next_url.clone());
 			let Ok(nreq) = Request::get(&next_url) else { break };
 			let Ok(nresp) = config::apply_headers(nreq, &final_url).send() else { break };
+			if !(200..400).contains(&nresp.status_code()) {
+				break;
+			}
 			let nf = nresp.get_url().unwrap_or_else(|| next_url.clone());
 			let Ok(ndoc) = nresp.get_html() else { break };
-			let page_items = extract_toc_from_doc(&ndoc, &base, &nf);
+			let page_items = extract_toc_from_doc(&ndoc, base, &nf);
 			if page_items.is_empty() {
 				break;
 			}
 			toc_items.extend(page_items);
-			next_opt = find_next_page_url(&ndoc, &base, &nf);
+			next_opt = find_next_page_url(&ndoc, base, &nf);
 		}
 
 		let deduped = dedup_toc_keep_last(toc_items);
@@ -770,7 +795,7 @@ pub fn fetch_manga_update(manga: Manga, needs_details: bool, needs_chapters: boo
 			.into_iter()
 			.enumerate()
 			.map(|(i, (key, title))| {
-				let ch_url = config::make_full_url(&base, &key);
+				let ch_url = config::make_full_url(base, &key);
 				Chapter {
 					key,
 					title: Some(title),
@@ -850,8 +875,10 @@ fn find_subpage_next_url(
 	None
 }
 
-fn extract_chapter_inner_html(doc: &Document) -> Option<String> {
+pub fn extract_chapter_inner_html(doc: &Document) -> Option<String> {
 	let selectors = [
+		".reader-prose",
+		"#content .text",
 		"#content",
 		"#chaptercontent",
 		"#booktxt",
@@ -905,13 +932,22 @@ pub fn fetch_chapter_text(chapter: &Chapter) -> Result<String> {
 		.map(|u| config::make_full_url(&base, u))
 		.unwrap_or_else(|| config::make_full_url(&base, &chapter.key));
 	let root_key = config::normalize_key(&chapter.key, &base);
-	let root_stem = extract_subpage_stem(&root_key);
 	let chapter_title = chapter.title.as_deref().unwrap_or("");
+	fetch_chapter_text_from_url(&base, &start_url, &root_key, chapter_title)
+}
+
+pub fn fetch_chapter_text_from_url(
+	base: &str,
+	start_url: &str,
+	root_key: &str,
+	chapter_title: &str,
+) -> Result<String> {
+	let root_stem = extract_subpage_stem(root_key);
 
 	let mut visited: Vec<String> = Vec::new();
 	let mut parts: Vec<String> = Vec::new();
-	let mut cur_url = start_url;
-	let mut referer = format!("{base}/");
+	let mut cur_url = String::from(start_url);
+	let mut referer = format!("{}/", base.trim_end_matches('/'));
 
 	for _ in 0..MAX_CHAPTER_SUBPAGES {
 		if visited.iter().any(|u| u == &cur_url) {
@@ -921,6 +957,10 @@ pub fn fetch_chapter_text(chapter: &Chapter) -> Result<String> {
 
 		let req = config::apply_headers(Request::get(&cur_url)?, &referer);
 		let resp = req.send()?;
+		let status = resp.status_code();
+		if !(200..400).contains(&status) {
+			return Err(error!("HTTP {status} fetching {cur_url}"));
+		}
 		let final_url = resp.get_url().unwrap_or_else(|| cur_url.clone());
 		if !visited.iter().any(|u| u == &final_url) {
 			visited.push(final_url.clone());
@@ -929,7 +969,7 @@ pub fn fetch_chapter_text(chapter: &Chapter) -> Result<String> {
 
 		// Locate subpage pagination BEFORE extract_chapter_inner_html strips .bottem/.read-page/.chapter-nav nodes.
 		let next_opt =
-			find_subpage_next_url(&doc, &base, &final_url, root_stem.as_deref(), &visited);
+			find_subpage_next_url(&doc, base, &final_url, root_stem.as_deref(), &visited);
 		let inner_html = extract_chapter_inner_html(&doc)
 			.ok_or_else(|| error!("未能在页面中定位到小说正文容器"))?;
 		let cleaned = clean_chapter_html(&inner_html, chapter_title);
@@ -1021,9 +1061,15 @@ pub fn fetch_listing(listing_id: &str) -> Result<MangaPageResult> {
 }
 
 pub fn extract_card_manga(container: &Element, base: &str, page_url: &str) -> Option<Manga> {
-	let link = container
-		.select_first("h3 a[href], h4 a[href], .s2 a[href], .bookname a[href], dd a[href]:not(:has(img)), a[href][title], a[href]:not(:has(img))")
-		.or_else(|| container.select_first("dt a[href], a[href]"))?;
+	let owned_link;
+	let link = if container.tag_name().is_some_and(|t| t.eq_ignore_ascii_case("a")) {
+		container
+	} else {
+		owned_link = container
+			.select_first("h3 a[href], h4 a[href], .s2 a[href], .bookname a[href], dd a[href]:not(:has(img)), a[href][title], a[href]:not(:has(img))")
+			.or_else(|| container.select_first("dt a[href], a[href]"))?;
+		&owned_link
+	};
 	let abs = element_href(&link, base, page_url);
 	if abs.is_empty() || !looks_like_book_href(&abs) {
 		return None;
@@ -1032,9 +1078,11 @@ pub fn extract_card_manga(container: &Element, base: &str, page_url: &str) -> Op
 	if key.is_empty() {
 		return None;
 	}
-	let title_raw = link
-		.attr("title")
+	let title_raw = container
+		.select_first(".reader-book-info strong")
+		.and_then(|el| el.text())
 		.filter(|s| !trim_cjk_space(s).is_empty())
+		.or_else(|| link.attr("title").filter(|s| !trim_cjk_space(s).is_empty()))
 		.or_else(|| link.text().filter(|s| !trim_cjk_space(s).is_empty()))
 		.or_else(|| {
 			link.select_first("img[alt]")
@@ -1050,7 +1098,7 @@ pub fn extract_card_manga(container: &Element, base: &str, page_url: &str) -> Op
 		.and_then(|img| element_src(&img, base, page_url));
 
 	let author = container
-		.select_first(".author, .s4, dt span, span.author, dd.book_other span, dd.book_other:contains(作者)")
+		.select_first(".reader-book-info span, .author, .s4, dt span, span.author, dd.book_other span, dd.book_other:contains(作者)")
 		.and_then(|el| el.text())
 		.map(|s| clean_author(&s))
 		.filter(|s| !s.is_empty());

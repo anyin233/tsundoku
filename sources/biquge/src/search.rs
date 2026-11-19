@@ -277,6 +277,7 @@ pub fn parse_search_results(doc: &Document, base: &str, final_url: &str) -> Mang
 	// 2. Common div/list search card templates (ShipSay, mobile Biquge, modern templates)
 	if entries.is_empty() {
 		let card_selectors = [
+			"a.reader-book[href]",
 			".result-item",
 			"li.hot_4_item",
 			".hot_4_item",
@@ -434,6 +435,13 @@ fn fallback_endpoints(base: &str, cs_pref: &str) -> Vec<SearchEndpoint> {
 			charset: String::from(cs),
 			extra_params: Vec::new(),
 		},
+		SearchEndpoint {
+			method: String::from("GET"),
+			action: format!("{base}/"),
+			query_param: String::from("q"),
+			charset: String::from(cs),
+			extra_params: Vec::new(),
+		},
 	];
 	if cs_pref == "auto" {
 		eps.push(SearchEndpoint {
@@ -462,23 +470,36 @@ pub fn search_manga(query: &str, page: i32) -> Result<MangaPageResult> {
 			req.set_body(b.into_bytes());
 		}
 		let resp = req.send()?;
+		let status = resp.status_code();
+		if !(200..400).contains(&status) {
+			return Err(error!("HTTP {status} searching {url}"));
+		}
 		let final_url = resp.get_url().unwrap_or(url);
 		let doc = resp.get_html()?;
 		return Ok(parse_search_results(&doc, &base, &final_url));
 	}
 
+	search_manga_on_base(&base, q, page)
+}
+
+pub fn search_manga_on_base(base: &str, query: &str, page: i32) -> Result<MangaPageResult> {
+	let q = query.trim();
+	if q.is_empty() {
+		return Ok(MangaPageResult::default());
+	}
+
 	// 1. Try cached discovered endpoint
-	if let Some(cached_json) = config::load_probe_cache(&base) {
+	if let Some(cached_json) = config::load_probe_cache(base) {
 		if let Ok(mut ep) = serde_json::from_str::<SearchEndpoint>(&cached_json) {
 			let pref = config::configured_charset();
 			if pref != "auto" {
 				ep.charset = pref;
 			}
-			if let Ok(resp) = send_search_endpoint(&base, &ep, q, page) {
+			if let Ok(resp) = send_search_endpoint(base, &ep, q, page) {
 				if (200..400).contains(&resp.status_code()) {
 					let final_url = resp.get_url().unwrap_or_else(|| ep.action.clone());
 					if let Ok(doc) = resp.get_html() {
-						let res = parse_search_results(&doc, &base, &final_url);
+						let res = parse_search_results(&doc, base, &final_url);
 						if !res.entries.is_empty() {
 							return Ok(res);
 						}
@@ -489,14 +510,14 @@ pub fn search_manga(query: &str, page: i32) -> Result<MangaPageResult> {
 	}
 
 	// 2. Discover homepage <form>
-	if let Some(ep) = discover_search_endpoint(&base) {
-		if let Ok(resp) = send_search_endpoint(&base, &ep, q, page) {
+	if let Some(ep) = discover_search_endpoint(base) {
+		if let Ok(resp) = send_search_endpoint(base, &ep, q, page) {
 			if (200..400).contains(&resp.status_code()) {
 				let final_url = resp.get_url().unwrap_or_else(|| ep.action.clone());
 				if let Ok(doc) = resp.get_html() {
-					let res = parse_search_results(&doc, &base, &final_url);
+					let res = parse_search_results(&doc, base, &final_url);
 					if let Ok(json) = serde_json::to_string(&ep) {
-						config::save_probe_cache(&base, &json);
+						config::save_probe_cache(base, &json);
 					}
 					if !res.entries.is_empty() {
 						return Ok(res);
@@ -509,17 +530,17 @@ pub fn search_manga(query: &str, page: i32) -> Result<MangaPageResult> {
 	// 3. Probe standard Jieqi / ShipSay endpoints
 	let cs_pref = config::configured_charset();
 	let mut first_ok: Option<MangaPageResult> = None;
-	for ep in fallback_endpoints(&base, &cs_pref) {
-		let Ok(resp) = send_search_endpoint(&base, &ep, q, page) else { continue };
+	for ep in fallback_endpoints(base, &cs_pref) {
+		let Ok(resp) = send_search_endpoint(base, &ep, q, page) else { continue };
 		if !(200..400).contains(&resp.status_code()) {
 			continue;
 		}
 		let final_url = resp.get_url().unwrap_or_else(|| ep.action.clone());
 		let Ok(doc) = resp.get_html() else { continue };
-		let res = parse_search_results(&doc, &base, &final_url);
+		let res = parse_search_results(&doc, base, &final_url);
 		if !res.entries.is_empty() {
 			if let Ok(json) = serde_json::to_string(&ep) {
-				config::save_probe_cache(&base, &json);
+				config::save_probe_cache(base, &json);
 			}
 			return Ok(res);
 		}

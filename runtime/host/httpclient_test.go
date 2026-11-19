@@ -1,10 +1,12 @@
 package host
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -119,5 +121,62 @@ func TestSharedHTTPClientJarRejectsPublicSuffixCookie(t *testing.T) {
 	}
 	if sent := jar.Cookies(sub); hasCookie(sent, "hostonly") {
 		t.Errorf("a host-only cookie must not be sent to a subdomain, got %v", sent)
+	}
+}
+
+func TestDoHTTPRequestRetriesTransientGetErrors(t *testing.T) {
+	var attempts atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := attempts.Add(1)
+		if n == 1 {
+			// Force abrupt EOF on first attempt (connection hijack & close).
+			if hj, ok := w.(http.Hijacker); ok {
+				conn, _, err := hj.Hijack()
+				if err == nil {
+					_ = conn.Close()
+					return
+				}
+			}
+		}
+		if r.URL.Path == "/502" && n == 2 {
+			w.WriteHeader(http.StatusBadGateway)
+			_, _ = w.Write([]byte("bad gateway"))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer srv.Close()
+
+	client := &http.Client{}
+	req1, _ := http.NewRequest(http.MethodGet, srv.URL+"/eof", nil)
+	resp1, data1, err := doHTTPRequest(client, req1)
+	if err != nil {
+		t.Fatalf("expected GET retry after EOF to succeed, got err: %v", err)
+	}
+	if resp1.StatusCode != http.StatusOK || string(data1) != "ok" {
+		t.Fatalf("unexpected response after EOF retry: status=%d body=%q", resp1.StatusCode, data1)
+	}
+
+	// Reset attempts so first attempt on /502 hits HTTP 502 and second gets 200.
+	attempts.Store(1)
+	req2, _ := http.NewRequest(http.MethodGet, srv.URL+"/502", nil)
+	resp2, data2, err := doHTTPRequest(client, req2)
+	if err != nil {
+		t.Fatalf("expected GET retry after 502 to succeed, got err: %v", err)
+	}
+	if resp2.StatusCode != http.StatusOK || string(data2) != "ok" {
+		t.Fatalf("unexpected response after 502 retry: status=%d body=%q", resp2.StatusCode, data2)
+	}
+
+	// Non-idempotent POST must NOT retry.
+	attempts.Store(0)
+	reqPost, _ := http.NewRequest(http.MethodPost, srv.URL+"/post", io.NopCloser(strings.NewReader("x=1")))
+	_, _, err = doHTTPRequest(client, reqPost)
+	if err == nil {
+		t.Fatalf("expected POST EOF not to retry")
+	}
+	if got := attempts.Load(); got != 1 {
+		t.Fatalf("POST attempts = %d, want 1", got)
 	}
 }

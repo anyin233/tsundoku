@@ -1,6 +1,7 @@
 #![cfg_attr(not(test), no_std)]
 
 pub mod config;
+pub mod fallback;
 pub mod parser;
 pub mod search;
 
@@ -45,11 +46,11 @@ impl Source for BiqugeSource {
 		needs_details: bool,
 		needs_chapters: bool,
 	) -> Result<Manga> {
-		parser::fetch_manga_update(manga, needs_details, needs_chapters)
+		fallback::fetch_manga_update_with_fallback(manga, needs_details, needs_chapters)
 	}
 
-	fn get_page_list(&self, _manga: Manga, chapter: Chapter) -> Result<Vec<Page>> {
-		let text = parser::fetch_chapter_text(&chapter)?;
+	fn get_page_list(&self, manga: Manga, chapter: Chapter) -> Result<Vec<Page>> {
+		let text = fallback::fetch_chapter_text_with_fallback(&manga, &chapter)?;
 		Ok(vec![Page {
 			content: PageContent::text(text),
 			..Default::default()
@@ -66,7 +67,10 @@ impl ListingProvider for BiqugeSource {
 impl NotificationHandler for BiqugeSource {
 	fn handle_notification(&self, notification: String) {
 		match notification.as_str() {
-			"reset_probe" | "mirror_url" | "charset" => config::clear_probe_cache(),
+			"reset_probe" | "mirror_url" | "charset" => {
+				config::clear_probe_cache();
+				fallback::reset_session_cache();
+			}
 			_ => {}
 		}
 	}
@@ -77,7 +81,8 @@ register_source!(BiqugeSource, ListingProvider, NotificationHandler);
 
 #[cfg(test)]
 mod tests {
-	use super::{config, parser, search};
+	use super::{config, fallback, parser, search};
+	use aidoku::{Chapter, alloc::{String, vec}};
 
 	#[test]
 	fn test_normalize_base_and_keys() {
@@ -94,6 +99,69 @@ mod tests {
 			config::resolve_href("https://m.bg.cc", "https://m.bg.cc/book/99/101.html", "101_2.html"),
 			"https://m.bg.cc/book/99/101_2.html"
 		);
+		assert_eq!(
+			config::resolve_href(
+				"https://www.myxyjs.com",
+				"https://www.myxyjs.com/books/source-abc",
+				"?page=2#directory"
+			),
+			"https://www.myxyjs.com/books/source-abc?page=2"
+		);
+	}
+
+	#[test]
+	fn test_fallback_wap_extraction_and_targets() {
+		assert_eq!(
+			fallback::extract_bqg_wap_ids("/129_129484/170227086.html"),
+			Some((String::from("129484"), String::from("170227086")))
+		);
+		assert_eq!(
+			fallback::extract_bqg_wap_ids("/129484/170227086.html"),
+			Some((String::from("129484"), String::from("170227086")))
+		);
+		assert_eq!(fallback::extract_bqg_wap_ids("/books/abc/chapters/1"), None);
+
+		let ch = Chapter {
+			key: String::from("/129_129484/170227090.html"),
+			title: Some(String::from("005 泛智人种族中心主义（中）")),
+			url: Some(String::from("https://www.bqg9.xyz/129_129484/170227090.html")),
+			..Default::default()
+		};
+		let targets = fallback::sibling_chapter_targets(
+			"https://www.bqg9.xyz",
+			&ch,
+			Some("https://www.bqg6.xyz"),
+			true,
+			&config::parse_fallback_mirrors("custom1.example.com, https://www.bqg6.xyz"),
+		);
+		let urls: Vec<&str> = targets.iter().map(|t| t.start_url.as_str()).collect();
+		assert_eq!(urls[0], "https://www.bqg6.xyz/129_129484/170227090.html");
+		assert_eq!(urls[1], "https://www.bqg9.xyz/129_129484/170227090.html");
+		assert!(urls.contains(&"http://www.b5200.net/129_129484/170227090.html"));
+		assert!(urls.contains(&"https://custom1.example.com/129_129484/170227090.html"));
+		assert!(urls.contains(&"https://m.bqg6.xyz/wapbook-129484-170227090/"));
+		assert!(urls.contains(&"https://m.bqg9.xyz/wapbook-129484-170227090/"));
+	}
+
+	#[test]
+	fn test_cross_mirror_chapter_title_matching() {
+		assert_eq!(
+			fallback::core_chapter_title("第  5  章  005 泛智人种族中心主义（中）"),
+			fallback::core_chapter_title("005 泛智人种族中心主义（中）")
+		);
+		let toc = vec![
+			(String::from("/books/s/chapters/4"), String::from("第  4  章  004 泛智人种族中心主义（上）")),
+			(String::from("/books/s/chapters/5"), String::from("第  5  章  005 泛智人种族中心主义（中）")),
+			(String::from("/books/s/chapters/6"), String::from("第  6  章  006 泛智人种族中心主义（下）")),
+		];
+		let ch = Chapter {
+			key: String::from("/129_129484/170227090.html"),
+			title: Some(String::from("005 泛智人种族中心主义（中）")),
+			chapter_number: Some(10.0),
+			..Default::default()
+		};
+		let matched = fallback::match_chapter_in_toc(&toc, &ch).unwrap();
+		assert_eq!(matched.0, "/books/s/chapters/5");
 	}
 
 	#[test]

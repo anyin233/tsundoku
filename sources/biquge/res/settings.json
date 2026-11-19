@@ -2,7 +2,7 @@
 	{
 		"type": "group",
 		"title": "镜像站配置",
-		"footer": "已内置 5 个经实测可直连且无需验证码的书源；也可在下方填写任意笔趣阁（杰奇 CMS / 船说 CMS）镜像站首页地址。填写自定义网址时优先使用自定义网址。",
+		"footer": "已内置 6 个可直连书源；也可在下方填写自定义镜像站或额外备用镜像。开启多镜像自动回退后，下载章节或拉取目录失败时将自动尝试同簇镜像及备用书源。",
 		"items": [
 			{
 				"type": "select",
@@ -10,18 +10,20 @@
 				"title": "内置书源 / 镜像站",
 				"values": [
 					"https://www.bqg9.xyz",
+					"https://www.bqg6.xyz",
+					"https://www.myxyjs.com",
 					"https://www.biquge123.uk",
 					"https://www.biqiuge8.net",
 					"https://www.piaotia.com",
-					"https://uukanshu.cc",
 					"custom"
 				],
 				"titles": [
-					"新笔趣阁 5200 (bqg9.xyz)",
+					"新笔趣阁 5200 主站 (bqg9.xyz)",
+					"新笔趣阁 5200 镜像2 (bqg6.xyz)",
+					"梦语小说网 (myxyjs.com)",
 					"新笔趣阁 123 (biquge123.uk)",
 					"笔趣阁 8 (biqiuge8.net)",
 					"飘天文学 (piaotia.com)",
-					"UU看书 (uukanshu.cc)",
 					"仅使用自定义网址"
 				],
 				"default": "https://www.bqg9.xyz",
@@ -35,6 +37,20 @@
 				"placeholder": "留空则使用上方内置书源，如 https://www.example.com",
 				"notification": "mirror_url",
 				"refreshes": ["content", "listings"]
+			},
+			{
+				"type": "switch",
+				"key": "mirror_fallback",
+				"title": "多镜像自动回退（下载/目录失败时自动切换备用源）",
+				"default": true,
+				"notification": "mirror_url"
+			},
+			{
+				"type": "text",
+				"key": "fallback_mirrors",
+				"title": "额外备用镜像网址（可选，逗号或空格分隔）",
+				"placeholder": "留空则自动使用内置镜像集群与备用书源",
+				"notification": "mirror_url"
 			}
 		]
 	},

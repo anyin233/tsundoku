@@ -1,6 +1,7 @@
 package host
 
 import (
+	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"sync"
@@ -30,16 +31,40 @@ var (
 // content to a browser agent.
 const defaultUserAgent = "Mozilla/5.0 (iPad; CPU iPad OS 26_5_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5.2 Mobile/15E148 Safari/605.1.15"
 
+func newDefaultTransport() *http.Transport {
+	base, ok := http.DefaultTransport.(*http.Transport)
+	var tr *http.Transport
+	if ok && base != nil {
+		tr = base.Clone()
+	} else {
+		tr = &http.Transport{}
+	}
+	tr.DialContext = (&net.Dialer{
+		Timeout:   8 * time.Second,
+		KeepAlive: 30 * time.Second,
+	}).DialContext
+	tr.TLSHandshakeTimeout = 8 * time.Second
+	tr.ResponseHeaderTimeout = 15 * time.Second
+	tr.IdleConnTimeout = 45 * time.Second
+	return tr
+}
+
 // defaultUAInjector adds the browser User-Agent to any outgoing request that
 // doesn't already carry one of its own. Requests that set an explicit UA (a
 // source sending its own header) are left untouched.
-type defaultUAInjector struct{}
+type defaultUAInjector struct {
+	transport http.RoundTripper
+}
 
-func (defaultUAInjector) RoundTrip(req *http.Request) (*http.Response, error) {
+func (d defaultUAInjector) RoundTrip(req *http.Request) (*http.Response, error) {
 	if req.Header.Get("User-Agent") == "" {
 		req.Header.Set("User-Agent", defaultUserAgent)
 	}
-	return http.DefaultTransport.RoundTrip(req)
+	tr := d.transport
+	if tr == nil {
+		tr = http.DefaultTransport
+	}
+	return tr.RoundTrip(req)
 }
 
 // SharedHTTPClient returns a process-wide *http.Client with a cookie jar,
@@ -64,7 +89,11 @@ func SharedHTTPClient() *http.Client {
 		// *.co.uk host in this process-wide jar (cross-source injection,
 		// and a way to break another site's cf_clearance).
 		jar, _ := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
-		sharedHTTPClient = &http.Client{Jar: jar, Transport: defaultUAInjector{}, Timeout: defaultHTTPTimeout}
+		sharedHTTPClient = &http.Client{
+			Jar:       jar,
+			Transport: defaultUAInjector{transport: newDefaultTransport()},
+			Timeout:   defaultHTTPTimeout,
+		}
 	})
 	return sharedHTTPClient
 }
