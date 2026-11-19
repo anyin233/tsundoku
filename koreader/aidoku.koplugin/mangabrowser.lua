@@ -617,9 +617,15 @@ function MangaBrowser:readingOrderedChapters()
 end
 
 function MangaBrowser:syncEpubReadChapters()
-    local epub_path = self:mangaEpubPath()
-    if epub_path ~= "" then
-        EpubHelper.syncReadChapters(epub_path, self.store, self.source_key, self.manga.Key, { ui = self.ui })
+    local seen = {}
+    for _ck, p in pairs(self.downloaded_keys or {}) do
+        if EpubHelper.isEpub(p) then
+            local norm = DownloadsEngine.normalizePath(p)
+            if norm ~= "" and not seen[norm] then
+                seen[norm] = true
+                EpubHelper.syncReadChapters(p, self.store, self.source_key, self.manga.Key, { ui = self.ui })
+            end
+        end
     end
 end
 
@@ -775,16 +781,12 @@ function MangaBrowser:buildQueueSpec(chapter, redownload, shared)
     local s = shared or {}
     local mtitle = s.manga_title or mangaLabel(self.manga)
     local clabel = chapterLabel(chapter)
-    local epub_path = s.epub_path
-    if epub_path == nil then
-        epub_path = self:mangaEpubPath()
-    end
-    local out_path = epub_path ~= "" and epub_path
-        or (self.downloads_dir .. "/" .. util.getSafeFilename(clabel .. ".cbz", self.downloads_dir))
     local is_novel = s.is_novel
     if is_novel == nil then
         is_novel = self:isNovel()
     end
+    local out_path = is_novel and (self.downloads_dir .. "/book.epub")
+        or (self.downloads_dir .. "/" .. util.getSafeFilename(clabel .. ".cbz", self.downloads_dir))
     local canonical_keys = s.canonical_keys
     if canonical_keys == nil then
         canonical_keys = self:canonicalKeys()
@@ -810,11 +812,9 @@ end
 
 function MangaBrowser:enqueueChaptersList(chapters_list)
     local mtitle = mangaLabel(self.manga)
-    local epub_path = self:mangaEpubPath()
     local shared = {
         manga_title = mtitle,
         manga_dir_name = mtitle .. " [" .. self.source_key .. "]",
-        epub_path = epub_path,
         is_novel = self:isNovel(),
         canonical_keys = self:canonicalKeys(),
     }
@@ -955,11 +955,63 @@ end
 
 function MangaBrowser:openLocal(path, chapter_key, preserve_scroll, needs_reload)
     local jump_xp
-    if EpubHelper.isEpub(path) and chapter_key then
-        jump_xp = EpubHelper.prepareJumpToChapter(path, chapter_key, {
-            preserve_if_matching = preserve_scroll,
-            ui = self.ui,
-        })
+    if EpubHelper.isEpub(path) then
+        if EpubHelper.isLegacyOversizedEpub(path) and self.engine and self.engine.epubSplit then
+            local msg = InfoMessage:new{
+                text = _("Optimizing book into 50-chapter volumes…"),
+            }
+            UIManager:show(msg)
+            UIManager:forceRePaint()
+            local res, split_err = self.engine:epubSplit({
+                epub_path = path,
+                downloads_dir = self.downloads_dir,
+                source_key = self.source_key,
+                manga_key = self.manga and self.manga.Key or "",
+                canonical_keys = self:canonicalKeys(),
+            })
+            UIManager:close(msg)
+            if res and not res.alreadySharded then
+                EpubHelper.invalidateCache()
+                DownloadsEngine.invalidateCache(self.downloads_dir)
+                pcall(function()
+                    local ReadHistory = require("readhistory")
+                    if ReadHistory and ReadHistory.removeItemByPath then
+                        ReadHistory:removeItemByPath(path)
+                    end
+                end)
+                self:reloadDownloadedKeys()
+                if self.refresh_callback then
+                    self.refresh_callback()
+                end
+                local resolved = chapter_key and self:downloadedPath(chapter_key) or ""
+                local next_path = (resolved ~= "" and resolved)
+                    or (type(res.activePath) == "string" and res.activePath ~= "" and res.activePath)
+                    or (type(res.volumes) == "table" and res.volumes[1] and res.volumes[1].path)
+                if next_path then
+                    if G_reader_settings and G_reader_settings.readSetting and G_reader_settings.saveSetting then
+                        local lastfile = G_reader_settings:readSetting("lastfile")
+                        if type(lastfile) == "string"
+                            and DownloadsEngine.normalizePath(lastfile) == DownloadsEngine.normalizePath(path)
+                        then
+                            G_reader_settings:saveSetting("lastfile", next_path)
+                        end
+                    end
+                    path = next_path
+                end
+            elseif split_err then
+                UIManager:show(InfoMessage:new{
+                    text = T(_("Could not split book volumes:\n%1"), split_err),
+                    timeout = 3,
+                })
+            end
+        end
+        if chapter_key then
+            jump_xp = EpubHelper.prepareJumpToChapter(path, chapter_key, {
+                preserve_if_matching = preserve_scroll,
+                ui = self.ui,
+                sync_typography_from = self.ui and self.ui.doc_settings or nil,
+            })
+        end
     end
     self.store:markLastRead(self.source_key, self.manga.Key)
     require("pendinglibrary").from_tsundoku = true
@@ -992,8 +1044,9 @@ function MangaBrowser:downloadAndOpen(chapter, redownload)
             local old_keys = (existing_epub ~= "" and not EpubHelper.usesAdjacentSidecar(existing_epub))
                 and EpubHelper.manifestKeys(EpubHelper.readManifest(existing_epub))
                 or nil
-            local out_path = existing_epub ~= "" and existing_epub
-                or (self.downloads_dir .. "/" .. util.getSafeFilename(clabel .. ".cbz", self.downloads_dir))
+            local out_path = self:isNovel() and (self.downloads_dir .. "/book.epub")
+                or (existing_epub ~= "" and existing_epub
+                    or (self.downloads_dir .. "/" .. util.getSafeFilename(clabel .. ".cbz", self.downloads_dir)))
             local manga_dir_name = mangaLabel(self.manga) .. " [" .. self.source_key .. "]"
             local progress_prefix = T(_("Downloading %1"), clabel)
 
@@ -1011,7 +1064,7 @@ function MangaBrowser:downloadAndOpen(chapter, redownload)
             self.downloaded_keys[chapter.Key] = path
             local is_epub = EpubHelper.isEpub(path)
             if is_epub then
-                EpubHelper.invalidateCache(path)
+                EpubHelper.invalidateCache()
                 self:reloadDownloadedKeys()
                 if old_keys and #old_keys > 0 and not EpubHelper.usesAdjacentSidecar(path) then
                     local new_keys = EpubHelper.manifestKeys(EpubHelper.readManifest(path))

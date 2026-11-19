@@ -194,6 +194,23 @@ func JoinTextPages(pages []models.Page) string {
 	return strings.Join(parts, "\n")
 }
 
+func resolveBookDir(outputPath, mangaDirName string) string {
+	sub := sanitizeFilename(mangaDirName)
+	var dir string
+	if outputPath != "" {
+		dir, _ = filepath.Split(outputPath)
+	}
+	if mangaDirName != "" && sub != "" {
+		cleanDir := filepath.Clean(dir)
+		if filepath.Base(cleanDir) != sub {
+			dir = filepath.Join(dir, sub)
+		} else {
+			dir = cleanDir
+		}
+	}
+	return dir
+}
+
 // ResolveBookEPUBPath computes the canonical single-book EPUB path for manga:
 // <outputDir>/<sanitized mangaDirName>/<sanitized mangaLabel>.epub.
 // If outputPath already points to an existing .epub file or already ends in
@@ -216,20 +233,36 @@ func ResolveBookEPUBPath(outputPath, mangaDirName string, manga models.Manga) (s
 		base = "book"
 	}
 	filename := base + ".epub"
-
-	var dir string
-	if outputPath != "" {
-		dir, _ = filepath.Split(outputPath)
-	}
-	if mangaDirName != "" && sub != "" {
-		cleanDir := filepath.Clean(dir)
-		if filepath.Base(cleanDir) != sub {
-			dir = filepath.Join(dir, sub)
-		} else {
-			dir = cleanDir
+	fullPath := filepath.Join(resolveBookDir(outputPath, mangaDirName), filename)
+	if parent := filepath.Dir(fullPath); parent != "." && parent != "" {
+		if err := os.MkdirAll(parent, 0o755); err != nil {
+			return "", fmt.Errorf("source: creating %s: %w", parent, err)
 		}
 	}
-	fullPath := filepath.Join(dir, filename)
+	return fullPath, nil
+}
+
+// ResolveVolumeEPUBPath computes the canonical sharded volume EPUB path for
+// manga: <outputDir>/<sanitized mangaDirName>/<sanitized title [0001-0050]>.epub.
+func ResolveVolumeEPUBPath(outputPath, mangaDirName string, manga models.Manga, volumeIndex, volumeSize int) (string, error) {
+	if volumeSize <= 0 {
+		volumeSize = epub.DefaultChaptersPerVolume
+	}
+	if volumeIndex < 1 {
+		volumeIndex = 1
+	}
+	_, start, end := epub.VolumeForOrder((volumeIndex-1)*volumeSize+1, volumeSize)
+
+	base := MangaLabel(manga)
+	if base == "" {
+		base = "book"
+	}
+	filename := sanitizeFilename(base+epub.VolumeRangeSuffix(start, end)) + ".epub"
+	if filename == ".epub" {
+		filename = "book" + epub.VolumeRangeSuffix(start, end) + ".epub"
+	}
+
+	fullPath := filepath.Join(resolveBookDir(outputPath, mangaDirName), filename)
 	if parent := filepath.Dir(fullPath); parent != "." && parent != "" {
 		if err := os.MkdirAll(parent, 0o755); err != nil {
 			return "", fmt.Errorf("source: creating %s: %w", parent, err)

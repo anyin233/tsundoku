@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: aidoku.koplugin\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-18 18:06+0000\n"
+"POT-Creation-Date: 2026-11-19 01:23+0000\n"
 "PO-Revision-Date: 2026-11-10 23:38+0000\n"
 "Last-Translator: Tsundoku Team\n"
 "Language-Team: English\n"
@@ -17,237 +17,193 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: downloadqueue.lua:319 downloadqueue.lua:360 downloadqueue.lua:457
-#: globalsearchbrowser.lua:625 globalsearchbrowser.lua:713
+#: booktoc.lua:51
+msgid "Vol.%1"
+msgstr "Vol.%1"
+
+#: booktoc.lua:143
+msgid "%1 · %2 ch (%3 vols)"
+msgstr "%1 · %2 ch (%3 vols)"
+
+#: booktoc.lua:167 main.lua:977
+msgid "Volume file not found on disk."
+msgstr "Volume file not found on disk."
+
+#: booktoc.lua:192
+msgid "Vol.%1 (%2–%3)"
+msgstr "Vol.%1 (%2–%3)"
+
+#: booktoc.lua:208
+msgid "Jump to volume"
+msgstr "Jump to volume"
+
+#: booktoc.lua:267
+msgid "Enter text to search for"
+msgstr "Enter text to search for"
+
+#: booktoc.lua:270 globalsearchbrowser.lua:766 koobonebrowser.lua:435
+#: mangabrowser.lua:935 searchbrowser.lua:344 settingsbrowser.lua:232
+#: settingsbrowser.lua:266 settingsbrowser.lua:301 settingsbrowser.lua:331
+#: settingsbrowser.lua:369 settingsbrowser.lua:406 settingsbrowser.lua:553
+#: sourcesettingsbrowser.lua:457 sourcesettingsbrowser.lua:497
+msgid "Cancel"
+msgstr "Cancel"
+
+#: booktoc.lua:277 globalsearchbrowser.lua:771 searchbrowser.lua:349
+msgid "Search"
+msgstr "Search"
+
+#: booktoc.lua:288
+msgid "No results in table of contents"
+msgstr "No results in table of contents"
+
+#: booktoc.lua:299
+msgid "Query: %1 (%2)"
+msgstr "Query: %1 (%2)"
+
+#: booktoc.lua:313
+msgid "Clear TOC search"
+msgstr "Clear TOC search"
+
+#: booktoc.lua:313
+msgid "Search table of contents"
+msgstr "Search table of contents"
+
+#: booktoc.lua:320
+msgid "Jump to volume…"
+msgstr "Jump to volume…"
+
+#: booktoc.lua:329
+msgid "Current volume TOC"
+msgstr "Current volume TOC"
+
+#: booktoc.lua:341
+msgid "Open in Tsundoku"
+msgstr "Open in Tsundoku"
+
+#: booktoc.lua:364
+msgid "Table of contents"
+msgstr "Table of contents"
+
+#: booktoc.lua:413
+msgid ""
+"%1\n"
+"\n"
+"Vol.%2 (%3–%4)"
+msgstr ""
+"%1\n"
+"\n"
+"Vol.%2 (%3–%4)"
+
+#: downloadqueue.lua:581 downloadqueue.lua:626 downloadqueue.lua:738
+#: globalsearchbrowser.lua:630 globalsearchbrowser.lua:719
 #: searchbrowser.lua:542 searchbrowser.lua:606 subprocess.lua:163
 #: subprocess.lua:224
 msgid "command failed"
 msgstr "command failed"
 
-#: downloadqueue.lua:431
+#: downloadqueue.lua:714
 msgid "Added %1 chapter(s) to current book."
 msgstr "Added %1 chapter(s) to current book."
 
-#: downloadsbrowser.lua:73 globalsearchbrowser.lua:961 koobonebrowser.lua:406
+#: downloadsbrowser.lua:55 globalsearchbrowser.lua:967 koobonebrowser.lua:406
 #: koobonebrowser.lua:581 librarybrowser.lua:1081 mangabrowser.lua:310
 #: settingsbrowser.lua:140 sourcesbrowser.lua:46
 msgid "Download Manager"
 msgstr "Download Manager"
 
-#: downloadsbrowser.lua:146
+#: downloadsbrowser.lua:102
 msgid "%1/%2p (%3%)"
 msgstr "%1/%2p (%3%)"
 
-#: downloadsbrowser.lua:148 downloadsbrowser.lua:170
+#: downloadsbrowser.lua:105 downloadsbrowser.lua:123
 msgid "Preparing…"
 msgstr "Preparing…"
 
-#: downloadsbrowser.lua:150
-msgid "Active: %1 · Queue: %2 · Saved: %3 ch (%4)"
-msgstr "Active: %1 · Queue: %2 · Saved: %3 ch (%4)"
+#: downloadsbrowser.lua:107
+msgid "Active: %1 · Queue: %2"
+msgstr "Active: %1 · Queue: %2"
 
-#: downloadsbrowser.lua:153
-msgid "Paused (%1 queued) · Saved: %2 ch (%3)"
-msgstr "Paused (%1 queued) · Saved: %2 ch (%3)"
+#: downloadsbrowser.lua:109
+msgid "Paused (%1 queued)"
+msgstr "Paused (%1 queued)"
 
-#: downloadsbrowser.lua:156
-msgid "%1 failed · Saved: %2 manga / %3 ch (%4)"
-msgstr "%1 failed · Saved: %2 manga / %3 ch (%4)"
+#: downloadsbrowser.lua:111
+msgid "%1 failed"
+msgstr "%1 failed"
 
-#: downloadsbrowser.lua:159
-msgid "Idle · Saved: %1 manga / %2 ch (%3)"
-msgstr "Idle · Saved: %1 manga / %2 ch (%3)"
+#: downloadsbrowser.lua:113
+msgid "No active downloads"
+msgstr "No active downloads"
 
-#: downloadsbrowser.lua:173
+#: downloadsbrowser.lua:126
 msgid "Paused #%1"
 msgstr "Paused #%1"
 
-#: downloadsbrowser.lua:175
+#: downloadsbrowser.lua:128
 msgid "Queued #%1"
 msgstr "Queued #%1"
 
-#: downloadsbrowser.lua:177 koobonebrowser.lua:242
+#: downloadsbrowser.lua:130 koobonebrowser.lua:242
 msgid "Failed"
 msgstr "Failed"
 
-#: downloadsbrowser.lua:179 koobonebrowser.lua:507 mangabrowser.lua:1005
+#: downloadsbrowser.lua:132 koobonebrowser.lua:507 mangabrowser.lua:1059
 #: subprocess.lua:405 subprocess.lua:480
 msgid "Cancelled"
 msgstr "Cancelled"
 
-#: downloadsbrowser.lua:181
-msgid "Done ✓"
-msgstr "Done ✓"
-
-#: downloadsbrowser.lua:224
-msgid "Paused"
-msgstr "Paused"
-
-#: downloadsbrowser.lua:225
-msgid "%1 remaining"
-msgstr "%1 remaining"
-
-#: downloadsbrowser.lua:227
-msgid "── Download Queue (%1) ──"
-msgstr "── Download Queue (%1) ──"
-
-#: downloadsbrowser.lua:247
+#: downloadsbrowser.lua:183
 msgid "No active download tasks in queue."
 msgstr "No active download tasks in queue."
 
-#: downloadsbrowser.lua:258
-msgid "── Downloaded Books (%1) ──"
-msgstr "── Downloaded Books (%1) ──"
-
-#: downloadsbrowser.lua:269
-msgid "All %1 ch · %2"
-msgstr "All %1 ch · %2"
-
-#: downloadsbrowser.lua:271
-msgid "%1/%2 ch · %3"
-msgstr "%1/%2 ch · %3"
-
-#: downloadsbrowser.lua:273
-msgid "%1 ch · %2"
-msgstr "%1 ch · %2"
-
-#: downloadsbrowser.lua:283 downloadsbrowser.lua:320
-msgid "No downloaded chapters yet."
-msgstr "No downloaded chapters yet."
-
-#: downloadsbrowser.lua:301
-msgid "── Downloaded Chapters (%1) ──"
-msgstr "── Downloaded Chapters (%1) ──"
-
-#: downloadsbrowser.lua:310 downloadsbrowser.lua:575 koobonebrowser.lua:225
-#: mangabrowser.lua:485
-msgid "Read"
-msgstr "Read"
-
-#: downloadsbrowser.lua:339
-msgid ""
-"Could not load downloads:\n"
-"%1"
-msgstr ""
-"Could not load downloads:\n"
-"%1"
-
-#: downloadsbrowser.lua:353
-msgid "View: Queue + Chapters"
-msgstr "View: Queue + Chapters"
-
-#: downloadsbrowser.lua:354
-msgid "View: Grouped by Book"
-msgstr "View: Grouped by Book"
-
-#: downloadsbrowser.lua:355
-msgid "View: Queue Only"
-msgstr "View: Queue Only"
-
-#: downloadsbrowser.lua:377
+#: downloadsbrowser.lua:214
 msgid "Pause download queue"
 msgstr "Pause download queue"
 
-#: downloadsbrowser.lua:377
+#: downloadsbrowser.lua:214
 msgid "Resume download queue"
 msgstr "Resume download queue"
 
-#: downloadsbrowser.lua:392
+#: downloadsbrowser.lua:229
 msgid "Retry failed/cancelled (%1)"
 msgstr "Retry failed/cancelled (%1)"
 
-#: downloadsbrowser.lua:403
+#: downloadsbrowser.lua:240
 msgid "Cancel all pending (%1)"
 msgstr "Cancel all pending (%1)"
 
-#: downloadsbrowser.lua:407
+#: downloadsbrowser.lua:244
 msgid "Cancel %1 active/queued download(s)?"
 msgstr "Cancel %1 active/queued download(s)?"
 
-#: downloadsbrowser.lua:408
+#: downloadsbrowser.lua:245
 msgid "Cancel downloads"
 msgstr "Cancel downloads"
 
-#: downloadsbrowser.lua:420
-msgid "Clear finished queue history"
-msgstr "Clear finished queue history"
+#: downloadsbrowser.lua:257
+msgid "Clear failed/cancelled tasks"
+msgstr "Clear failed/cancelled tasks"
 
-#: downloadsbrowser.lua:430
+#: downloadsbrowser.lua:267
 msgid "Refresh status"
 msgstr "Refresh status"
 
-#: downloadsbrowser.lua:452
+#: downloadsbrowser.lua:289
 msgid "Download next (prioritize)"
 msgstr "Download next (prioritize)"
 
-#: downloadsbrowser.lua:463
+#: downloadsbrowser.lua:300
 msgid "Cancel this download"
 msgstr "Cancel this download"
 
-#: downloadsbrowser.lua:474
+#: downloadsbrowser.lua:311
 msgid "Retry download"
 msgstr "Retry download"
 
-#: downloadsbrowser.lua:485
-msgid "Open chapter"
-msgstr "Open chapter"
-
-#: downloadsbrowser.lua:495
+#: downloadsbrowser.lua:322
 msgid "Remove from queue list"
 msgstr "Remove from queue list"
-
-#: downloadsbrowser.lua:513
-msgid "Download no longer available."
-msgstr "Download no longer available."
-
-#: downloadsbrowser.lua:588
-msgid "%1 downloaded chapters (%2)"
-msgstr "%1 downloaded chapters (%2)"
-
-#: downloadsbrowser.lua:602
-msgid ""
-"Remove download?\n"
-"\n"
-"%1 - %2"
-msgstr ""
-"Remove download?\n"
-"\n"
-"%1 - %2"
-
-#: downloadsbrowser.lua:603 downloadsbrowser.lua:697 downloadsbrowser.lua:717
-#: librarybrowser.lua:1429 librarybrowser.lua:1445 sourcesbrowser.lua:198
-msgid "Remove"
-msgstr "Remove"
-
-#: downloadsbrowser.lua:653
-msgid "View downloaded chapters"
-msgstr "View downloaded chapters"
-
-#: downloadsbrowser.lua:662
-msgid "Open manga detail page"
-msgstr "Open manga detail page"
-
-#: downloadsbrowser.lua:668 nextchapter.lua:217
-msgid "Source no longer installed."
-msgstr "Source no longer installed."
-
-#: downloadsbrowser.lua:692
-msgid "Remove all %1 downloaded chapters"
-msgstr "Remove all %1 downloaded chapters"
-
-#: downloadsbrowser.lua:696 librarybrowser.lua:1428
-msgid "Remove all %1 downloaded chapters of '%2'?"
-msgstr "Remove all %1 downloaded chapters of '%2'?"
-
-#: downloadsbrowser.lua:716
-msgid ""
-"Remove download?\n"
-"\n"
-"%1"
-msgstr ""
-"Remove download?\n"
-"\n"
-"%1"
 
 #: downloadsengine.lua:564
 msgid "Could not read the downloads index."
@@ -373,7 +329,11 @@ msgstr "Invalid response from aidoku-run"
 msgid "Could not decode epub-remove result"
 msgstr "Could not decode epub-remove result"
 
-#: engine.lua:554
+#: engine.lua:570
+msgid "Could not decode epub-split result"
+msgstr "Could not decode epub-split result"
+
+#: engine.lua:580
 msgid "Could not write cover request"
 msgstr "Could not write cover request"
 
@@ -438,141 +398,141 @@ msgstr "Search with these filters"
 msgid "Any"
 msgstr "Any"
 
-#: globalsearchbrowser.lua:94 globalsearchbrowser.lua:491
-#: globalsearchbrowser.lua:1035
+#: globalsearchbrowser.lua:94 globalsearchbrowser.lua:496
+#: globalsearchbrowser.lua:1041
 msgid "Multi-source Search"
 msgstr "Multi-source Search"
 
-#: globalsearchbrowser.lua:241
+#: globalsearchbrowser.lua:246
 msgid "No sources installed. Install sources in Settings → Sources first."
 msgstr "No sources installed. Install sources in Settings → Sources first."
 
-#: globalsearchbrowser.lua:247
+#: globalsearchbrowser.lua:252
 msgid "» Start Search (%1/%2 sources selected)…"
 msgstr "» Start Search (%1/%2 sources selected)…"
 
-#: globalsearchbrowser.lua:248
+#: globalsearchbrowser.lua:253
 msgid "Search >"
 msgstr "Search >"
 
-#: globalsearchbrowser.lua:254
+#: globalsearchbrowser.lua:259
 msgid "[✓] Select all sources"
 msgstr "[✓] Select all sources"
 
-#: globalsearchbrowser.lua:255 globalsearchbrowser.lua:262
+#: globalsearchbrowser.lua:260 globalsearchbrowser.lua:267
 msgid "Invert on hold"
 msgstr "Invert on hold"
 
-#: globalsearchbrowser.lua:261
+#: globalsearchbrowser.lua:266
 msgid "[ ] Deselect all sources"
 msgstr "[ ] Deselect all sources"
 
-#: globalsearchbrowser.lua:273
+#: globalsearchbrowser.lua:278
 msgid "Selected"
 msgstr "Selected"
 
-#: globalsearchbrowser.lua:285
+#: globalsearchbrowser.lua:290
 msgid "Select Search Sources"
 msgstr "Select Search Sources"
 
-#: globalsearchbrowser.lua:289
+#: globalsearchbrowser.lua:294
 msgid "Tap sources to toggle (%1/%2 selected), then tap Start Search"
 msgstr "Tap sources to toggle (%1/%2 selected), then tap Start Search"
 
-#: globalsearchbrowser.lua:313 searchbrowser.lua:440
+#: globalsearchbrowser.lua:318 searchbrowser.lua:440
 msgid "Downloaded all %1 ch"
 msgstr "Downloaded all %1 ch"
 
-#: globalsearchbrowser.lua:315 librarybrowser.lua:970 mangabrowser.lua:170
+#: globalsearchbrowser.lua:320 librarybrowser.lua:970 mangabrowser.lua:170
 #: searchbrowser.lua:442
 msgid "Downloaded %1 ch"
 msgstr "Downloaded %1 ch"
 
-#: globalsearchbrowser.lua:362
+#: globalsearchbrowser.lua:367
 msgid "Loading Page %1 (%2/%3) · %4 results · Active: %5"
 msgstr "Loading Page %1 (%2/%3) · %4 results · Active: %5"
 
-#: globalsearchbrowser.lua:365
+#: globalsearchbrowser.lua:370
 msgid "Loading Page %1 (%2/%3) · %4 results…"
 msgstr "Loading Page %1 (%2/%3) · %4 results…"
 
-#: globalsearchbrowser.lua:369
+#: globalsearchbrowser.lua:374
 msgid "Searching %1/%2 · %3 results · Active: %4"
 msgstr "Searching %1/%2 · %3 results · Active: %4"
 
-#: globalsearchbrowser.lua:372
+#: globalsearchbrowser.lua:377
 msgid "Searching %1/%2 · %3 results…"
 msgstr "Searching %1/%2 · %3 results…"
 
-#: globalsearchbrowser.lua:377
+#: globalsearchbrowser.lua:382
 msgid "Stopped (%1/%2 sources) · %3 results · Hold to bookmark"
 msgstr "Stopped (%1/%2 sources) · %3 results · Hold to bookmark"
 
-#: globalsearchbrowser.lua:380
+#: globalsearchbrowser.lua:385
 msgid "%1 results from %2 selected sources · Hold to bookmark"
 msgstr "%1 results from %2 selected sources · Hold to bookmark"
 
-#: globalsearchbrowser.lua:384
+#: globalsearchbrowser.lua:389
 msgid " (%1 failed)"
 msgstr " (%1 failed)"
 
-#: globalsearchbrowser.lua:399
+#: globalsearchbrowser.lua:404
 msgid "%1 Searching %2/%3 · Tap to stop"
 msgstr "%1 Searching %2/%3 · Tap to stop"
 
-#: globalsearchbrowser.lua:400
+#: globalsearchbrowser.lua:405
 msgid "%1 results"
 msgstr "%1 results"
 
-#: globalsearchbrowser.lua:406
+#: globalsearchbrowser.lua:411
 msgid "» Change sources (%1/%2) or search again…"
 msgstr "» Change sources (%1/%2) or search again…"
 
-#: globalsearchbrowser.lua:407
+#: globalsearchbrowser.lua:412
 msgid "Query: %1"
 msgstr "Query: %1"
 
-#: globalsearchbrowser.lua:413
+#: globalsearchbrowser.lua:418
 msgid "▶ Continue searching remaining %1 source(s)…"
 msgstr "▶ Continue searching remaining %1 source(s)…"
 
-#: globalsearchbrowser.lua:414
+#: globalsearchbrowser.lua:419
 msgid "Resume >"
 msgstr "Resume >"
 
-#: globalsearchbrowser.lua:421
+#: globalsearchbrowser.lua:426
 msgid "✗ %1 source(s) failed · Tap to retry or disable"
 msgstr "✗ %1 source(s) failed · Tap to retry or disable"
 
-#: globalsearchbrowser.lua:422
+#: globalsearchbrowser.lua:427
 msgid "Details >"
 msgstr "Details >"
 
-#: globalsearchbrowser.lua:435
+#: globalsearchbrowser.lua:440
 msgid "Waiting for first source results… (Results appear here live)"
 msgstr "Waiting for first source results… (Results appear here live)"
 
-#: globalsearchbrowser.lua:437
+#: globalsearchbrowser.lua:442
 msgid "Search stopped before any results arrived."
 msgstr "Search stopped before any results arrived."
 
-#: globalsearchbrowser.lua:439
+#: globalsearchbrowser.lua:444
 msgid "No results in the selected sources."
 msgstr "No results in the selected sources."
 
-#: globalsearchbrowser.lua:448
+#: globalsearchbrowser.lua:453
 msgid "» Load more results (Page %1 · %2 sources)…"
 msgstr "» Load more results (Page %1 · %2 sources)…"
 
-#: globalsearchbrowser.lua:491
+#: globalsearchbrowser.lua:496
 msgid "Search: %1"
 msgstr "Search: %1"
 
-#: globalsearchbrowser.lua:672
+#: globalsearchbrowser.lua:678
 msgid "Search stopped (%1/%2 sources, %3 results kept)"
 msgstr "Search stopped (%1/%2 sources, %3 results kept)"
 
-#: globalsearchbrowser.lua:713
+#: globalsearchbrowser.lua:719
 msgid ""
 "Could not start search:\n"
 "%1"
@@ -580,115 +540,103 @@ msgstr ""
 "Could not start search:\n"
 "%1"
 
-#: globalsearchbrowser.lua:741 globalsearchbrowser.lua:790
+#: globalsearchbrowser.lua:747 globalsearchbrowser.lua:796
 msgid "Please select at least one source before searching."
 msgstr "Please select at least one source before searching."
 
-#: globalsearchbrowser.lua:748
+#: globalsearchbrowser.lua:754
 msgid "Search in %1 selected source(s)"
 msgstr "Search in %1 selected source(s)"
 
-#: globalsearchbrowser.lua:750 searchbrowser.lua:334
+#: globalsearchbrowser.lua:756 searchbrowser.lua:334
 msgid "Title…"
 msgstr "Title…"
 
-#: globalsearchbrowser.lua:753
+#: globalsearchbrowser.lua:759
 msgid "Sources…"
 msgstr "Sources…"
 
-#: globalsearchbrowser.lua:760 koobonebrowser.lua:435 mangabrowser.lua:935
-#: searchbrowser.lua:344 settingsbrowser.lua:232 settingsbrowser.lua:266
-#: settingsbrowser.lua:301 settingsbrowser.lua:331 settingsbrowser.lua:369
-#: settingsbrowser.lua:406 settingsbrowser.lua:553
-#: sourcesettingsbrowser.lua:457 sourcesettingsbrowser.lua:497
-msgid "Cancel"
-msgstr "Cancel"
-
-#: globalsearchbrowser.lua:765 searchbrowser.lua:349
-msgid "Search"
-msgstr "Search"
-
-#: globalsearchbrowser.lua:809
+#: globalsearchbrowser.lua:815
 msgid "failed"
 msgstr "failed"
 
-#: globalsearchbrowser.lua:813
+#: globalsearchbrowser.lua:819
 msgid "…and %1 more"
 msgstr "…and %1 more"
 
-#: globalsearchbrowser.lua:836
+#: globalsearchbrowser.lua:842
 msgid "Retry failed sources (%1)"
 msgstr "Retry failed sources (%1)"
 
-#: globalsearchbrowser.lua:844
+#: globalsearchbrowser.lua:850
 msgid "Deselect failed sources"
 msgstr "Deselect failed sources"
 
-#: globalsearchbrowser.lua:859
+#: globalsearchbrowser.lua:865
 msgid "Disabled %1 failed source(s) for future searches."
 msgstr "Disabled %1 failed source(s) for future searches."
 
-#: globalsearchbrowser.lua:866
+#: globalsearchbrowser.lua:872
 msgid "Close"
 msgstr "Close"
 
-#: globalsearchbrowser.lua:871
+#: globalsearchbrowser.lua:877
 msgid "Failed Sources (%1)"
 msgstr "Failed Sources (%1)"
 
-#: globalsearchbrowser.lua:895
+#: globalsearchbrowser.lua:901
 msgid "■ Stop current search (%1/%2)"
 msgstr "■ Stop current search (%1/%2)"
 
-#: globalsearchbrowser.lua:904
+#: globalsearchbrowser.lua:910
 msgid "Search keyword (%1/%2 sources)…"
 msgstr "Search keyword (%1/%2 sources)…"
 
-#: globalsearchbrowser.lua:913
+#: globalsearchbrowser.lua:919
 msgid "Select search sources (%1/%2)…"
 msgstr "Select search sources (%1/%2)…"
 
-#: globalsearchbrowser.lua:921
+#: globalsearchbrowser.lua:927
 msgid "Select all sources"
 msgstr "Select all sources"
 
-#: globalsearchbrowser.lua:932
+#: globalsearchbrowser.lua:938
 msgid "Deselect all sources"
 msgstr "Deselect all sources"
 
-#: globalsearchbrowser.lua:943
+#: globalsearchbrowser.lua:949
 msgid "Invert selection"
 msgstr "Invert selection"
 
-#: globalsearchbrowser.lua:951
+#: globalsearchbrowser.lua:957
 msgid "Back to last results (%1)"
 msgstr "Back to last results (%1)"
 
-#: globalsearchbrowser.lua:1038
+#: globalsearchbrowser.lua:1044
 msgid "New search with current sources…"
 msgstr "New search with current sources…"
 
-#: globalsearchbrowser.lua:1045
+#: globalsearchbrowser.lua:1051
 msgid "Change selected sources (%1/%2)…"
 msgstr "Change selected sources (%1/%2)…"
 
-#: globalsearchbrowser.lua:1101
+#: globalsearchbrowser.lua:1107
 msgid "Select ONLY this source & search…"
 msgstr "Select ONLY this source & search…"
 
-#: globalsearchbrowser.lua:1115
+#: globalsearchbrowser.lua:1121
 msgid "Invert all selections"
 msgstr "Invert all selections"
 
-#: globalsearchbrowser.lua:1145 mangabrowser.lua:244 searchbrowser.lua:713
+#: globalsearchbrowser.lua:1151 mangabrowser.lua:244 searchbrowser.lua:713
 msgid "Could not update library."
 msgstr "Could not update library."
 
-#: globalsearchbrowser.lua:1153 mangabrowser.lua:252 searchbrowser.lua:721
+#: globalsearchbrowser.lua:1159 mangabrowser.lua:252 searchbrowser.lua:721
 msgid "Added '%1' to library"
 msgstr "Added '%1' to library"
 
-#: globalsearchbrowser.lua:1153 mangabrowser.lua:252 searchbrowser.lua:721
+#: globalsearchbrowser.lua:1159 mangabrowser.lua:252 searchbrowser.lua:721
 msgid "Removed '%1' from library"
 msgstr "Removed '%1' from library"
 
@@ -721,6 +669,10 @@ msgstr "Auto-sync: On"
 #: koobonebrowser.lua:219
 msgid "%1p"
 msgstr "%1p"
+
+#: koobonebrowser.lua:225 mangabrowser.lua:485
+msgid "Read"
+msgstr "Read"
 
 #: koobonebrowser.lua:227
 msgid "Offline ✓"
@@ -843,12 +795,12 @@ msgstr ""
 "Login failed:\n"
 "%1"
 
-#: koobonebrowser.lua:491 mangabrowser.lua:997
+#: koobonebrowser.lua:491 mangabrowser.lua:1051
 msgid "Downloading %1"
 msgstr "Downloading %1"
 
-#: koobonebrowser.lua:508 mangabrowser.lua:1006 nextchapter.lua:263
-#: nextchapter.lua:287
+#: koobonebrowser.lua:508 mangabrowser.lua:1060 nextchapter.lua:265
+#: nextchapter.lua:293
 msgid ""
 "Download failed:\n"
 "%1"
@@ -940,8 +892,8 @@ msgstr "Grid (cover + title)"
 msgid "Grid"
 msgstr "Grid"
 
-#: librarybrowser.lua:564 librarybrowser.lua:1007 main.lua:415 main.lua:488
-#: simpleui_bridge.lua:1381 sui_module_tsundoku.lua:345
+#: librarybrowser.lua:564 librarybrowser.lua:1007 main.lua:512 main.lua:585
+#: simpleui_bridge.lua:1387 sui_module_tsundoku.lua:345
 msgid "Manga Library"
 msgstr "Manga Library"
 
@@ -998,7 +950,7 @@ msgstr "Koobone Bookshelf…"
 msgid "View: %1…"
 msgstr "View: %1…"
 
-#: librarybrowser.lua:1150 main.lua:525 settingsbrowser.lua:100
+#: librarybrowser.lua:1150 main.lua:622 settingsbrowser.lua:100
 #: settingsbrowser.lua:209
 msgid "Settings"
 msgstr "Settings"
@@ -1063,7 +1015,7 @@ msgstr "'%1' is no longer installed. Hold to remove it."
 msgid "'%1' is no longer installed."
 msgstr "'%1' is no longer installed."
 
-#: librarybrowser.lua:1310 mangabrowser.lua:652
+#: librarybrowser.lua:1310 mangabrowser.lua:658
 msgid ""
 "Could not load chapters:\n"
 "%1"
@@ -1099,6 +1051,14 @@ msgstr "Download all chapters"
 msgid "Delete %1 downloaded chapter(s)…"
 msgstr "Delete %1 downloaded chapter(s)…"
 
+#: librarybrowser.lua:1428
+msgid "Remove all %1 downloaded chapters of '%2'?"
+msgstr "Remove all %1 downloaded chapters of '%2'?"
+
+#: librarybrowser.lua:1429 librarybrowser.lua:1445 sourcesbrowser.lua:198
+msgid "Remove"
+msgstr "Remove"
+
 #: librarybrowser.lua:1440
 msgid "Remove from library…"
 msgstr "Remove from library…"
@@ -1107,96 +1067,108 @@ msgstr "Remove from library…"
 msgid "Remove '%1' from your library?"
 msgstr "Remove '%1' from your library?"
 
-#: main.lua:393
+#: main.lua:362 mangabrowser.lua:961
+msgid "Optimizing book into 50-chapter volumes…"
+msgstr "Optimizing book into 50-chapter volumes…"
+
+#: main.lua:377 mangabrowser.lua:1003
+msgid ""
+"Could not split book volumes:\n"
+"%1"
+msgstr ""
+"Could not split book volumes:\n"
+"%1"
+
+#: main.lua:490
 msgid "Open Manga Series"
 msgstr "Open Manga Series"
 
-#: main.lua:421 main.lua:494 simpleui_bridge.lua:1388
+#: main.lua:518 main.lua:591 simpleui_bridge.lua:1394
 #: sui_module_tsundoku.lua:353
 msgid "Search Manga"
 msgstr "Search Manga"
 
-#: main.lua:427 main.lua:500 simpleui_bridge.lua:1394
+#: main.lua:524 main.lua:597 simpleui_bridge.lua:1400
 #: sui_module_tsundoku.lua:361
 msgid "Refresh Koobone"
 msgstr "Refresh Koobone"
 
-#: main.lua:433 main.lua:506 simpleui_bridge.lua:1408
+#: main.lua:530 main.lua:603 simpleui_bridge.lua:1414
 msgid "Koobone Shelf"
 msgstr "Koobone Shelf"
 
-#: main.lua:439 main.lua:513 sui_module_tsundoku.lua:377
+#: main.lua:536 main.lua:610 sui_module_tsundoku.lua:377
 msgid "Downloads"
 msgstr "Downloads"
 
-#: main.lua:447
+#: main.lua:544
 msgid "aidoku-run binary not found. Rebuild the plugin with koreader/build.sh."
 msgstr ""
 "aidoku-run binary not found. Rebuild the plugin with koreader/build.sh."
 
-#: main.lua:453
+#: main.lua:550
 msgid "Could not open the downloads database. Is storage writable?"
 msgstr "Could not open the downloads database. Is storage writable?"
 
-#: main.lua:465
+#: main.lua:562
 msgid "Current Manga"
 msgstr "Current Manga"
 
-#: main.lua:467
+#: main.lua:564
 msgid "Current: %1"
 msgstr "Current: %1"
 
-#: main.lua:473
+#: main.lua:570
 msgid "Next Chapter"
 msgstr "Next Chapter"
 
-#: main.lua:479
+#: main.lua:576
 msgid "Previous Chapter"
 msgstr "Previous Chapter"
 
-#: main.lua:519
+#: main.lua:616
 msgid "Manga Sources"
 msgstr "Manga Sources"
 
-#: main.lua:633
+#: main.lua:730
 msgid "Please log in to Koobone first."
 msgstr "Please log in to Koobone first."
 
-#: main.lua:644
+#: main.lua:741
 msgid "Syncing Koobone subscriptions…"
 msgstr "Syncing Koobone subscriptions…"
 
-#: main.lua:663
+#: main.lua:760
 msgid "Koobone sync is already running…"
 msgstr "Koobone sync is already running…"
 
-#: main.lua:672
+#: main.lua:769
 msgid "Koobone sync failed: %1"
 msgstr "Koobone sync failed: %1"
 
-#: main.lua:678
+#: main.lua:775
 msgid "Koobone: queued %1 new chapters."
 msgstr "Koobone: queued %1 new chapters."
 
-#: main.lua:680
+#: main.lua:777
 msgid "Koobone: added %1 series to library."
 msgstr "Koobone: added %1 series to library."
 
-#: main.lua:682
+#: main.lua:779
 msgid "Koobone is up to date (%1 items)."
 msgstr "Koobone is up to date (%1 items)."
 
-#: main.lua:832 main.lua:858
-msgid "No adjacent downloaded chapters found."
-msgstr "No adjacent downloaded chapters found."
-
-#: main.lua:840 main.lua:876
+#: main.lua:953 main.lua:992 main.lua:1028
 msgid "Already at first downloaded chapter."
 msgstr "Already at first downloaded chapter."
 
-#: main.lua:840 main.lua:876
+#: main.lua:953 main.lua:992 main.lua:1028
 msgid "Already at latest downloaded chapter."
 msgstr "Already at latest downloaded chapter."
+
+#: main.lua:984 main.lua:1010
+msgid "No adjacent downloaded chapters found."
+msgstr "No adjacent downloaded chapters found."
 
 #: mangabrowser.lua:53
 msgid "Default (Newest chapter first)"
@@ -1282,7 +1254,7 @@ msgstr "Sort chapters by"
 msgid "Sort chapters: %1…"
 msgstr "Sort chapters: %1…"
 
-#: mangabrowser.lua:276 mangabrowser.lua:1091
+#: mangabrowser.lua:276 mangabrowser.lua:1145
 msgid "Check online chapters"
 msgstr "Check online chapters"
 
@@ -1348,7 +1320,7 @@ msgstr "Pushed to Koobone."
 msgid "Push all %1 volume(s) of '%2' to Koobone?"
 msgstr "Push all %1 volume(s) of '%2' to Koobone?"
 
-#: mangabrowser.lua:413 mangabrowser.lua:1154
+#: mangabrowser.lua:413 mangabrowser.lua:1208
 msgid "Push to Koobone"
 msgstr "Push to Koobone"
 
@@ -1392,15 +1364,15 @@ msgstr "▶ DL…"
 msgid "✗ Failed"
 msgstr "✗ Failed"
 
-#: mangabrowser.lua:735
+#: mangabrowser.lua:741
 msgid "Resume reading from %1?"
 msgstr "Resume reading from %1?"
 
-#: mangabrowser.lua:736
+#: mangabrowser.lua:742
 msgid "Resume"
 msgstr "Resume"
 
-#: mangabrowser.lua:737
+#: mangabrowser.lua:743
 msgid "Not now"
 msgstr "Not now"
 
@@ -1448,7 +1420,7 @@ msgstr "Download %1 ch"
 msgid "No chapters to download."
 msgstr "No chapters to download."
 
-#: mangabrowser.lua:915 nextchapter.lua:182
+#: mangabrowser.lua:915 nextchapter.lua:185
 msgid "No next chapter yet."
 msgstr "No next chapter yet."
 
@@ -1464,47 +1436,51 @@ msgstr "Chapters to queue in background, starting after the last one read."
 msgid "Download"
 msgstr "Download"
 
-#: mangabrowser.lua:1076
+#: mangabrowser.lua:1130
 msgid "Mark as read"
 msgstr "Mark as read"
 
-#: mangabrowser.lua:1076
+#: mangabrowser.lua:1130
 msgid "Mark as unread"
 msgstr "Mark as unread"
 
-#: mangabrowser.lua:1104
+#: mangabrowser.lua:1158
 msgid "Cancel background download"
 msgstr "Cancel background download"
 
-#: mangabrowser.lua:1113
+#: mangabrowser.lua:1167
 msgid "Download in background"
 msgstr "Download in background"
 
-#: mangabrowser.lua:1131
+#: mangabrowser.lua:1185
 msgid "Download from this chapter onward"
 msgstr "Download from this chapter onward"
 
-#: mangabrowser.lua:1165
+#: mangabrowser.lua:1219
 msgid "Re-download"
 msgstr "Re-download"
 
-#: mangabrowser.lua:1172
+#: mangabrowser.lua:1226
 msgid "Remove download"
 msgstr "Remove download"
 
-#: nextchapter.lua:201 nextchapter.lua:305
+#: nextchapter.lua:204 nextchapter.lua:311
 msgid "Continue to '%1'?"
 msgstr "Continue to '%1'?"
 
-#: nextchapter.lua:202 nextchapter.lua:306
+#: nextchapter.lua:205 nextchapter.lua:312
 msgid "Continue"
 msgstr "Continue"
 
-#: nextchapter.lua:213
+#: nextchapter.lua:216
 msgid "Offline, and the next chapter isn't downloaded."
 msgstr "Offline, and the next chapter isn't downloaded."
 
-#: nextchapter.lua:222
+#: nextchapter.lua:220
+msgid "Source no longer installed."
+msgstr "Source no longer installed."
+
+#: nextchapter.lua:225
 msgid ""
 "Could not check for next chapter:\n"
 "%1"
@@ -1512,7 +1488,7 @@ msgstr ""
 "Could not check for next chapter:\n"
 "%1"
 
-#: nextchapter.lua:260
+#: nextchapter.lua:262
 msgid "Downloading %1 chapter(s)…"
 msgstr "Downloading %1 chapter(s)…"
 
@@ -1824,7 +1800,9 @@ msgstr ""
 msgid ""
 "Parallel sources searched at once. 0 or blank = Auto (2–3 on Kindle, 4 on "
 "desktop); 1 = serial."
-msgstr "Parallel sources searched at once. 0 or blank = Auto (2–3 on Kindle, 4 on desktop); 1 = serial."
+msgstr ""
+"Parallel sources searched at once. 0 or blank = Auto (2–3 on Kindle, 4 on "
+"desktop); 1 = serial."
 
 #: settingsbrowser.lua:364
 msgid ""
@@ -1924,11 +1902,11 @@ msgstr "Open series chapter list"
 msgid "Chapter file not found on storage."
 msgstr "Chapter file not found on storage."
 
-#: simpleui_bridge.lua:1191
+#: simpleui_bridge.lua:1197
 msgid "%1/%2 ch"
 msgstr "%1/%2 ch"
 
-#: simpleui_bridge.lua:1414
+#: simpleui_bridge.lua:1420
 msgid "Manga Downloads"
 msgstr "Manga Downloads"
 
@@ -2183,6 +2161,100 @@ msgstr "No manga series yet  —  long press to configure"
 #: sui_module_tsundoku.lua:575
 msgid "No manga series yet"
 msgstr "No manga series yet"
+
+#~ msgid "Paused (%1 queued) · Saved: %2 ch (%3)"
+#~ msgstr "Paused (%1 queued) · Saved: %2 ch (%3)"
+
+#~ msgid "%1 failed · Saved: %2 manga / %3 ch (%4)"
+#~ msgstr "%1 failed · Saved: %2 manga / %3 ch (%4)"
+
+#~ msgid "Idle · Saved: %1 manga / %2 ch (%3)"
+#~ msgstr "Idle · Saved: %1 manga / %2 ch (%3)"
+
+#~ msgid "Done ✓"
+#~ msgstr "Done ✓"
+
+#~ msgid "Paused"
+#~ msgstr "Paused"
+
+#~ msgid "%1 remaining"
+#~ msgstr "%1 remaining"
+
+#~ msgid "── Download Queue (%1) ──"
+#~ msgstr "── Download Queue (%1) ──"
+
+#~ msgid "── Downloaded Books (%1) ──"
+#~ msgstr "── Downloaded Books (%1) ──"
+
+#~ msgid "All %1 ch · %2"
+#~ msgstr "All %1 ch · %2"
+
+#~ msgid "%1/%2 ch · %3"
+#~ msgstr "%1/%2 ch · %3"
+
+#~ msgid "%1 ch · %2"
+#~ msgstr "%1 ch · %2"
+
+#~ msgid "No downloaded chapters yet."
+#~ msgstr "No downloaded chapters yet."
+
+#~ msgid "── Downloaded Chapters (%1) ──"
+#~ msgstr "── Downloaded Chapters (%1) ──"
+
+#~ msgid ""
+#~ "Could not load downloads:\n"
+#~ "%1"
+#~ msgstr ""
+#~ "Could not load downloads:\n"
+#~ "%1"
+
+#~ msgid "View: Queue + Chapters"
+#~ msgstr "View: Queue + Chapters"
+
+#~ msgid "View: Grouped by Book"
+#~ msgstr "View: Grouped by Book"
+
+#~ msgid "View: Queue Only"
+#~ msgstr "View: Queue Only"
+
+#~ msgid "Clear finished queue history"
+#~ msgstr "Clear finished queue history"
+
+#~ msgid "Open chapter"
+#~ msgstr "Open chapter"
+
+#~ msgid "Download no longer available."
+#~ msgstr "Download no longer available."
+
+#~ msgid "%1 downloaded chapters (%2)"
+#~ msgstr "%1 downloaded chapters (%2)"
+
+#~ msgid ""
+#~ "Remove download?\n"
+#~ "\n"
+#~ "%1 - %2"
+#~ msgstr ""
+#~ "Remove download?\n"
+#~ "\n"
+#~ "%1 - %2"
+
+#~ msgid "View downloaded chapters"
+#~ msgstr "View downloaded chapters"
+
+#~ msgid "Open manga detail page"
+#~ msgstr "Open manga detail page"
+
+#~ msgid "Remove all %1 downloaded chapters"
+#~ msgstr "Remove all %1 downloaded chapters"
+
+#~ msgid ""
+#~ "Remove download?\n"
+#~ "\n"
+#~ "%1"
+#~ msgstr ""
+#~ "Remove download?\n"
+#~ "\n"
+#~ "%1"
 
 #~ msgid "Some sources failed: %1"
 #~ msgstr "Some sources failed: %1"

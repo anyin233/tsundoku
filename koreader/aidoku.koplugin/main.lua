@@ -16,6 +16,7 @@ local util = require("util")
 local T = require("ffi/util").template
 local _ = require("aidoku_l10n")
 
+local BookToc = require("booktoc")
 local ChapterCache = require("chaptercache")
 local ChapterOrder = require("chapterorder")
 local ComicLayout = require("comiclayout")
@@ -120,6 +121,7 @@ function Aidoku:init()
     self.ui.menu:registerToMainMenu(self)
     self:registerFileDialogButtons()
     self:hookEndOfBook()
+    self:hookShowToc()
     self:hookShowFileManager()
     self:hookClose()
     self.simpleui_active = SimpleUIBridge.setup(self)
@@ -163,6 +165,18 @@ end
 -- plugins (such as docsettingtweak.koplugin) continue receiving the event.
 function Aidoku:onDocSettingsLoad(doc_settings, document)
     self:applyAdaptiveComicSettings(doc_settings, document)
+end
+
+function Aidoku:onSuspend()
+    DownloadQueue:onSuspend()
+end
+
+function Aidoku:onResume()
+    DownloadQueue:onResume()
+end
+
+function Aidoku:onNetworkConnected()
+    DownloadQueue:onNetworkConnected()
 end
 
 local _builtin_sources_checked = {}
@@ -312,6 +326,89 @@ function Aidoku:hookEndOfBook()
         end
         return original_on_end_of_book(status_self, ...)
     end
+end
+
+-- hookShowToc replaces KOReader's per-volume Table of Contents menu with our
+-- cross-volume full-book TOC when a novel has multiple 50-chapter volumes.
+function Aidoku:hookShowToc()
+    if not self.document or not self.ui or not self.ui.toc or not self.ui.toc.onShowToc then
+        return
+    end
+    local original_on_show_toc = self.ui.toc.onShowToc
+    self.ui.toc.onShowToc = function(toc_self, ...)
+        if BookToc.show(self, toc_self, original_on_show_toc) then
+            return true
+        end
+        return original_on_show_toc(toc_self, ...)
+    end
+end
+
+function Aidoku:splitLegacyEpubIfNeeded(epub_path, opts)
+    opts = opts or {}
+    local is_legacy, manifest = EpubHelper.isLegacyOversizedEpub(epub_path)
+    if not is_legacy then
+        return epub_path, nil
+    end
+    local source_key = opts.source_key or (manifest and manifest.sourceKey) or ""
+    local manga_key = opts.manga_key or (manifest and manifest.mangaKey) or ""
+    if (source_key == "" or manga_key == "") and self.downloads_engine then
+        local entry = self.downloads_engine:byPath(epub_path)
+        if entry then
+            if source_key == "" then source_key = entry.sourceKey or "" end
+            if manga_key == "" then manga_key = entry.mangaKey or "" end
+        end
+    end
+    local msg = InfoMessage:new{
+        text = _("Optimizing book into 50-chapter volumes…"),
+    }
+    UIManager:show(msg)
+    UIManager:forceRePaint()
+    local res, err = self.engine:epubSplit({
+        epub_path = epub_path,
+        downloads_dir = self.downloads_dir,
+        source_key = source_key,
+        manga_key = manga_key,
+        canonical_keys = opts.canonical_keys,
+    })
+    UIManager:close(msg)
+    if not res then
+        if err then
+            UIManager:show(InfoMessage:new{
+                text = T(_("Could not split book volumes:\n%1"), err),
+                timeout = 3,
+            })
+        end
+        return epub_path, nil
+    end
+    if not res.alreadySharded then
+        EpubHelper.invalidateCache()
+        DownloadsEngine.invalidateCache(self.downloads_dir)
+        SimpleUIBridge.invalidate()
+        pcall(function()
+            local ReadHistory = require("readhistory")
+            if ReadHistory and ReadHistory.removeItemByPath then
+                ReadHistory:removeItemByPath(epub_path)
+            end
+        end)
+    end
+    local target_path
+    if opts.chapter_key and self.downloads_engine and source_key ~= "" and manga_key ~= "" then
+        local cp = self.downloads_engine:path(source_key, manga_key, opts.chapter_key)
+        if cp ~= "" then
+            target_path = cp
+        end
+    end
+    target_path = target_path
+        or (type(res.activePath) == "string" and res.activePath ~= "" and res.activePath)
+        or (type(res.volumes) == "table" and res.volumes[1] and res.volumes[1].path)
+        or epub_path
+    if G_reader_settings and G_reader_settings.readSetting and G_reader_settings.saveSetting then
+        local lastfile = G_reader_settings:readSetting("lastfile")
+        if type(lastfile) == "string" and DownloadsEngine.normalizePath(lastfile) == DownloadsEngine.normalizePath(epub_path) then
+            G_reader_settings:saveSetting("lastfile", target_path)
+        end
+    end
+    return target_path, res
 end
 
 -- hookShowFileManager makes every "back to Files" path return to Aidoku's
@@ -543,7 +640,12 @@ function Aidoku:addToMainMenu(menu_items)
     }
 end
 
-function Aidoku:onShow()
+-- Entrypoint for SimpleUI's generic plugin scanner (which probes
+-- {"onShow", "show", "open", "launch", "onOpen"}). Must NOT be named
+-- `onShow`, because KOReader's UIManager:show(ReaderUI) broadcasts
+-- Event("Show") to child plugins on every book open and switchDocument(),
+-- which would otherwise pop LibraryBrowser on top of the reader.
+function Aidoku:open()
     return self:onAidokuBrowseSources()
 end
 
@@ -827,6 +929,61 @@ function Aidoku:stepCurrentMangaChapter(delta)
         return
     end
     if EpubHelper.isEpub(self.document.file) then
+        local lfs = require("libs/libkoreader-lfs")
+        local book = EpubHelper.readBookIndex(self.document.file, self.downloads_engine)
+        if book and type(book.chapters) == "table" and #book.chapters > 0 then
+            local norm_cur = DownloadsEngine.normalizePath(self.document.file)
+            local xp = EpubHelper.currentXPointer(self.document.file, self.ui)
+            local cur_frag = EpubHelper.parseDocFragmentIndex(xp)
+            local cur_global
+            for idx, ch in ipairs(book.chapters) do
+                if DownloadsEngine.normalizePath(ch.epubPath) == norm_cur and (not cur_frag or ch.fragIndex == cur_frag) then
+                    cur_global = idx
+                    break
+                end
+            end
+            if not cur_global then
+                for idx, ch in ipairs(book.chapters) do
+                    if DownloadsEngine.normalizePath(ch.epubPath) == norm_cur then
+                        cur_global = idx
+                        break
+                    end
+                end
+            end
+            cur_global = cur_global or 1
+            local target_global = cur_global + (delta or 1)
+            local target = book.chapters[target_global]
+            if not target then
+                UIManager:show(Notification:new{
+                    text = (delta or 1) > 0 and _("Already at latest downloaded chapter.") or _("Already at first downloaded chapter."),
+                    timeout = 2,
+                })
+                return
+            end
+            if (delta or 1) > 0 then
+                local cur_ch = book.chapters[cur_global]
+                local entry = self.downloads_engine and self.downloads_engine:byPath(self.document.file)
+                if cur_ch and cur_ch.key and cur_ch.key ~= "" and entry then
+                    self.store:markChapterRead(entry.sourceKey, entry.mangaKey, cur_ch.key)
+                    SimpleUIBridge.invalidate()
+                end
+            end
+            if DownloadsEngine.normalizePath(target.epubPath) == norm_cur then
+                EpubHelper.jumpOpenDocument(self.ui, string.format("/body/DocFragment[%d]/body", target.fragIndex or 1))
+            elseif lfs.attributes(target.epubPath, "mode") == "file" then
+                self:syncCurrentEpubProgress(false)
+                EpubHelper.prepareJumpToChapter(target.epubPath, target.key, {
+                    ui = self.ui,
+                    frag_index = target.fragIndex,
+                    sync_typography_from = self.ui and self.ui.doc_settings or nil,
+                })
+                self.ui:switchDocument(target.epubPath)
+            else
+                UIManager:show(InfoMessage:new{ text = _("Volume file not found on disk."), timeout = 2 })
+            end
+            return
+        end
+
         local manifest = EpubHelper.readManifest(self.document.file)
         if not manifest or type(manifest.chapters) ~= "table" or #manifest.chapters == 0 then
             UIManager:show(InfoMessage:new{ text = _("No adjacent downloaded chapters found."), timeout = 2 })

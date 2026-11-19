@@ -1,37 +1,19 @@
 --[[--
 DownloadsBrowser (Download Manager):
-- Displays live download queue progress (page-by-page progress bar, percentage,
-  queued tasks, pause/resume, cancel, prioritize, retry) in real time.
-- Displays locally downloaded manga & chapters (grouped by manga or flat chapter
-  list, with storage size, tap to open/read, hold to manage/delete).
+- Displays live download queue progress (page-by-page / chapter progress bar,
+  percentage, queued tasks, pause/resume, cancel, prioritize, retry) in real time.
+- Completed downloads are automatically removed from the queue so only active,
+  queued, failed, and cancelled tasks remain listed.
 ]]
 
 local ButtonDialog = require("ui/widget/buttondialog")
 local ConfirmBox = require("ui/widget/confirmbox")
 local DownloadQueue = require("downloadqueue")
-local DownloadsEngine = require("downloadsengine")
-local EpubHelper = require("epubhelper")
-local InfoMessage = require("ui/widget/infomessage")
-local InstalledSources = require("installedsources")
 local Menu = require("ui/widget/menu")
 local OpenWidgets = require("openwidgets")
-local Trapper = require("ui/trapper")
 local UIManager = require("ui/uimanager")
-local lfs = require("libs/libkoreader-lfs")
 local T = require("ffi/util").template
 local _ = require("aidoku_l10n")
-
-local MB = 1024 * 1024
-
-local function formatSize(bytes)
-    bytes = tonumber(bytes) or 0
-    if bytes >= MB then
-        return string.format("%.1f MB", bytes / MB)
-    elseif bytes >= 1024 then
-        return string.format("%d KB", math.floor(bytes / 1024 + 0.5))
-    end
-    return string.format("%d B", bytes)
-end
 
 -- shortenUTF8 caps a long manga title at max_chars UTF-8 codepoints before
 -- appending " · <chapterTitle>", so KOReader's Menu row truncation never cuts
@@ -71,28 +53,17 @@ local DownloadsBrowser = Menu:extend{
 
 function DownloadsBrowser:init()
     self.title = _("Download Manager")
-    self.view_mode = self.view_mode or "all" -- "all" | "by_manga" | "queue_only"
-    self.cached_entries = {}
-    self.item_table = {}
     self.refresh_pending = false
+    self.item_table = self:genItemTable()
     Menu.init(self)
     OpenWidgets.push(self)
 
     self.listener_key = tostring(self)
-    DownloadQueue:subscribe(self.listener_key, function(event_kind)
-        if self.closed then
-            return
-        end
-        -- Reload SQLite index when a download finishes so newly completed CBZs
-        -- appear in the downloaded section with exact file size immediately.
-        if event_kind == "completed" then
-            self:scheduleRefresh(true)
-        else
-            self:scheduleRefresh(false)
+    DownloadQueue:subscribe(self.listener_key, function()
+        if not self.closed then
+            self:scheduleRefresh()
         end
     end)
-
-    UIManager:nextTick(function() self:reload() end)
 end
 
 function DownloadsBrowser:onCloseWidget()
@@ -106,58 +77,40 @@ end
 
 -- Throttle UI refreshes slightly so rapid page downloads on E-Ink repaint
 -- smoothly using partial UI refresh without flickering.
-function DownloadsBrowser:scheduleRefresh(reload_db)
-    if reload_db then
-        self.needs_db_reload = true
-    end
+function DownloadsBrowser:scheduleRefresh()
     if self.refresh_pending then
         return
     end
     self.refresh_pending = true
     UIManager:scheduleIn(0.35, function()
         self.refresh_pending = false
-        if self.closed then
-            return
+        if not self.closed then
+            self:rebuildUI()
         end
-        if self.needs_db_reload then
-            self.needs_db_reload = false
-            local entries = self.downloads_engine:list()
-            if entries then
-                self.cached_entries = entries
-            end
-        end
-        self:rebuildUI()
     end)
 end
 
-function DownloadsBrowser:buildSubtitle(qstats, mstats)
-    local total_dl_chapters = 0
-    local total_dl_bytes = 0
-    for _idx, g in ipairs(mstats.groups) do
-        total_dl_chapters = total_dl_chapters + g.count
-        total_dl_bytes = total_dl_bytes + g.sizeBytes
-    end
-
+function DownloadsBrowser:buildSubtitle(qstats)
     if qstats.active then
         local t = qstats.active
         local page_str
         if t.total_pages and t.total_pages > 0 then
             local pct = math.floor((t.current_page * 100) / t.total_pages)
-            page_str = T(_("%1/%2p (%3%)"), t.current_page, t.total_pages, pct)
+            if #(DownloadQueue.active_batch or {}) > 1 or DownloadQueue:isNovelTask(t) then
+                page_str = string.format("%d/%d (%d%%)", t.current_page, t.total_pages, pct)
+            else
+                page_str = T(_("%1/%2p (%3%)"), t.current_page, t.total_pages, pct)
+            end
         else
             page_str = _("Preparing…")
         end
-        return T(_("Active: %1 · Queue: %2 · Saved: %3 ch (%4)"),
-            page_str, qstats.pending, total_dl_chapters, formatSize(total_dl_bytes))
+        return T(_("Active: %1 · Queue: %2"), page_str, qstats.pending)
     elseif qstats.paused and qstats.queued > 0 then
-        return T(_("Paused (%1 queued) · Saved: %2 ch (%3)"),
-            qstats.queued, total_dl_chapters, formatSize(total_dl_bytes))
+        return T(_("Paused (%1 queued)"), qstats.queued)
     elseif qstats.failed > 0 then
-        return T(_("%1 failed · Saved: %2 manga / %3 ch (%4)"),
-            qstats.failed, #mstats.groups, total_dl_chapters, formatSize(total_dl_bytes))
+        return T(_("%1 failed"), qstats.failed)
     end
-    return T(_("Idle · Saved: %1 manga / %2 ch (%3)"),
-        #mstats.groups, total_dl_chapters, formatSize(total_dl_bytes))
+    return _("No active downloads")
 end
 
 local function formatTaskMandatory(task, queue_pos)
@@ -177,8 +130,6 @@ local function formatTaskMandatory(task, queue_pos)
         return _("Failed")
     elseif task.status == "cancelled" then
         return _("Cancelled")
-    elseif task.status == "completed" then
-        return _("Done ✓")
     end
     return task.status
 end
@@ -192,8 +143,6 @@ local function taskPrefix(task)
         return "✗ "
     elseif task.status == "cancelled" then
         return "– "
-    elseif task.status == "completed" then
-        return "✓ "
     end
     return ""
 end
@@ -201,176 +150,64 @@ end
 function DownloadsBrowser:genItemTable()
     local item_table = {}
     local qstats = DownloadQueue:getStats()
-    local mstats = self.downloads_engine:mangaDownloadStats(self.cached_entries)
+    local subtitle = self:buildSubtitle(qstats)
 
     if self.title_bar then
-        self.title_bar:setSubTitle(self:buildSubtitle(qstats, mstats), true)
+        self.title_bar:setSubTitle(subtitle, true)
     else
-        self.subtitle = self:buildSubtitle(qstats, mstats)
+        self.subtitle = subtitle
     end
 
-    -- 1. Active / Queued / Recent Queue Tasks section
-    if self.view_mode ~= "by_manga" or qstats.pending > 0 or qstats.failed > 0 then
-        local shown_tasks = {}
-        for _idx, t in ipairs(DownloadQueue.tasks) do
-            -- In "all" or "by_manga" mode, show active/queued/failed tasks cleanly
-            -- (completed ones already appear in Downloaded section below unless in queue_only mode)
-            if self.view_mode == "queue_only" or t.status ~= "completed" then
-                table.insert(shown_tasks, t)
-            end
-        end
-
-        if #shown_tasks > 0 then
-            local header_right = qstats.paused and _("Paused")
-                or (qstats.pending > 0 and T(_("%1 remaining"), qstats.pending) or "")
-            table.insert(item_table, {
-                text = T(_("── Download Queue (%1) ──"), #shown_tasks),
-                mandatory = header_right,
-                bold = true,
-                dim = true,
-                is_placeholder = true,
-            })
-            local qpos = 0
-            for _idx, t in ipairs(shown_tasks) do
-                if t.status == "queued" then
-                    qpos = qpos + 1
-                end
-                table.insert(item_table, {
-                    text = taskPrefix(t) .. formatChapterRowTitle(t.manga_title, t.chapter_title, 12),
-                    mandatory = formatTaskMandatory(t, qpos),
-                    queue_task = t,
-                    bold = (t.status == "downloading"),
-                })
-            end
-        elseif self.view_mode == "queue_only" then
-            table.insert(item_table, {
-                text = _("No active download tasks in queue."),
-                dim = true,
-                is_placeholder = true,
-            })
+    local shown_tasks = {}
+    for _idx, t in ipairs(DownloadQueue.tasks) do
+        if t.status ~= "completed" then
+            table.insert(shown_tasks, t)
         end
     end
 
-    -- 2. Downloaded Manga / Chapters section
-    if self.view_mode == "by_manga" then
-        if #mstats.groups > 0 then
-            table.insert(item_table, {
-                text = T(_("── Downloaded Books (%1) ──"), #mstats.groups),
-                bold = true,
-                dim = true,
-                is_placeholder = true,
-            })
-            local meta_map = self.store and self.store:getMangaMetaMap() or {}
-            for _idx, g in ipairs(mstats.groups) do
-                local meta = meta_map[g.sourceKey .. "\0" .. g.mangaKey]
-                local total_ch = meta and meta.chapter_count or 0
-                local count_str
-                if total_ch > 0 and g.count >= total_ch then
-                    count_str = T(_("All %1 ch · %2"), g.count, formatSize(g.sizeBytes))
-                elseif total_ch > 0 then
-                    count_str = T(_("%1/%2 ch · %3"), g.count, total_ch, formatSize(g.sizeBytes))
-                else
-                    count_str = T(_("%1 ch · %2"), g.count, formatSize(g.sizeBytes))
-                end
-                table.insert(item_table, {
-                    text = "✓ " .. g.mangaTitle,
-                    mandatory = count_str,
-                    manga_group = g,
-                })
+    if #shown_tasks > 0 then
+        local qpos = 0
+        for _idx, t in ipairs(shown_tasks) do
+            if t.status == "queued" then
+                qpos = qpos + 1
             end
-        elseif #item_table == 0 then
             table.insert(item_table, {
-                text = _("No downloaded chapters yet."),
-                dim = true,
-                is_placeholder = true,
+                text = taskPrefix(t) .. formatChapterRowTitle(t.manga_title, t.chapter_title, 12),
+                mandatory = formatTaskMandatory(t, qpos),
+                queue_task = t,
+                bold = (t.status == "downloading"),
             })
         end
-    elseif self.view_mode == "all" then
-        local valid_entries = mstats.valid_entries
-        if not valid_entries then
-            local existing = DownloadsEngine.buildExistingFilesSet(self.cached_entries)
-            valid_entries = {}
-            for _idx, entry in ipairs(self.cached_entries) do
-                if entry.path ~= "" and existing[entry.path] then
-                    table.insert(valid_entries, entry)
-                end
-            end
-        end
-        if #valid_entries > 0 then
-            table.insert(item_table, {
-                text = T(_("── Downloaded Chapters (%1) ──"), #valid_entries),
-                bold = true,
-                dim = true,
-                is_placeholder = true,
-            })
-            for _idx, entry in ipairs(valid_entries) do
-                local is_read = self.store and self.store:isChapterRead(entry.sourceKey, entry.mangaKey, entry.chapterKey)
-                local right = formatSize(entry.sizeBytes)
-                if is_read then
-                    right = _("Read") .. " · " .. right
-                end
-                table.insert(item_table, {
-                    text = formatChapterRowTitle(entry.mangaTitle, entry.chapterTitle, 15),
-                    mandatory = right,
-                    download_entry = entry,
-                })
-            end
-        elseif #item_table == 0 then
-            table.insert(item_table, {
-                text = _("No downloaded chapters yet."),
-                dim = true,
-                is_placeholder = true,
-            })
-        end
+    else
+        table.insert(item_table, {
+            text = _("No active download tasks in queue."),
+            dim = true,
+            is_placeholder = true,
+        })
     end
 
     return item_table
 end
 
 function DownloadsBrowser:rebuildUI()
-    local saved_page = self.page
     self.item_table = self:genItemTable()
-    self:updateItems(saved_page)
-end
-
-function DownloadsBrowser:loadAndRefresh()
-    local entries, err = self.downloads_engine:list()
-    if not entries then
-        UIManager:show(InfoMessage:new{ text = T(_("Could not load downloads:\n%1"), err) })
-        return
+    if self.perpage and self.perpage > 0 then
+        local max_page = math.max(1, math.ceil(#self.item_table / self.perpage))
+        if self.page and self.page > max_page then
+            self.page = max_page
+        end
     end
-    self.cached_entries = entries
-    self:rebuildUI()
+    self:updateItems(1)
 end
 
 function DownloadsBrowser:reload()
-    Trapper:wrap(function() self:loadAndRefresh() end)
+    self:rebuildUI()
 end
 
 function DownloadsBrowser:onLeftButtonTap()
     local qstats = DownloadQueue:getStats()
-    local view_labels = {
-        all = _("View: Queue + Chapters"),
-        by_manga = _("View: Grouped by Book"),
-        queue_only = _("View: Queue Only"),
-    }
-    local next_view = {
-        all = "by_manga",
-        by_manga = "queue_only",
-        queue_only = "all",
-    }
-
     local dialog
-    local buttons = {
-        {{
-            text = view_labels[self.view_mode] or view_labels.all,
-            callback = function()
-                UIManager:close(dialog)
-                self.view_mode = next_view[self.view_mode] or "all"
-                self:rebuildUI()
-            end,
-        }},
-    }
+    local buttons = {}
 
     if qstats.pending > 0 or qstats.paused then
         table.insert(buttons, {{
@@ -415,9 +252,9 @@ function DownloadsBrowser:onLeftButtonTap()
         }})
     end
 
-    if (qstats.completed + qstats.failed + qstats.cancelled) > 0 then
+    if (qstats.failed + qstats.cancelled) > 0 then
         table.insert(buttons, {{
-            text = _("Clear finished queue history"),
+            text = _("Clear failed/cancelled tasks"),
             callback = function()
                 UIManager:close(dialog)
                 DownloadQueue:clearFinished()
@@ -480,16 +317,6 @@ function DownloadsBrowser:showTaskActions(task)
         }})
     end
 
-    if task.status == "completed" and task.result_path and lfs.attributes(task.result_path, "mode") == "file" then
-        table.insert(buttons, {{
-            text = _("Open chapter"),
-            callback = function()
-                UIManager:close(dialog)
-                self:openChapterFile(task.source_key, task.manga_key, task.result_path, task.chapter_key)
-            end,
-        }})
-    end
-
     if task.status ~= "downloading" then
         table.insert(buttons, {{
             text = _("Remove from queue list"),
@@ -508,131 +335,12 @@ function DownloadsBrowser:showTaskActions(task)
     UIManager:show(dialog)
 end
 
-function DownloadsBrowser:openChapterFile(source_key, manga_key, path, chapter_key)
-    if lfs.attributes(path, "mode") ~= "file" then
-        UIManager:show(InfoMessage:new{ text = _("Download no longer available."), timeout = 2 })
-        self:reload()
-        return
-    end
-    local jump_xp
-    if EpubHelper.isEpub(path) and chapter_key then
-        jump_xp = EpubHelper.prepareJumpToChapter(path, chapter_key, { ui = self.ui })
-    end
-    self.store:markLastRead(source_key, manga_key)
-    require("pendinglibrary").from_tsundoku = true
-    OpenWidgets.closeAll()
-    UIManager:close(self)
-    if EpubHelper.isEpub(path)
-        and self.ui.document
-        and DownloadsEngine.normalizePath(self.ui.document.file) == DownloadsEngine.normalizePath(path)
-    then
-        if jump_xp then
-            EpubHelper.jumpOpenDocument(self.ui, jump_xp)
-        end
-        if self.store:isEphemeralMode() then
-            self.downloads_engine:removeAllExcept(path)
-        end
-        return
-    end
-    if self.ui.document then
-        self.ui:switchDocument(path)
-    else
-        self.ui:openFile(path)
-    end
-    if self.store:isEphemeralMode() then
-        self.downloads_engine:removeAllExcept(path)
-    end
-end
-
-function DownloadsBrowser:openMangaGroupChapters(group)
-    local rows = {}
-    -- Order chapters by chapter number ascending if possible for clean reading
-    local sorted = {}
-    for i, e in ipairs(group.chapters) do
-        sorted[i] = e
-    end
-    table.sort(sorted, function(a, b)
-        if a.chapterNumber and b.chapterNumber and a.chapterNumber ~= b.chapterNumber then
-            return a.chapterNumber < b.chapterNumber
-        end
-        return (a.downloadedAt or 0) < (b.downloadedAt or 0)
-    end)
-
-    if self.store then
-        local synced = {}
-        for _idx, entry in ipairs(sorted) do
-            if EpubHelper.isEpub(entry.path) and not synced[entry.path] then
-                synced[entry.path] = true
-                EpubHelper.syncReadChapters(entry.path, self.store, entry.sourceKey, entry.mangaKey, { ui = self.ui })
-            end
-        end
-    end
-
-    for _idx, entry in ipairs(sorted) do
-        local is_read = self.store and self.store:isChapterRead(entry.sourceKey, entry.mangaKey, entry.chapterKey)
-        local right = formatSize(entry.sizeBytes)
-        if is_read then
-            right = _("Read") .. " · " .. right
-        end
-        table.insert(rows, {
-            text = entry.chapterTitle,
-            mandatory = right,
-            download_entry = entry,
-        })
-    end
-
-    local sub_menu
-    sub_menu = Menu:new{
-        name = "tsundoku_downloads_manga",
-        title = group.mangaTitle,
-        subtitle = T(_("%1 downloaded chapters (%2)"), group.count, formatSize(group.sizeBytes)),
-        item_table = rows,
-        is_popout = false,
-        is_borderless = true,
-        title_bar_fm_style = true,
-        onMenuSelect = function(_m, item)
-            local e = item.download_entry
-            UIManager:close(sub_menu)
-            self:openChapterFile(e.sourceKey, e.mangaKey, e.path, e.chapterKey)
-            return true
-        end,
-        onMenuHold = function(_m, item)
-            local e = item.download_entry
-            UIManager:show(ConfirmBox:new{
-                text = T(_("Remove download?\n\n%1 - %2"), e.mangaTitle, e.chapterTitle),
-                ok_text = _("Remove"),
-                ok_callback = function()
-                    self.downloads_engine:remove(e.sourceKey, e.mangaKey, e.chapterKey)
-                    UIManager:close(sub_menu)
-                    self:reload()
-                end,
-            })
-            return true
-        end,
-        onCloseWidget = function(self_sub)
-            Menu.onCloseWidget(self_sub)
-            OpenWidgets.remove(self_sub)
-        end,
-    }
-    OpenWidgets.push(sub_menu)
-    UIManager:show(sub_menu)
-end
-
 function DownloadsBrowser:onMenuSelect(item)
     if item.is_placeholder then
         return true
     end
     if item.queue_task then
         self:showTaskActions(item.queue_task)
-        return true
-    end
-    if item.manga_group then
-        self:openMangaGroupChapters(item.manga_group)
-        return true
-    end
-    local entry = item.download_entry
-    if entry then
-        self:openChapterFile(entry.sourceKey, entry.mangaKey, entry.path, entry.chapterKey)
     end
     return true
 end
@@ -643,85 +351,7 @@ function DownloadsBrowser:onMenuHold(item)
     end
     if item.queue_task then
         self:showTaskActions(item.queue_task)
-        return true
     end
-    if item.manga_group then
-        local g = item.manga_group
-        local dialog
-        local buttons = {
-            {{
-                text = _("View downloaded chapters"),
-                callback = function()
-                    UIManager:close(dialog)
-                    self:openMangaGroupChapters(g)
-                end,
-            }},
-        }
-        if self.engine and self.sources_dir then
-            table.insert(buttons, {{
-                text = _("Open manga detail page"),
-                callback = function()
-                    UIManager:close(dialog)
-                    Trapper:wrap(function()
-                        local found = InstalledSources.findByKey(self.sources_dir, self.engine, g.sourceKey)
-                        if not found then
-                            UIManager:show(InfoMessage:new{ text = _("Source no longer installed."), timeout = 2 })
-                            return
-                        end
-                        local MangaBrowser = require("mangabrowser")
-                        UIManager:show(MangaBrowser:new{
-                            engine = self.engine,
-                            store = self.store,
-                            downloads_engine = self.downloads_engine,
-                            ui = self.ui,
-                            sources_dir = self.sources_dir,
-                            source_path = found.path,
-                            source_key = g.sourceKey,
-                            source_name = found.name,
-                            downloads_dir = self.downloads_dir or self.downloads_engine.downloads_dir,
-                            manga = { Key = g.mangaKey, Title = g.mangaTitle },
-                            is_popout = false,
-                            is_borderless = true,
-                            title_bar_fm_style = true,
-                        })
-                    end)
-                end,
-            }})
-        end
-        table.insert(buttons, {{
-            text = T(_("Remove all %1 downloaded chapters"), g.count),
-            callback = function()
-                UIManager:close(dialog)
-                UIManager:show(ConfirmBox:new{
-                    text = T(_("Remove all %1 downloaded chapters of '%2'?"), g.count, g.mangaTitle),
-                    ok_text = _("Remove"),
-                    ok_callback = function()
-                        Trapper:wrap(function()
-                            self.downloads_engine:removeManga(g.sourceKey, g.mangaKey, g.mangaTitle)
-                            self:loadAndRefresh()
-                        end)
-                    end,
-                })
-            end,
-        }})
-        dialog = ButtonDialog:new{
-            title = g.mangaTitle,
-            buttons = buttons,
-        }
-        UIManager:show(dialog)
-        return true
-    end
-    local entry = item.download_entry
-    UIManager:show(ConfirmBox:new{
-        text = T(_("Remove download?\n\n%1"), item.text),
-        ok_text = _("Remove"),
-        ok_callback = function()
-            Trapper:wrap(function()
-                self.downloads_engine:remove(entry.sourceKey, entry.mangaKey, entry.chapterKey)
-                self:loadAndRefresh()
-            end)
-        end,
-    })
     return true
 end
 

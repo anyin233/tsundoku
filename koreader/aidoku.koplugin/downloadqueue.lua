@@ -16,6 +16,7 @@ Features:
 
 local DownloadsEngine = require("downloadsengine")
 local EpubHelper = require("epubhelper")
+local NetworkMgr = require("ui/network/manager")
 local Notification = require("ui/widget/notification")
 local UIManager = require("ui/uimanager")
 local util = require("util")
@@ -29,7 +30,11 @@ local DownloadQueue = {
     active_batch = nil,    -- array of tasks owned by active_handle
     active_old_keys = nil, -- pre-update EPUB keys for post-batch SDR remapping
     active_handle = nil,   -- Runner async handle for active_task
+    session_keep_paths = {}, -- file paths completed during the current active queue run
     paused = false,
+    suspended = false,
+    net_retry_count = 0,
+    net_retry_timer = nil,
     standby_prevented = false,
     poll_scheduled = false,
     listeners = {},        -- key -> fn(event_kind, task)
@@ -156,20 +161,52 @@ local function buildTask(self, id, spec)
     return task
 end
 
-local function isCompletedStillOnDisk(self, existing, spec)
-    if self.downloads_engine and self.downloads_engine.path then
-        return self.downloads_engine:path(spec.source_key, spec.manga_key, spec.chapter_key) ~= ""
+-- detachCompletedTasks removes finished tasks from DownloadQueue.tasks / by_id
+-- without mutating task.status or task.result_path so subscribers receiving the
+-- "completed" notification can still inspect those fields.
+local function detachCompletedTasks(self, completed_set)
+    if not completed_set or next(completed_set) == nil then
+        return
     end
-    if type(existing.result_path) == "string" and existing.result_path ~= "" then
-        local ok, lfs = pcall(require, "libs/libkoreader-lfs")
-        if ok and lfs then
-            return lfs.attributes(existing.result_path, "mode") == "file"
+    for t in pairs(completed_set) do
+        if type(t) == "table" and t.id ~= nil then
+            self.by_id[t.id] = nil
         end
+    end
+    local kept = {}
+    for _idx, t in ipairs(self.tasks) do
+        if completed_set[t] or t.status == "completed" then
+            self.by_id[t.id] = nil
+        else
+            table.insert(kept, t)
+        end
+    end
+    self.tasks = kept
+end
+
+local function isSpecOnDisk(self, spec, dl_maps)
+    if spec.redownload or not self.downloads_engine then
+        return false
+    end
+    if dl_maps and self.downloads_engine.downloadedPathsMap then
+        local mkey = tostring(spec.source_key or "") .. "\0" .. tostring(spec.manga_key or "")
+        local map = dl_maps[mkey]
+        if map == nil then
+            map = self.downloads_engine:downloadedPathsMap(spec.source_key, spec.manga_key, spec.manga_title) or false
+            dl_maps[mkey] = map
+        end
+        if type(map) == "table" then
+            return (map[spec.chapter_key] or "") ~= ""
+        end
+    end
+    if self.downloads_engine.path then
+        return self.downloads_engine:path(spec.source_key, spec.manga_key, spec.chapter_key) ~= ""
     end
     return false
 end
 
 -- enqueue adds one chapter download task (or re-queues a failed/cancelled one).
+-- Already-downloaded chapters (unless spec.redownload is set) are skipped.
 -- Returns (task, was_added).
 function DownloadQueue:enqueue(spec)
     local id = makeId(spec.source_key, spec.manga_key, spec.chapter_key)
@@ -178,15 +215,20 @@ function DownloadQueue:enqueue(spec)
         if existing.status == "downloading" or existing.status == "queued" then
             return existing, false
         end
-        -- Re-activate a previously failed/cancelled/completed entry if explicitly requested
-        -- or if the previously recorded file is no longer indexed/present on disk.
-        if existing.status == "completed" and not spec.redownload and isCompletedStillOnDisk(self, existing, spec) then
+        if isSpecOnDisk(self, spec) then
+            if existing.status == "completed" then
+                detachCompletedTasks(self, { [existing] = true })
+            end
             return existing, false
         end
         reactivateTask(existing, spec)
         self:notify("enqueued", existing)
         self:pump()
         return existing, true
+    end
+
+    if isSpecOnDisk(self, spec) then
+        return nil, false
     end
 
     local task = buildTask(self, id, spec)
@@ -200,22 +242,29 @@ end
 function DownloadQueue:enqueueBatch(specs, ctx)
     self:setContext(ctx)
     local added = 0
+    local dl_maps = {}
+    local stale_completed = {}
     for _idx, spec in ipairs(specs) do
         local id = makeId(spec.source_key, spec.manga_key, spec.chapter_key)
         local existing = self.by_id[id]
         if existing then
             if existing.status == "failed"
                 or existing.status == "cancelled"
-                or (existing.status == "completed" and (spec.redownload or not isCompletedStillOnDisk(self, existing, spec)))
+                or existing.status == "completed"
             then
-                reactivateTask(existing, spec)
-                added = added + 1
+                if not isSpecOnDisk(self, spec, dl_maps) then
+                    reactivateTask(existing, spec)
+                    added = added + 1
+                elseif existing.status == "completed" then
+                    stale_completed[existing] = true
+                end
             end
-        else
+        elseif not isSpecOnDisk(self, spec, dl_maps) then
             buildTask(self, id, spec)
             added = added + 1
         end
     end
+    detachCompletedTasks(self, stale_completed)
     if added > 0 then
         self.paused = false
         self:notify("batch_enqueued")
@@ -248,8 +297,157 @@ function DownloadQueue:isNovelTask(task)
     return false
 end
 
+function DownloadQueue:clearNetRetryTimer()
+    if self.net_retry_timer then
+        UIManager:unschedule(self.net_retry_timer)
+        self.net_retry_timer = nil
+    end
+end
+
+function DownloadQueue:hasQueuedTasks()
+    for _idx, t in ipairs(self.tasks) do
+        if t.status == "queued" then
+            return true
+        end
+    end
+    return false
+end
+
+function DownloadQueue:scheduleNetworkRetry(delay_s)
+    if self.net_retry_timer or self.paused or self.suspended or not self:hasQueuedTasks() then
+        return
+    end
+    self.net_retry_timer = function()
+        self.net_retry_timer = nil
+        if self.paused or self.suspended or self.active_task or not self:hasQueuedTasks() then
+            return
+        end
+        if NetworkMgr:isConnected() then
+            self.net_retry_count = 0
+            self:pump()
+            return
+        end
+        if self.net_retry_count < 10 then
+            self.net_retry_count = self.net_retry_count + 1
+            self:scheduleNetworkRetry(delay_s)
+        else
+            self.paused = true
+            self:updateStandbyGuard()
+            self:notify("paused")
+        end
+    end
+    UIManager:scheduleIn(delay_s, self.net_retry_timer)
+end
+
+-- reconcilePartialBatch checks whether any chapters from an aborted/failed
+-- batch were already flushed to disk before the failure, detaching those tasks
+-- as completed and returning (remaining, first_completed).
+function DownloadQueue:reconcilePartialBatch(batch, old_keys, downloads_dir)
+    if type(batch) ~= "table" or #batch == 0 then
+        return {}, nil
+    end
+    DownloadsEngine.invalidateCache(downloads_dir or self.downloads_dir)
+    local lead = batch[1]
+    local dl_map
+    if self.downloads_engine and lead then
+        dl_map = self.downloads_engine:downloadedPathsMap(lead.source_key, lead.manga_key, lead.manga_title)
+    end
+    if type(dl_map) ~= "table" or next(dl_map) == nil then
+        return batch, nil
+    end
+
+    local remaining = {}
+    local completed_set = {}
+    local first_completed = nil
+    local saved_epub
+    local now = os.time()
+    for _idx, t in ipairs(batch) do
+        local p = (not t.redownload) and (dl_map[t.chapter_key] or "") or ""
+        if p ~= "" then
+            t.status = "completed"
+            t.result_path = p
+            if t.total_pages and t.total_pages > 0 then
+                t.current_page = t.total_pages
+            end
+            t.finished_at = now
+            completed_set[t] = true
+            first_completed = first_completed or t
+            self.session_keep_paths[p] = true
+            if not saved_epub and EpubHelper.isEpub(p) then
+                saved_epub = p
+            end
+        else
+            table.insert(remaining, t)
+        end
+    end
+
+    if saved_epub then
+        EpubHelper.invalidateCache()
+        if old_keys and #old_keys > 0 and not EpubHelper.usesAdjacentSidecar(saved_epub) then
+            local new_keys = EpubHelper.manifestKeys(EpubHelper.readManifest(saved_epub))
+            EpubHelper.remapDocSettings(saved_epub, old_keys, new_keys)
+        end
+    end
+    detachCompletedTasks(self, completed_set)
+    return remaining, first_completed
+end
+
+function DownloadQueue:onSuspend()
+    self.suspended = true
+    self:clearNetRetryTimer()
+    self.net_retry_count = 0
+    local first_completed
+    if self.active_task and self.active_handle then
+        local batch = self.active_batch or { self.active_task }
+        local old_keys = self.active_old_keys
+        local dl_dir = self.active_task.downloads_dir
+        self.active_handle:cancel()
+        self.active_task = nil
+        self.active_batch = nil
+        self.active_old_keys = nil
+        self.active_handle = nil
+
+        local unsaved
+        unsaved, first_completed = self:reconcilePartialBatch(batch, old_keys, dl_dir)
+        for _idx, t in ipairs(unsaved) do
+            t.status = "queued"
+            t.current_page = 0
+            t.total_pages = 0
+            t.error_msg = nil
+        end
+    end
+    self:updateStandbyGuard()
+    if first_completed then
+        self:notify("completed", first_completed)
+    end
+    self:notify("suspended")
+end
+
+function DownloadQueue:onResume()
+    self.suspended = false
+    self.net_retry_count = 0
+    self:clearNetRetryTimer()
+    if self.paused or self.active_task or not self:hasQueuedTasks() then
+        return
+    end
+    if NetworkMgr:isConnected() then
+        self:pump()
+    else
+        self.net_retry_count = 1
+        self:scheduleNetworkRetry(2)
+    end
+end
+
+function DownloadQueue:onNetworkConnected()
+    self.net_retry_count = 0
+    self:clearNetRetryTimer()
+    if not self.suspended and not self.paused and not self.active_task and self:hasQueuedTasks() then
+        self:pump()
+    end
+end
+
 function DownloadQueue:pump()
-    if self.active_task or self.paused or not self.engine then
+    if self.active_task or self.paused or self.suspended or not self.engine then
         self:updateStandbyGuard()
         return
     end
@@ -266,6 +464,20 @@ function DownloadQueue:pump()
         return
     end
 
+    if not NetworkMgr:isConnected() then
+        if self.net_retry_count < 10 then
+            self.net_retry_count = self.net_retry_count + 1
+            self:scheduleNetworkRetry(3)
+        else
+            self.paused = true
+            self:notify("paused")
+        end
+        self:updateStandbyGuard()
+        return
+    end
+    self.net_retry_count = 0
+    self:clearNetRetryTimer()
+
     if self:isNovelTask(next_task)
         and type(next_task.manga) == "table"
         and type(next_task.chapter) == "table"
@@ -273,8 +485,24 @@ function DownloadQueue:pump()
         local dl_map = self.downloads_engine
             and self.downloads_engine:downloadedPathsMap(next_task.source_key, next_task.manga_key, next_task.manga_title)
             or nil
+        local canon_idx
+        if type(next_task.canonical_keys) == "table" and #next_task.canonical_keys > 0 then
+            canon_idx = {}
+            for i, ck in ipairs(next_task.canonical_keys) do
+                if type(ck) == "string" and ck ~= "" and not canon_idx[ck] then
+                    canon_idx[ck] = i
+                end
+            end
+        end
+        local lead_order = (canon_idx and canon_idx[next_task.chapter_key])
+            or (type(next_task.chapter.ChapterNumber) == "number" and next_task.chapter.ChapterNumber >= 1
+                and math.floor(next_task.chapter.ChapterNumber))
+            or nil
+        local lead_vol = lead_order and EpubHelper.volumeIndexForOrder(lead_order) or nil
+
         local batch = {}
-        local skipped_any = false
+        local skipped_set = {}
+        local first_skipped = nil
         local now = os.time()
         for _idx, t in ipairs(self.tasks) do
             if #batch >= NOVEL_BATCH_SIZE then
@@ -286,21 +514,38 @@ function DownloadQueue:pump()
                 and (t.redownload and true or false) == (next_task.redownload and true or false)
                 and type(t.chapter) == "table"
             then
-                local existing = (not t.redownload and dl_map) and (dl_map[t.chapter_key] or "") or ""
-                if existing ~= "" then
-                    t.status = "completed"
-                    t.result_path = existing
-                    t.finished_at = now
-                    skipped_any = true
-                else
-                    table.insert(batch, t)
+                local same_vol = true
+                if lead_vol and canon_idx then
+                    local t_order = canon_idx[t.chapter_key]
+                        or (type(t.chapter.ChapterNumber) == "number" and t.chapter.ChapterNumber >= 1
+                            and math.floor(t.chapter.ChapterNumber))
+                        or nil
+                    if t_order and EpubHelper.volumeIndexForOrder(t_order) ~= lead_vol then
+                        same_vol = false
+                    end
+                end
+                if same_vol then
+                    local existing = (not t.redownload and dl_map) and (dl_map[t.chapter_key] or "") or ""
+                    if existing ~= "" then
+                        t.status = "completed"
+                        t.result_path = existing
+                        t.finished_at = now
+                        skipped_set[t] = true
+                        first_skipped = first_skipped or t
+                    else
+                        table.insert(batch, t)
+                    end
                 end
             end
         end
 
+        if first_skipped then
+            detachCompletedTasks(self, skipped_set)
+            self:notify("completed", first_skipped)
+        end
         if #batch == 0 then
-            if skipped_any then
-                self:notify("completed", next_task)
+            if not self:hasQueuedTasks() then
+                self.session_keep_paths = {}
             end
             self:pump()
             return
@@ -324,7 +569,7 @@ function DownloadQueue:pump()
             manga = next_task.manga,
             chapters = chapters,
             canonical_keys = next_task.canonical_keys,
-            out_path = existing_epub ~= "" and existing_epub or next_task.out_path,
+            out_path = nil,
             downloads_dir = next_task.downloads_dir,
             manga_dir_name = next_task.manga_dir_name,
             redownload = next_task.redownload,
@@ -365,6 +610,10 @@ function DownloadQueue:pump()
             next_task.status = "completed"
             next_task.result_path = existing
             next_task.finished_at = os.time()
+            detachCompletedTasks(self, { [next_task] = true })
+            if not self:hasQueuedTasks() then
+                self.session_keep_paths = {}
+            end
             self:notify("completed", next_task)
             self:pump()
             return
@@ -425,6 +674,7 @@ function DownloadQueue:onPollTick()
 
     if state == "done" then
         local done_ts = os.time()
+        local completed_set = {}
         for _idx, t in ipairs(batch) do
             t.status = "completed"
             t.result_path = a
@@ -432,10 +682,26 @@ function DownloadQueue:onPollTick()
                 t.current_page = t.total_pages
             end
             t.finished_at = done_ts
+            completed_set[t] = true
         end
+        if type(a) == "string" and a ~= "" then
+            self.session_keep_paths[a] = true
+        end
+        detachCompletedTasks(self, completed_set)
 
         if EpubHelper.isEpub(a) then
-            EpubHelper.invalidateCache(a)
+            EpubHelper.invalidateCache()
+            DownloadsEngine.invalidateCache(task.downloads_dir or self.downloads_dir)
+            if self.downloads_engine then
+                local updated_map = self.downloads_engine:downloadedPathsMap(task.source_key, task.manga_key, task.manga_title)
+                for _idx, t in ipairs(batch) do
+                    local rp = updated_map[t.chapter_key]
+                    if type(rp) == "string" and rp ~= "" then
+                        t.result_path = rp
+                        self.session_keep_paths[rp] = true
+                    end
+                end
+            end
             if old_keys and #old_keys > 0 and not EpubHelper.usesAdjacentSidecar(a) then
                 local new_keys = EpubHelper.manifestKeys(EpubHelper.readManifest(a))
                 EpubHelper.remapDocSettings(a, old_keys, new_keys)
@@ -456,52 +722,72 @@ function DownloadQueue:onPollTick()
         if self.store and self.downloads_engine and not self.store:isEphemeralMode() then
             local limit = self.store:downloadLimitBytes()
             if limit and limit > 0 then
-                local keep = {}
-                for _idx, t in ipairs(self.tasks) do
-                    if t.result_path then
-                        keep[t.result_path] = true
-                    end
-                end
-                self.downloads_engine:prune(limit, keep)
+                self.downloads_engine:prune(limit, self.session_keep_paths)
             end
+        end
+        if not self:hasQueuedTasks() then
+            self.session_keep_paths = {}
         end
         DownloadsEngine.invalidateCache(task.downloads_dir or self.downloads_dir)
         self:notify("completed", task)
     else
+        local unsaved, first_completed = self:reconcilePartialBatch(batch, old_keys, task.downloads_dir)
         local fail_ts = os.time()
-        for _idx, t in ipairs(batch) do
+        for _idx, t in ipairs(unsaved) do
             t.status = "failed"
             t.error_msg = b or _("command failed")
             t.finished_at = fail_ts
         end
-        self:notify("failed", task)
+        if not self:hasQueuedTasks() then
+            self.session_keep_paths = {}
+        end
+        if first_completed then
+            self:notify("completed", first_completed)
+        end
+        if #unsaved > 0 then
+            self:notify("failed", unsaved[1])
+        end
     end
 
     self:pump()
 end
 
 function DownloadQueue:pause()
+    self:clearNetRetryTimer()
+    self.net_retry_count = 0
     if self.paused then
         return
     end
     self.paused = true
+    local first_completed
     if self.active_task and self.active_handle then
+        local batch = self.active_batch or { self.active_task }
+        local old_keys = self.active_old_keys
+        local dl_dir = self.active_task.downloads_dir
         self.active_handle:cancel()
-        for _idx, t in ipairs(self.active_batch or { self.active_task }) do
-            t.status = "queued"
-            t.current_page = 0
-            t.total_pages = 0
-        end
         self.active_task = nil
         self.active_batch = nil
         self.active_old_keys = nil
         self.active_handle = nil
+        local unsaved
+        unsaved, first_completed = self:reconcilePartialBatch(batch, old_keys, dl_dir)
+        for _idx, t in ipairs(unsaved) do
+            t.status = "queued"
+            t.current_page = 0
+            t.total_pages = 0
+        end
     end
     self:updateStandbyGuard()
+    if first_completed then
+        self:notify("completed", first_completed)
+    end
     self:notify("paused")
 end
 
 function DownloadQueue:resume()
+    self.suspended = false
+    self.net_retry_count = 0
+    self:clearNetRetryTimer()
     if not self.paused then
         return
     end
@@ -595,6 +881,8 @@ function DownloadQueue:removeTaskRecord(task_id)
 end
 
 function DownloadQueue:cancelAll()
+    self:clearNetRetryTimer()
+    self.net_retry_count = 0
     if self.active_task and self.active_handle then
         self.active_handle:cancel()
         local now = os.time()
@@ -614,6 +902,7 @@ function DownloadQueue:cancelAll()
         end
     end
     self.paused = false
+    self.session_keep_paths = {}
     self:updateStandbyGuard()
     self:notify("cancelled_all")
 end
@@ -629,6 +918,9 @@ function DownloadQueue:retryTask(task_id)
     task.error_msg = nil
     task.finished_at = nil
     self.paused = false
+    self.suspended = false
+    self.net_retry_count = 0
+    self:clearNetRetryTimer()
     self:notify("retried", task)
     self:pump()
     return true
@@ -648,6 +940,9 @@ function DownloadQueue:retryFailed()
     end
     if count > 0 then
         self.paused = false
+        self.suspended = false
+        self.net_retry_count = 0
+        self:clearNetRetryTimer()
         self:notify("retried_all")
         self:pump()
     end

@@ -797,3 +797,47 @@ func TestSharedEPUBBookChaptersTotalBytesRemoveAndPrune(t *testing.T) {
 	}
 }
 
+func TestBookEPUBPathsAndMigrateSplitBook(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(dir)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer s.Close()
+
+	legacyPath := writeFile(t, dir, "Legacy.epub", 999)
+	if _, err := s.RecordBookChapters("zh.biquge", "biquge.aix", "/book/split/", legacyPath, "SplitBook", []BookChapterRecord{
+		{ChapterKey: "k1", ChapterTitle: "Ch 1"},
+		{ChapterKey: "k2", ChapterTitle: "Ch 2"},
+		{ChapterKey: "k3", ChapterTitle: "Ch 3"},
+	}, 0); err != nil {
+		t.Fatalf("RecordBookChapters: %v", err)
+	}
+
+	vol1 := writeFile(t, dir, "SplitBook [0001-0050].epub", 400)
+	vol2 := writeFile(t, dir, "SplitBook [0051-0100].epub", 250)
+	if err := s.MigrateSplitBook("zh.biquge", "/book/split/", legacyPath, []epub.SplitVolumeResult{
+		{VolumeIndex: 1, VolumeStart: 1, VolumeEnd: 50, Path: vol1, ChapterKeys: []string{"k1", "k2"}},
+		{VolumeIndex: 2, VolumeStart: 51, VolumeEnd: 100, Path: vol2, ChapterKeys: []string{"k3"}},
+	}); err != nil {
+		t.Fatalf("MigrateSplitBook: %v", err)
+	}
+
+	paths, err := s.BookEPUBPaths("zh.biquge", "/book/split/")
+	if err != nil {
+		t.Fatalf("BookEPUBPaths: %v", err)
+	}
+	if len(paths) != 2 {
+		t.Fatalf("BookEPUBPaths = %v, want 2 paths", paths)
+	}
+	if got, _ := s.Path("zh.biquge", "/book/split/", "k1"); got != vol1 {
+		t.Fatalf("Path(k1) = %q, want %q", got, vol1)
+	}
+	if got, _ := s.Path("zh.biquge", "/book/split/", "k3"); got != vol2 {
+		t.Fatalf("Path(k3) = %q, want %q", got, vol2)
+	}
+	if total, err := s.TotalBytes(); err != nil || total != 650 {
+		t.Fatalf("TotalBytes = %d, want 650 (err=%v)", total, err)
+	}
+}
+

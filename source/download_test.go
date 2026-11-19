@@ -321,3 +321,50 @@ func TestCanonicalReadingKeys_DuplicateChapterNumbersKeepPositionalOrder(t *test
 		t.Fatalf("CanonicalReadingKeys(unique) = %v, want %v", gotUnique, wantUnique)
 	}
 }
+
+func TestResolveVolumeEPUBPath(t *testing.T) {
+	dir := t.TempDir()
+	manga := models.Manga{Title: "道与碳基猴子饲养守则"}
+	mangaDirName := "道与碳基猴子饲养守则 [zh.biquge]"
+
+	v1, err := ResolveVolumeEPUBPath(filepath.Join(dir, "book.epub"), mangaDirName, manga, 1, 50)
+	if err != nil {
+		t.Fatalf("ResolveVolumeEPUBPath v1: %v", err)
+	}
+	wantV1 := filepath.Join(dir, mangaDirName, "道与碳基猴子饲养守则 [0001-0050].epub")
+	if v1 != wantV1 {
+		t.Fatalf("v1 = %q, want %q", v1, wantV1)
+	}
+
+	// Passing v1's path (already inside mangaDirName) must resolve v2 cleanly without double-nesting.
+	v2, err := ResolveVolumeEPUBPath(v1, mangaDirName, manga, 2, 50)
+	if err != nil {
+		t.Fatalf("ResolveVolumeEPUBPath v2: %v", err)
+	}
+	wantV2 := filepath.Join(dir, mangaDirName, "道与碳基猴子饲养守则 [0051-0100].epub")
+	if v2 != wantV2 {
+		t.Fatalf("v2 = %q, want %q", v2, wantV2)
+	}
+
+	v21, err := ResolveVolumeEPUBPath("", mangaDirName, manga, 21, 50)
+	if err != nil {
+		t.Fatalf("ResolveVolumeEPUBPath v21: %v", err)
+	}
+	if filepath.Base(v21) != "道与碳基猴子饲养守则 [1001-1050].epub" {
+		t.Fatalf("v21 base = %q, want [1001-1050].epub", filepath.Base(v21))
+	}
+
+	// Long titles must preserve the [0001-0050].epub suffix within maxFilenameBytes.
+	longManga := models.Manga{Title: strings.Repeat("超长书名测试", 40)}
+	vLong, err := ResolveVolumeEPUBPath(filepath.Join(dir, "book.epub"), "long [zh.biquge]", longManga, 1, 50)
+	if err != nil {
+		t.Fatalf("ResolveVolumeEPUBPath long: %v", err)
+	}
+	base := filepath.Base(vLong)
+	if !strings.HasSuffix(base, " [0001-0050].epub") {
+		t.Fatalf("long volume base = %q, expected [0001-0050].epub suffix preserved", base)
+	}
+	if !utf8.ValidString(base) || len(base) > 220 {
+		t.Fatalf("long volume base invalid or too long (%d bytes): %q", len(base), base)
+	}
+}

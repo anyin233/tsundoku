@@ -15,12 +15,17 @@ local json = require("json")
 
 local EpubHelper = {}
 
+EpubHelper.CHAPTERS_PER_VOLUME = 50
+EpubHelper.BOOK_INDEX_FILE = ".tsundoku_book.json"
+
 local MANIFEST_ENTRY = "META-INF/tsundoku.json"
 local MAX_MANIFEST_CACHE = 16
 local _manifest_cache = {}
 local _manifest_order = {}
 local _sidecar_cache = {}
 local _sidecar_order = {}
+local _book_index_cache = {}
+local _book_index_order = {}
 
 local function u16(s, idx)
     local b1, b2 = s:byte(idx, idx + 1)
@@ -74,6 +79,8 @@ function EpubHelper.invalidateCache(epub_path)
         _manifest_order = {}
         _sidecar_cache = {}
         _sidecar_order = {}
+        _book_index_cache = {}
+        _book_index_order = {}
         return
     end
     local norm = normalizePath(epub_path)
@@ -85,10 +92,42 @@ function EpubHelper.invalidateCache(epub_path)
         _sidecar_cache[norm] = nil
         removeOrderKey(_sidecar_order, norm)
     end
+    if _book_index_cache[norm] then
+        _book_index_cache[norm] = nil
+        removeOrderKey(_book_index_order, norm)
+    end
+    local dir = norm:match("^(.*)/[^/]+$")
+    if dir and _book_index_cache[dir] then
+        _book_index_cache[dir] = nil
+        removeOrderKey(_book_index_order, dir)
+    end
 end
 
 function EpubHelper.isEpub(path)
     return type(path) == "string" and path:lower():sub(-5) == ".epub"
+end
+
+function EpubHelper.volumeIndexForOrder(toc_order, volume_size)
+    local vsz = (type(volume_size) == "number" and volume_size > 0)
+        and math.floor(volume_size) or EpubHelper.CHAPTERS_PER_VOLUME
+    local ord = (type(toc_order) == "number" and toc_order >= 1)
+        and math.floor(toc_order) or 1
+    return math.floor((ord - 1) / vsz) + 1
+end
+
+function EpubHelper.isLegacyOversizedEpub(epub_path)
+    if not EpubHelper.isEpub(epub_path) then
+        return false, nil
+    end
+    local manifest = EpubHelper.readManifest(epub_path)
+    if type(manifest) ~= "table" or type(manifest.chapters) ~= "table" then
+        return false, nil
+    end
+    local vol_idx = tonumber(manifest.volumeIndex) or 0
+    if vol_idx == 0 and #manifest.chapters > EpubHelper.CHAPTERS_PER_VOLUME then
+        return true, manifest
+    end
+    return false, manifest
 end
 
 -- Locate and decode META-INF/tsundoku.json via the ZIP End-of-Central-Directory
@@ -244,6 +283,265 @@ function EpubHelper.chapterAtDocFragmentIndex(manifest, idx)
         return nil
     end
     return manifest.chapters[idx]
+end
+
+local function normalizeBookIndex(dir, raw_idx)
+    if type(raw_idx) ~= "table" or type(raw_idx.volumes) ~= "table" then
+        return nil
+    end
+    local volumes = {}
+    local flat_chapters = {}
+    local chapter_by_key = {}
+    local global_idx = 0
+
+    for vi, v in ipairs(raw_idx.volumes) do
+        if type(v) == "table" and type(v.file) == "string" and v.file ~= "" and type(v.chapters) == "table" then
+            local v_path = normalizePath(dir .. "/" .. v.file)
+            local v_idx = tonumber(v.volumeIndex) or vi
+            local v_start = tonumber(v.volumeStart) or 0
+            local v_end = tonumber(v.volumeEnd) or 0
+            local v_chapters = {}
+            local first_global = global_idx + 1
+            for ci, ch in ipairs(v.chapters) do
+                if type(ch) == "table" and type(ch.key) == "string" and ch.key ~= "" then
+                    global_idx = global_idx + 1
+                    local frag_idx = tonumber(ch.fragIndex) or ci
+                    local entry = {
+                        key = ch.key,
+                        title = (type(ch.title) == "string" and ch.title ~= "") and ch.title or ch.key,
+                        tocOrder = tonumber(ch.tocOrder) or 0,
+                        volumeIndex = v_idx,
+                        volumeStart = v_start,
+                        volumeEnd = v_end,
+                        epubPath = v_path,
+                        fragIndex = frag_idx,
+                        globalIndex = global_idx,
+                    }
+                    table.insert(v_chapters, entry)
+                    table.insert(flat_chapters, entry)
+                    if not chapter_by_key[ch.key] then
+                        chapter_by_key[ch.key] = entry
+                    end
+                end
+            end
+            if #v_chapters > 0 then
+                table.insert(volumes, {
+                    volumeIndex = v_idx,
+                    volumeStart = v_start,
+                    volumeEnd = v_end,
+                    file = v.file,
+                    path = v_path,
+                    firstGlobalIndex = first_global,
+                    chapters = v_chapters,
+                })
+            end
+        end
+    end
+
+    if #volumes == 0 or #flat_chapters == 0 then
+        return nil
+    end
+
+    return {
+        sourceKey = type(raw_idx.sourceKey) == "string" and raw_idx.sourceKey or "",
+        mangaKey = type(raw_idx.mangaKey) == "string" and raw_idx.mangaKey or "",
+        title = type(raw_idx.title) == "string" and raw_idx.title or "",
+        volumeSize = tonumber(raw_idx.volumeSize) or EpubHelper.CHAPTERS_PER_VOLUME,
+        volumes = volumes,
+        chapters = flat_chapters,
+        chapter_by_key = chapter_by_key,
+    }
+end
+
+local function bookManifestMatchesIdentity(m, cur_manifest)
+    if not cur_manifest then
+        return true
+    end
+    local sk = type(cur_manifest.sourceKey) == "string" and cur_manifest.sourceKey or ""
+    local mk = type(cur_manifest.mangaKey) == "string" and cur_manifest.mangaKey or ""
+    if sk ~= "" and mk ~= "" then
+        return m.sourceKey == sk and m.mangaKey == mk
+    end
+    local title = type(cur_manifest.title) == "string" and cur_manifest.title or ""
+    if title ~= "" then
+        return m.title == title
+    end
+    return true
+end
+
+-- Reads <bookDir>/.tsundoku_book.json (with mtime/size/directory cache) and
+-- falls back to scanning sibling EPUB manifests if the sidecar is missing or stale.
+function EpubHelper.readBookIndex(epub_path, _downloads_engine)
+    if not EpubHelper.isEpub(epub_path) or not ok_lfs or not lfs then
+        return nil
+    end
+    local norm = normalizePath(epub_path)
+    local dir = norm:match("^(.*)/[^/]+$")
+    if not dir or dir == "" or lfs.attributes(dir, "mode") ~= "directory" then
+        return nil
+    end
+
+    local epub_files = {}
+    local epub_count = 0
+    local ok_dir, iter, dir_obj = pcall(lfs.dir, dir)
+    if not ok_dir or not iter then
+        return nil
+    end
+    for fname in iter, dir_obj do
+        if fname ~= "." and fname ~= ".." and fname:sub(1, 1) ~= "." and EpubHelper.isEpub(fname) then
+            epub_files[fname] = true
+            epub_count = epub_count + 1
+        end
+    end
+    if epub_count == 0 then
+        return nil
+    end
+
+    local idx_path = dir .. "/" .. EpubHelper.BOOK_INDEX_FILE
+    local idx_attr = lfs.attributes(idx_path)
+    local cached = _book_index_cache[dir]
+    if cached and cached.epub_count == epub_count then
+        if (idx_attr and idx_attr.mode == "file"
+            and cached.mtime == idx_attr.modification and cached.size == idx_attr.size)
+            or (not idx_attr and not cached.mtime)
+        then
+            local all_present = true
+            for _vi, v in ipairs(cached.book.volumes) do
+                if not epub_files[v.file] then
+                    all_present = false
+                    break
+                end
+            end
+            if all_present then
+                return cached.book
+            end
+        end
+    end
+
+    if idx_attr and idx_attr.mode == "file" then
+        local f = io.open(idx_path, "rb")
+        if f then
+            local raw = f:read("*a")
+            f:close()
+            local ok_dec, decoded = pcall(json.decode, raw)
+            if ok_dec and type(decoded) == "table" and type(decoded.volumes) == "table"
+                and #decoded.volumes == epub_count
+            then
+                local all_present = true
+                for _vi, v in ipairs(decoded.volumes) do
+                    if type(v) ~= "table" or type(v.file) ~= "string" or not epub_files[v.file] then
+                        all_present = false
+                        break
+                    end
+                end
+                if all_present then
+                    local book = normalizeBookIndex(dir, decoded)
+                    if book then
+                        cachePut(_book_index_cache, _book_index_order, dir, {
+                            mtime = idx_attr.modification,
+                            size = idx_attr.size,
+                            epub_count = epub_count,
+                            book = book,
+                        })
+                        return book
+                    end
+                end
+            end
+        end
+    end
+
+    -- Self-healing fallback: scan sibling EPUB manifests in dir.
+    local cur_manifest = EpubHelper.readManifest(norm)
+    local scanned_vols = {}
+    local raw_meta = {
+        sourceKey = cur_manifest and cur_manifest.sourceKey or "",
+        mangaKey = cur_manifest and cur_manifest.mangaKey or "",
+        title = cur_manifest and cur_manifest.title or "",
+        volumeSize = (cur_manifest and tonumber(cur_manifest.volumeSize)) or EpubHelper.CHAPTERS_PER_VOLUME,
+        volumes = scanned_vols,
+    }
+
+    for fname in pairs(epub_files) do
+        local m = EpubHelper.readManifest(dir .. "/" .. fname)
+        if type(m) == "table" and type(m.chapters) == "table" and #m.chapters > 0
+            and bookManifestMatchesIdentity(m, cur_manifest)
+        then
+            if raw_meta.sourceKey == "" and type(m.sourceKey) == "string" then
+                raw_meta.sourceKey = m.sourceKey
+            end
+            if raw_meta.mangaKey == "" and type(m.mangaKey) == "string" then
+                raw_meta.mangaKey = m.mangaKey
+            end
+            if raw_meta.title == "" and type(m.title) == "string" then
+                raw_meta.title = m.title
+            end
+            if tonumber(m.volumeSize) and tonumber(m.volumeSize) > 0 then
+                raw_meta.volumeSize = tonumber(m.volumeSize)
+            end
+
+            local v_idx = tonumber(m.volumeIndex) or 0
+            local v_size = tonumber(m.volumeSize) or raw_meta.volumeSize or EpubHelper.CHAPTERS_PER_VOLUME
+            local v_start = tonumber(m.volumeStart) or 0
+            local v_end = tonumber(m.volumeEnd) or 0
+            if v_idx > 0 and (v_start <= 0 or v_end < v_start) then
+                v_start = (v_idx - 1) * v_size + 1
+                v_end = v_idx * v_size
+            end
+
+            local chs = {}
+            for ci, ch in ipairs(m.chapters) do
+                if type(ch) == "table" and type(ch.key) == "string" and ch.key ~= "" then
+                    table.insert(chs, {
+                        key = ch.key,
+                        title = ch.title,
+                        tocOrder = tonumber(ch.tocOrder) or 0,
+                        fragIndex = ci,
+                    })
+                end
+            end
+            if #chs > 0 then
+                table.insert(scanned_vols, {
+                    volumeIndex = v_idx,
+                    volumeStart = v_start,
+                    volumeEnd = v_end,
+                    file = fname,
+                    chapters = chs,
+                })
+            end
+        end
+    end
+
+    if #scanned_vols == 0 then
+        return nil
+    end
+
+    table.sort(scanned_vols, function(a, b)
+        local az = (a.volumeIndex == 0)
+        local bz = (b.volumeIndex == 0)
+        if az ~= bz then
+            return not az
+        end
+        local ao = a.chapters[1] and a.chapters[1].tocOrder or 0
+        local bo = b.chapters[1] and b.chapters[1].tocOrder or 0
+        if ao > 0 and bo > 0 and ao ~= bo then
+            return ao < bo
+        end
+        if a.volumeIndex ~= b.volumeIndex then
+            return a.volumeIndex < b.volumeIndex
+        end
+        return a.file < b.file
+    end)
+
+    local book = normalizeBookIndex(dir, raw_meta)
+    if book then
+        cachePut(_book_index_cache, _book_index_order, dir, {
+            mtime = nil,
+            size = nil,
+            epub_count = epub_count,
+            book = book,
+        })
+    end
+    return book
 end
 
 function EpubHelper.parseDocFragmentIndex(xpointer)
@@ -555,6 +853,59 @@ function EpubHelper.syncReadChapters(epub_path, store, source_key, manga_key, op
     return #to_mark
 end
 
+local TYPOGRAPHY_EXACT_KEYS = {
+    "font_face",
+    "font_family_fonts",
+    "css",
+    "cre_dom_version",
+    "floating_punctuation",
+    "hyphenation",
+    "hyph_force_algorithmic",
+    "hyph_soft_hyphens_only",
+    "hyph_trust_soft_hyphens",
+    "text_lang",
+    "text_lang_embedded_langs",
+    "partial_rerendering",
+}
+
+local function cloneSettingValue(v)
+    if type(v) ~= "table" then
+        return v
+    end
+    local copy = {}
+    for k, sv in pairs(v) do
+        copy[k] = cloneSettingValue(sv)
+    end
+    return copy
+end
+
+-- Copies typography/layout preferences from an already-configured volume's
+-- DocSettings onto a brand-new volume's DocSettings so jumping across volumes
+-- keeps the reader's font, margins, spacing, and CSS consistent.
+function EpubHelper.copyTypographySettings(src_ds, dst_ds)
+    if type(src_ds) ~= "table" or type(dst_ds) ~= "table" or type(src_ds.data) ~= "table" then
+        return false
+    end
+    if dst_ds:readSetting("doc_pages") ~= nil or dst_ds:readSetting("font_face") ~= nil then
+        return false
+    end
+    local copied = false
+    for _idx, key in ipairs(TYPOGRAPHY_EXACT_KEYS) do
+        local v = src_ds.data[key]
+        if v ~= nil then
+            dst_ds:saveSetting(key, cloneSettingValue(v))
+            copied = true
+        end
+    end
+    for k, v in pairs(src_ds.data) do
+        if type(k) == "string" and k:sub(1, 5) == "copt_" and v ~= nil then
+            dst_ds:saveSetting(k, cloneSettingValue(v))
+            copied = true
+        end
+    end
+    return copied
+end
+
 -- Resolves the XPointer for chapter_key and persists last_xpointer in DocSettings
 -- before opening the EPUB. With opts.preserve_if_matching, keeps an existing
 -- XPointer already inside the target DocFragment so Continue restores exact scroll.
@@ -563,11 +914,14 @@ function EpubHelper.prepareJumpToChapter(epub_path, chapter_key, opts)
     if not EpubHelper.isEpub(epub_path) or type(chapter_key) ~= "string" or chapter_key == "" then
         return nil
     end
-    local manifest = EpubHelper.readManifest(epub_path)
-    if not manifest then
-        return nil
+    local target_idx = tonumber(opts.frag_index)
+    if not target_idx or target_idx < 1 then
+        local manifest = EpubHelper.readManifest(epub_path)
+        if not manifest then
+            return nil
+        end
+        target_idx = EpubHelper.chapterDocFragmentIndex(manifest, chapter_key)
     end
-    local target_idx = EpubHelper.chapterDocFragmentIndex(manifest, chapter_key)
     if not target_idx then
         return nil
     end
@@ -584,6 +938,9 @@ function EpubHelper.prepareJumpToChapter(epub_path, chapter_key, opts)
     if ok_ds and DocSettings and DocSettings.open then
         local ok_open, ds = pcall(DocSettings.open, DocSettings, epub_path)
         if ok_open and ds then
+            if opts.sync_typography_from then
+                EpubHelper.copyTypographySettings(opts.sync_typography_from, ds)
+            end
             if ds:readSetting("cre_dom_version") == nil then
                 local ok_cre, cre_doc = pcall(require, "document/credocument")
                 if ok_cre and cre_doc and type(cre_doc.engineInit) == "function" then

@@ -1337,7 +1337,7 @@ function LibraryBrowser:batchDownloadEntry(entry)
             for _idx, c in ipairs(ordered) do
                 if not dl_map[c.Key] and not (alt_map and alt_map[c.Key]) then
                     local clabel = Prefetch.chapterLabel(c)
-                    local out_path = epub_path ~= "" and epub_path
+                    local out_path = is_novel and (self.downloads_dir .. "/book.epub")
                         or (self.downloads_dir .. "/" .. util.getSafeFilename(clabel .. ".cbz", self.downloads_dir))
                     table.insert(specs, {
                         source_key = source_key,

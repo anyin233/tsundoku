@@ -973,6 +973,12 @@ local function makeOpenWrapper(orig_open_fn)
         elseif series then
             fp = series.active_fp or fp
         end
+        if EpubHelper.isEpub(fp) and EpubHelper.isLegacyOversizedEpub(fp) then
+            local host = SimpleUIBridge.getHost()
+            if host and host.splitLegacyEpubIfNeeded then
+                fp = host:splitLegacyEpubIfNeeded(fp)
+            end
+        end
         if orig_open_fn then
             return orig_open_fn(fp, pos0, page)
         end

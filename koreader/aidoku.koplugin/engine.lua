@@ -546,6 +546,32 @@ function Engine:epubRemove(opts)
     return decoded
 end
 
+-- Splits a legacy single-book EPUB into fixed 50-chapter volumes via Go.
+function Engine:epubSplit(opts)
+    local payload_path, err = writeJSONPayload({
+        epubPath = opts.epub_path or "",
+        downloadsDir = opts.downloads_dir or "",
+        sourceKey = opts.source_key or "",
+        mangaKey = opts.manga_key or "",
+        canonicalKeys = type(opts.canonical_keys) == "table" and opts.canonical_keys or nil,
+        volumeSize = tonumber(opts.volume_size) or 0,
+    })
+    if not payload_path then
+        return nil, err
+    end
+    local out, exec_err = self.runner:exec({ "-", "epub-split", payload_path }, nil, nil, true)
+    os.remove(payload_path)
+    if not out then
+        return nil, exec_err
+    end
+    invalidateDownloadsCache(opts.downloads_dir)
+    local ok_dec, decoded = pcall(json.decode, out)
+    if not ok_dec or type(decoded) ~= "table" then
+        return nil, _("Could not decode epub-split result")
+    end
+    return decoded
+end
+
 -- spawnCovers starts a non-blocking background cover batch subprocess for
 -- CoverCache and returns its pollable handle.
 function Engine:spawnCovers(payload)

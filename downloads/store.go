@@ -532,6 +532,79 @@ func (s *Store) BookEPUBPath(sourceKey, mangaKey string) (string, error) {
 	return path, nil
 }
 
+// BookEPUBPaths returns every distinct .epub path recorded for (sourceKey, mangaKey),
+// ordered most recently downloaded first.
+func (s *Store) BookEPUBPaths(sourceKey, mangaKey string) ([]string, error) {
+	rows, err := s.db.Query(
+		`SELECT path FROM downloads WHERE source_key=? AND manga_key=? AND LOWER(path) LIKE '%.epub' GROUP BY path ORDER BY MAX(downloaded_at) DESC`,
+		sourceKey, mangaKey,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("downloads: querying book epub paths: %w", err)
+	}
+	defer rows.Close()
+	var paths []string
+	for rows.Next() {
+		var p string
+		if err := rows.Scan(&p); err != nil {
+			return nil, fmt.Errorf("downloads: scanning book epub path: %w", err)
+		}
+		if p != "" {
+			paths = append(paths, p)
+		}
+	}
+	return paths, rows.Err()
+}
+
+// MigrateSplitBook atomically repoints chapter rows from legacyPath (or matching
+// (sourceKey, mangaKey)) to each split volume's path and size_bytes.
+func (s *Store) MigrateSplitBook(sourceKey, mangaKey, legacyPath string, volumes []epub.SplitVolumeResult) error {
+	if len(volumes) == 0 {
+		return nil
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("downloads: beginning split migration tx: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck
+
+	for _, vol := range volumes {
+		if vol.Path == "" || len(vol.ChapterKeys) == 0 {
+			continue
+		}
+		info, err := os.Stat(vol.Path)
+		if err != nil {
+			return fmt.Errorf("downloads: stat split volume %s: %w", vol.Path, err)
+		}
+		sz := info.Size()
+		for _, ck := range vol.ChapterKeys {
+			if ck == "" {
+				continue
+			}
+			if legacyPath != "" {
+				if _, err := tx.Exec(
+					`UPDATE downloads SET path = ?, size_bytes = ? WHERE (path = ? OR (source_key = ? AND manga_key = ?)) AND chapter_key = ?`,
+					vol.Path, sz, legacyPath, sourceKey, mangaKey, ck,
+				); err != nil {
+					return fmt.Errorf("downloads: migrating chapter %s to %s: %w", ck, vol.Path, err)
+				}
+			} else {
+				if _, err := tx.Exec(
+					`UPDATE downloads SET path = ?, size_bytes = ? WHERE source_key = ? AND manga_key = ? AND chapter_key = ?`,
+					vol.Path, sz, sourceKey, mangaKey, ck,
+				); err != nil {
+					return fmt.Errorf("downloads: migrating chapter %s to %s: %w", ck, vol.Path, err)
+				}
+			}
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("downloads: committing split migration: %w", err)
+	}
+	return nil
+}
+
 // nullFloat32 converts a nullable REAL column scan into the *float32
 // pointer-means-absent representation Entry uses (matching models.Chapter).
 func nullFloat32(n sql.NullFloat64) *float32 {
@@ -621,6 +694,7 @@ func (s *Store) Remove(sourceKey, mangaKey, chapterKey string) error {
 				}
 			}
 		}
+		_, _ = epub.SyncBookIndex(filepath.Dir(path))
 		return nil
 	}
 

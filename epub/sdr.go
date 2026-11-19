@@ -26,9 +26,111 @@ func removeAdjacentSDR(epubPath string) error {
 }
 
 var (
-	xpRegex     = regexp.MustCompile(`^/body/DocFragment(?:\[(\d+)\])?(/.*)?$`)
-	xpFindRegex = regexp.MustCompile(`/body/DocFragment(?:\[\d+\])?(?:/[^"'\r\n]*)?`)
+	xpRegex       = regexp.MustCompile(`^/body/DocFragment(?:\[(\d+)\])?(/.*)?$`)
+	xpFindRegex   = regexp.MustCompile(`/body/DocFragment(?:\[\d+\])?(?:/[^"'\r\n]*)?`)
+	lastXPRegex   = regexp.MustCompile(`\["last_xpointer"\]\s*=\s*"([^"\r\n]*)"`)
+	staleSDRLine  = regexp.MustCompile(`(?m)^[ \t]*\["(?:doc_pages|doc_path|partial_md5_checksum|percent_finished|readingloc_anchor)"\]\s*=[^\r\n]*\r?\n?`)
 )
+
+func writeAtomicFile(path, pattern string, data []byte) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(dir, pattern)
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		os.Remove(tmpPath)
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		os.Remove(tmpPath)
+		return err
+	}
+	_ = tmp.Chmod(0o644)
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpPath)
+		return err
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		os.Remove(tmpPath)
+		return err
+	}
+	_ = fsutil.SyncDir(dir)
+	return nil
+}
+
+func writeFileAtomic(path string, data []byte) error {
+	return writeAtomicFile(path, ".metadata-*.tmp", data)
+}
+
+// extractLastXPointer reads last_xpointer and its 1-based DocFragment index
+// from a KOReader metadata.epub.lua payload, returning ("", 0) when absent.
+func extractLastXPointer(data []byte) (string, int) {
+	m := lastXPRegex.FindSubmatch(data)
+	if len(m) < 2 {
+		return "", 0
+	}
+	xp := string(m[1])
+	parts := xpRegex.FindStringSubmatch(xp)
+	if parts == nil {
+		return xp, 0
+	}
+	if parts[1] == "" {
+		return xp, 1
+	}
+	idx, err := strconv.Atoi(parts[1])
+	if err != nil || idx < 1 {
+		return xp, 0
+	}
+	return xp, idx
+}
+
+func remapXPointerInSubset(xp string, oldKeys []string, targetIndex map[string]int) string {
+	m := xpRegex.FindStringSubmatch(xp)
+	if m == nil || len(oldKeys) == 0 {
+		return xp
+	}
+	oldIdx := 1
+	if m[1] != "" {
+		parsed, err := strconv.Atoi(m[1])
+		if err != nil {
+			return xp
+		}
+		oldIdx = parsed
+	}
+	if oldIdx < 1 || oldIdx > len(oldKeys) {
+		return xp
+	}
+	if newIdx, ok := targetIndex[oldKeys[oldIdx-1]]; ok {
+		return fmt.Sprintf("/body/DocFragment[%d]%s", newIdx, m[2])
+	}
+	return xp
+}
+
+// migrateVolumeSDR copies a legacy book's metadata.epub.lua into volEPUBPath's
+// adjacent .sdr directory, remapping XPointers belonging to volKeys and
+// stripping stale file-specific layout/hash fields so KOReader recomputes them.
+func migrateVolumeSDR(legacyData []byte, volEPUBPath string, legacyKeys, volKeys []string) error {
+	if len(legacyData) == 0 || len(volKeys) == 0 {
+		return nil
+	}
+	targetIndex := make(map[string]int, len(volKeys))
+	for i, k := range volKeys {
+		targetIndex[k] = i + 1
+	}
+	cleaned := staleSDRLine.ReplaceAll(legacyData, nil)
+	updated := xpFindRegex.ReplaceAllFunc(cleaned, func(match []byte) []byte {
+		return []byte(remapXPointerInSubset(string(match), legacyKeys, targetIndex))
+	})
+	metaPath := filepath.Join(sidecarDir(volEPUBPath), "metadata.epub.lua")
+	return writeFileAtomic(metaPath, updated)
+}
 
 // RemapXPointerString adjusts a KOReader crengine XPointer from oldKeys'
 // 1-based DocFragment indices to newKeys' indices so reading positions,
@@ -96,31 +198,8 @@ func RemapAdjacentSDR(epubPath string, oldKeys, newKeys []string) (bool, error) 
 		return false, nil
 	}
 
-	dir := filepath.Dir(metaPath)
-	tmp, err := os.CreateTemp(dir, ".metadata-*.tmp")
-	if err != nil {
+	if err := writeFileAtomic(metaPath, updated); err != nil {
 		return false, err
 	}
-	tmpPath := tmp.Name()
-	if _, err := tmp.Write(updated); err != nil {
-		tmp.Close()
-		os.Remove(tmpPath)
-		return false, err
-	}
-	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		os.Remove(tmpPath)
-		return false, err
-	}
-	_ = tmp.Chmod(0o644)
-	if err := tmp.Close(); err != nil {
-		os.Remove(tmpPath)
-		return false, err
-	}
-	if err := os.Rename(tmpPath, metaPath); err != nil {
-		os.Remove(tmpPath)
-		return false, err
-	}
-	_ = fsutil.SyncDir(dir)
 	return true, nil
 }

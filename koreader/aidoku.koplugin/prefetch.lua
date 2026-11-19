@@ -104,7 +104,7 @@ function Prefetch.ahead(ctx, chapters, chapter_key, on_downloaded, on_complete)
                     manga = ctx.manga,
                     chapters = to_fetch,
                     canonical_keys = canonical_keys,
-                    out_path = existing_epub ~= "" and existing_epub or nil,
+                    out_path = nil,
                     downloads_dir = ctx.downloads_dir,
                     manga_dir_name = manga_dir_name,
                     silent = true,
@@ -112,16 +112,19 @@ function Prefetch.ahead(ctx, chapters, chapter_key, on_downloaded, on_complete)
                 if path then
                     any_new = true
                     new_paths[path] = true
+                    local updated_map = ctx.downloads_engine:downloadedPathsMap(ctx.source_key, ctx.manga.Key, Prefetch.mangaLabel(ctx.manga))
                     if EpubHelper.isEpub(path) then
-                        EpubHelper.invalidateCache(path)
+                        EpubHelper.invalidateCache()
                         if old_keys and #old_keys > 0 and not EpubHelper.usesAdjacentSidecar(path) then
                             local new_keys = EpubHelper.manifestKeys(EpubHelper.readManifest(path))
                             EpubHelper.remapDocSettings(path, old_keys, new_keys)
                         end
                     end
-                    if on_downloaded then
-                        for _j, c in ipairs(to_fetch) do
-                            on_downloaded(c, path)
+                    for _j, c in ipairs(to_fetch) do
+                        local ch_path = (updated_map and updated_map[c.Key]) or path
+                        new_paths[ch_path] = true
+                        if on_downloaded then
+                            on_downloaded(c, ch_path)
                         end
                     end
                 end

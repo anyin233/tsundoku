@@ -66,8 +66,9 @@ commands:
   download-payload <payload.json>   download one chapter from a JSON payload carrying pre-fetched
                                      manga + chapter metadata (avoids a GetMangaUpdate round-trip)
   download-batch <payload.json>     download a batch of chapters on one WASM runtime (appends text
-                                     chapters into a single-book EPUB, or writes CBZs for manga)
+                                     chapters into 50-chapter volume EPUBs, or writes CBZs for manga)
   epub-remove <payload.json>        remove chapter(s) from a single-book EPUB and repack atomically
+  epub-split <payload.json>         split a legacy single-file EPUB into 50-chapter volume EPUBs
   info                              print source metadata and detected features (default)
   search <query> [page] [filters.json]
                                      call get_search_manga_list; filters.json, if given, is a JSON array
@@ -139,7 +140,7 @@ const (
 func run(dir, command string, args []string) (err error) {
 	timeout := defaultCommandTimeout
 	switch command {
-	case "download", "redownload", "download-payload", "download-batch", "epub-remove", "update":
+	case "download", "redownload", "download-payload", "download-batch", "epub-remove", "epub-split", "update":
 		timeout = longCommandTimeout
 	case "koobone":
 		if len(args) > 0 && args[0] == "download-payload" {
@@ -205,6 +206,9 @@ func run(dir, command string, args []string) (err error) {
 	}
 	if command == "epub-remove" {
 		return handleEpubRemove(ctx, args)
+	}
+	if command == "epub-split" {
+		return handleEpubSplit(ctx, args)
 	}
 
 	// Only use an on-disk wazero compilation cache on AOT compiler platforms
@@ -585,6 +589,15 @@ type epubRemovePayload struct {
 	ChapterKeys  []string `json:"chapterKeys"`
 }
 
+type epubSplitPayload struct {
+	EPUBPath      string   `json:"epubPath"`
+	DownloadsDir  string   `json:"downloadsDir"`
+	SourceKey     string   `json:"sourceKey"`
+	MangaKey      string   `json:"mangaKey"`
+	CanonicalKeys []string `json:"canonicalKeys"`
+	VolumeSize    int      `json:"volumeSize"`
+}
+
 func chapterEpoch(c models.Chapter) *int64 {
 	if c.DateUploaded == nil {
 		return nil
@@ -635,12 +648,66 @@ func handleEpubRemove(ctx context.Context, args []string) error {
 			return err
 		}
 	}
+	_, _ = epub.SyncBookIndex(filepath.Dir(p.EPUBPath))
 	return printJSON(map[string]any{
 		"ok":          true,
 		"remaining":   res.TotalChapters,
 		"oldKeys":     res.OldKeys,
 		"newKeys":     res.NewKeys,
 		"sdrRemapped": res.SDRRemapped,
+	})
+}
+
+func handleEpubSplit(ctx context.Context, args []string) error {
+	if len(args) < 1 {
+		return fmt.Errorf("usage: epub-split <payload.json>")
+	}
+	data, err := os.ReadFile(args[0])
+	if err != nil {
+		return fmt.Errorf("reading epub-split payload: %w", err)
+	}
+	var p epubSplitPayload
+	if err := json.Unmarshal(data, &p); err != nil {
+		return fmt.Errorf("parsing epub-split payload: %w", err)
+	}
+	if p.EPUBPath == "" {
+		return fmt.Errorf("epub-split requires epubPath")
+	}
+	if p.SourceKey != "" && p.MangaKey != "" {
+		bookLock, err := downloads.AcquireBookLock(ctx, p.SourceKey, p.MangaKey)
+		if err != nil {
+			return fmt.Errorf("acquiring book lock: %w", err)
+		}
+		defer bookLock.Release()
+	}
+	pathLock, err := downloads.AcquirePathLock(ctx, p.EPUBPath)
+	if err != nil {
+		return fmt.Errorf("acquiring epub path lock: %w", err)
+	}
+	defer pathLock.Release()
+
+	res, err := epub.SplitToVolumes(p.EPUBPath, p.VolumeSize, p.CanonicalKeys)
+	if err != nil {
+		return err
+	}
+	if p.DownloadsDir != "" && !res.AlreadySharded && len(res.Volumes) > 0 {
+		store, err := downloads.Open(p.DownloadsDir)
+		if err != nil {
+			return fmt.Errorf("opening downloads index: %w", err)
+		}
+		defer store.Close()
+		if err := store.MigrateSplitBook(p.SourceKey, p.MangaKey, p.EPUBPath, res.Volumes); err != nil {
+			return err
+		}
+	}
+	return printJSON(map[string]any{
+		"ok":             true,
+		"legacyPath":     res.LegacyPath,
+		"alreadySharded": res.AlreadySharded,
+		"activePath":     res.ActivePath,
+		"activeChapter":  res.ActiveChapter,
+		"volumes":        res.Volumes,
+		"totalChapters":  res.TotalChapters,
 	})
 }
 
@@ -702,8 +769,90 @@ func canonicalOrderMap(keys []string) map[string]int {
 	return m
 }
 
+func maybeMigrateLegacyBookEPUBs(store *downloads.Store, srcKey, mangaKey, outputPath string, canonicalKeys []string) error {
+	seen := make(map[string]bool)
+	var candidates []string
+	if store != nil {
+		paths, err := store.BookEPUBPaths(srcKey, mangaKey)
+		if err == nil {
+			for _, p := range paths {
+				clean := filepath.Clean(p)
+				if !seen[clean] {
+					seen[clean] = true
+					candidates = append(candidates, p)
+				}
+			}
+		}
+	}
+	if outputPath != "" && strings.EqualFold(filepath.Ext(outputPath), ".epub") {
+		clean := filepath.Clean(outputPath)
+		if !seen[clean] {
+			seen[clean] = true
+			candidates = append(candidates, outputPath)
+		}
+	}
+	for _, p := range candidates {
+		st, err := os.Stat(p)
+		if err != nil || st.IsDir() || st.Size() == 0 {
+			continue
+		}
+		m, err := epub.ReadManifest(p)
+		if err != nil || m == nil || m.VolumeIndex > 0 {
+			continue
+		}
+		if m.SourceKey != "" && srcKey != "" && m.SourceKey != srcKey {
+			continue
+		}
+		res, err := epub.SplitToVolumes(p, epub.DefaultChaptersPerVolume, canonicalKeys)
+		if err != nil {
+			return err
+		}
+		if store != nil && !res.AlreadySharded && len(res.Volumes) > 0 {
+			if err := store.MigrateSplitBook(srcKey, mangaKey, p, res.Volumes); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func resolveChapterVolumeOrder(ch models.Chapter, orderMap map[string]int, store *downloads.Store, srcKey, mangaKey string, volumeSize int) (tocOrder, volIdx, volStart, volEnd int) {
+	if volumeSize <= 0 {
+		volumeSize = epub.DefaultChaptersPerVolume
+	}
+	pos := orderMap[ch.Key]
+	if pos <= 0 && store != nil {
+		if curPath, err := store.Path(srcKey, mangaKey, ch.Key); err == nil && curPath != "" {
+			if m, merr := epub.ReadManifest(curPath); merr == nil && m != nil && m.VolumeIndex > 0 {
+				vSize := m.VolumeSize
+				if vSize <= 0 {
+					vSize = volumeSize
+				}
+				_, vs, ve := epub.VolumeForOrder((m.VolumeIndex-1)*vSize+1, vSize)
+				if m.VolumeStart > 0 && m.VolumeEnd >= m.VolumeStart {
+					vs, ve = m.VolumeStart, m.VolumeEnd
+				}
+				for _, mc := range m.Chapters {
+					if mc.Key == ch.Key && mc.TOCOrder > 0 {
+						return mc.TOCOrder, m.VolumeIndex, vs, ve
+					}
+				}
+				return 0, m.VolumeIndex, vs, ve
+			}
+		}
+	}
+	if pos <= 0 && ch.ChapterNumber != nil && *ch.ChapterNumber >= 1 {
+		pos = int(*ch.ChapterNumber)
+	}
+	if pos <= 0 {
+		pos = 1
+	}
+	volIdx, volStart, volEnd = epub.VolumeForOrder(pos, volumeSize)
+	return pos, volIdx, volStart, volEnd
+}
+
 // executeDownload runs the indexed (or bare) chapter download, emitting an
-// incremental single-book EPUB for text-page chapters or a CBZ archive for
+// incremental volume-sharded EPUB for text-page chapters or a CBZ archive for
 // image chapters.
 func executeDownload(ctx context.Context, src *source.Source, dir string, manga models.Manga, chapter models.Chapter, outputPath, downloadsDir, mangaDirName string, redownload, fallbackUpdate bool, canonicalKeys []string) error {
 	var lock *downloads.Lock
@@ -745,27 +894,26 @@ func executeDownload(ctx context.Context, src *source.Source, dir string, manga 
 	}
 
 	if source.IsTextPages(pages) {
-		baseOut := outputPath
-		if (baseOut == "" || !strings.EqualFold(filepath.Ext(baseOut), ".epub")) && store != nil {
-			if existingBook, berr := store.BookEPUBPath(src.Key, manga.Key); berr == nil && existingBook != "" {
-				if st, serr := os.Stat(existingBook); serr == nil && !st.IsDir() {
-					baseOut = existingBook
-				}
-			}
-		}
-		if baseOut == "" && downloadsDir != "" {
-			baseOut = filepath.Join(downloadsDir, "book.epub")
-		}
-		epubPath, err := source.ResolveBookEPUBPath(baseOut, mangaDirName, manga)
-		if err != nil {
-			return err
-		}
 		if downloadsDir != "" {
 			bookLock, err := downloads.AcquireBookLock(ctx, src.Key, manga.Key)
 			if err != nil {
 				return fmt.Errorf("acquiring book lock: %w", err)
 			}
 			defer bookLock.Release()
+		}
+		if err := maybeMigrateLegacyBookEPUBs(store, src.Key, manga.Key, outputPath, canonicalKeys); err != nil {
+			return err
+		}
+
+		baseOut := outputPath
+		if baseOut == "" && downloadsDir != "" {
+			baseOut = filepath.Join(downloadsDir, "book.epub")
+		}
+		orderMap := canonicalOrderMap(canonicalKeys)
+		tocOrder, volIdx, volStart, volEnd := resolveChapterVolumeOrder(chapter, orderMap, store, src.Key, manga.Key, epub.DefaultChaptersPerVolume)
+		epubPath, err := source.ResolveVolumeEPUBPath(baseOut, mangaDirName, manga, volIdx, epub.DefaultChaptersPerVolume)
+		if err != nil {
+			return err
 		}
 		pathLock, err := downloads.AcquirePathLock(ctx, epubPath)
 		if err != nil {
@@ -774,9 +922,13 @@ func executeDownload(ctx context.Context, src *source.Source, dir string, manga 
 		defer pathLock.Release()
 
 		epub.RemoveStaleTemps(filepath.Dir(epubPath), time.Hour)
-		orderMap := canonicalOrderMap(canonicalKeys)
-		chInput := source.BuildChapterInput(chapter, source.JoinTextPages(pages), orderMap[chapter.Key])
-		if _, err := epub.UpsertChapters(epubPath, buildBookMetaWithSource(src, manga), []epub.ChapterInput{chInput}, canonicalKeys); err != nil {
+		volMeta := buildBookMetaWithSource(src, manga)
+		volMeta.VolumeIndex = volIdx
+		volMeta.VolumeSize = epub.DefaultChaptersPerVolume
+		volMeta.VolumeStart = volStart
+		volMeta.VolumeEnd = volEnd
+		chInput := source.BuildChapterInput(chapter, source.JoinTextPages(pages), tocOrder)
+		if _, err := epub.UpsertChapters(epubPath, volMeta, []epub.ChapterInput{chInput}, canonicalKeys); err != nil {
 			return err
 		}
 		printDownloadProgress(1, 1)
@@ -793,6 +945,7 @@ func executeDownload(ctx context.Context, src *source.Source, dir string, manga 
 				return fmt.Errorf("recording download: %w", err)
 			}
 		}
+		_, _ = epub.SyncBookIndex(filepath.Dir(epubPath))
 		fmt.Println(epubPath)
 		return nil
 	}
@@ -845,6 +998,7 @@ func executeBatchDownload(ctx context.Context, src *source.Source, dir string, p
 	}
 	fetched := make([]fetchedChapter, 0, total)
 	var updatedManga *models.Manga
+	var batchErr error
 
 	for i, ch := range p.Chapters {
 		var pages []models.Page
@@ -872,7 +1026,8 @@ func executeBatchDownload(ctx context.Context, src *source.Source, dir string, p
 			}
 		}
 		if err != nil {
-			return fmt.Errorf("downloading chapter %d/%d (%s): %w", i+1, total, source.ChapterLabel(ch), err)
+			batchErr = fmt.Errorf("downloading chapter %d/%d (%s): %w", i+1, total, source.ChapterLabel(ch), err)
+			break
 		}
 		fetched = append(fetched, fetchedChapter{ch: ch, pages: pages})
 		if source.IsTextPages(pages) {
@@ -881,6 +1036,9 @@ func executeBatchDownload(ctx context.Context, src *source.Source, dir string, p
 	}
 
 	if len(fetched) == 0 {
+		if batchErr != nil {
+			return batchErr
+		}
 		return fmt.Errorf("no chapters fetched")
 	}
 
@@ -893,45 +1051,60 @@ func executeBatchDownload(ctx context.Context, src *source.Source, dir string, p
 				return fmt.Errorf("opening downloads index: %w", err)
 			}
 			defer store.Close()
-		}
-		baseOut := p.OutputPath
-		if (baseOut == "" || !strings.EqualFold(filepath.Ext(baseOut), ".epub")) && store != nil {
-			if existingBook, berr := store.BookEPUBPath(src.Key, manga.Key); berr == nil && existingBook != "" {
-				if st, serr := os.Stat(existingBook); serr == nil && !st.IsDir() {
-					baseOut = existingBook
-				}
-			}
-		}
-		if baseOut == "" && p.DownloadsDir != "" {
-			baseOut = filepath.Join(p.DownloadsDir, "book.epub")
-		}
-		epubPath, err := source.ResolveBookEPUBPath(baseOut, p.MangaDirName, manga)
-		if err != nil {
-			return err
-		}
-		if p.DownloadsDir != "" {
+
 			bookLock, err := downloads.AcquireBookLock(ctx, src.Key, manga.Key)
 			if err != nil {
 				return fmt.Errorf("acquiring book lock: %w", err)
 			}
 			defer bookLock.Release()
 		}
-		pathLock, err := downloads.AcquirePathLock(ctx, epubPath)
-		if err != nil {
-			return fmt.Errorf("acquiring output path lock: %w", err)
+		if err := maybeMigrateLegacyBookEPUBs(store, src.Key, manga.Key, p.OutputPath, canonicalKeys); err != nil {
+			return err
 		}
-		defer pathLock.Release()
 
-		epub.RemoveStaleTemps(filepath.Dir(epubPath), time.Hour)
+		baseOut := p.OutputPath
+		if baseOut == "" && p.DownloadsDir != "" {
+			baseOut = filepath.Join(p.DownloadsDir, "book.epub")
+		}
 		orderMap := canonicalOrderMap(canonicalKeys)
-		inputs := make([]epub.ChapterInput, 0, len(fetched))
-		recs := make([]downloads.BookChapterRecord, 0, len(fetched))
-		for _, item := range fetched {
+
+		type batchVolumeGroup struct {
+			volIdx   int
+			volStart int
+			volEnd   int
+			volPath  string
+			inputs   []epub.ChapterInput
+			recs     []downloads.BookChapterRecord
+		}
+		groupsByVol := make(map[int]*batchVolumeGroup)
+		var firstVolPath string
+		var bookDir string
+
+		for i, item := range fetched {
 			if !source.IsTextPages(item.pages) {
 				return fmt.Errorf("mixed text and image chapters in download-batch for %q", item.ch.Key)
 			}
-			inputs = append(inputs, source.BuildChapterInput(item.ch, source.JoinTextPages(item.pages), orderMap[item.ch.Key]))
-			recs = append(recs, downloads.BookChapterRecord{
+			tocOrder, volIdx, volStart, volEnd := resolveChapterVolumeOrder(item.ch, orderMap, store, src.Key, manga.Key, epub.DefaultChaptersPerVolume)
+			grp := groupsByVol[volIdx]
+			if grp == nil {
+				volPath, err := source.ResolveVolumeEPUBPath(baseOut, p.MangaDirName, manga, volIdx, epub.DefaultChaptersPerVolume)
+				if err != nil {
+					return err
+				}
+				grp = &batchVolumeGroup{
+					volIdx:   volIdx,
+					volStart: volStart,
+					volEnd:   volEnd,
+					volPath:  volPath,
+				}
+				groupsByVol[volIdx] = grp
+			}
+			if i == 0 {
+				firstVolPath = grp.volPath
+				bookDir = filepath.Dir(grp.volPath)
+			}
+			grp.inputs = append(grp.inputs, source.BuildChapterInput(item.ch, source.JoinTextPages(item.pages), tocOrder))
+			grp.recs = append(grp.recs, downloads.BookChapterRecord{
 				ChapterKey:    item.ch.Key,
 				ChapterTitle:  source.ChapterLabel(item.ch),
 				ChapterNumber: item.ch.ChapterNumber,
@@ -939,15 +1112,49 @@ func executeBatchDownload(ctx context.Context, src *source.Source, dir string, p
 				DateUploaded:  chapterEpoch(item.ch),
 			})
 		}
-		if _, err := epub.UpsertChapters(epubPath, buildBookMetaWithSource(src, manga), inputs, canonicalKeys); err != nil {
-			return err
+
+		volIDs := make([]int, 0, len(groupsByVol))
+		for volIdx := range groupsByVol {
+			volIDs = append(volIDs, volIdx)
 		}
-		if store != nil {
-			if _, err := store.RecordBookChapters(src.Key, dir, manga.Key, epubPath, source.MangaLabel(manga), recs, uint8(source.EffectiveViewer(manga))); err != nil {
-				return fmt.Errorf("recording batch download: %w", err)
+		sort.Ints(volIDs)
+
+		writeGroup := func(grp *batchVolumeGroup) error {
+			pathLock, err := downloads.AcquirePathLock(ctx, grp.volPath)
+			if err != nil {
+				return fmt.Errorf("acquiring output path lock: %w", err)
+			}
+			defer pathLock.Release()
+
+			epub.RemoveStaleTemps(filepath.Dir(grp.volPath), time.Hour)
+			volMeta := buildBookMetaWithSource(src, manga)
+			volMeta.VolumeIndex = grp.volIdx
+			volMeta.VolumeSize = epub.DefaultChaptersPerVolume
+			volMeta.VolumeStart = grp.volStart
+			volMeta.VolumeEnd = grp.volEnd
+			if _, err := epub.UpsertChapters(grp.volPath, volMeta, grp.inputs, canonicalKeys); err != nil {
+				return err
+			}
+			if store != nil {
+				if _, err := store.RecordBookChapters(src.Key, dir, manga.Key, grp.volPath, source.MangaLabel(manga), grp.recs, uint8(source.EffectiveViewer(manga))); err != nil {
+					return fmt.Errorf("recording batch download: %w", err)
+				}
+			}
+			return nil
+		}
+
+		for _, volIdx := range volIDs {
+			if err := writeGroup(groupsByVol[volIdx]); err != nil {
+				return err
 			}
 		}
-		fmt.Println(epubPath)
+		if bookDir != "" {
+			_, _ = epub.SyncBookIndex(bookDir)
+		}
+		if batchErr != nil {
+			return batchErr
+		}
+		fmt.Println(firstVolPath)
 		return nil
 	}
 
@@ -984,6 +1191,9 @@ func executeBatchDownload(ctx context.Context, src *source.Source, dir string, p
 			}
 		}
 		_ = i
+	}
+	if batchErr != nil {
+		return batchErr
 	}
 	fmt.Println(lastPath)
 	return nil

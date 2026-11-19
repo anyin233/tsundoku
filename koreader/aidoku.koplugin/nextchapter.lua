@@ -127,7 +127,10 @@ function NextChapter.handle(ctx, file_path)
 
         local function openOrReload(path, target_chapter_key)
             if EpubHelper.isEpub(path) then
-                local xp = EpubHelper.prepareJumpToChapter(path, target_chapter_key, { ui = ctx.ui })
+                local xp = EpubHelper.prepareJumpToChapter(path, target_chapter_key, {
+                    ui = ctx.ui,
+                    sync_typography_from = ctx.ui and ctx.ui.doc_settings or nil,
+                })
                 if DownloadsEngine.normalizePath(path) == DownloadsEngine.normalizePath(file_path)
                     and ctx.reload_callback
                 then
@@ -245,7 +248,6 @@ function NextChapter.handle(ctx, file_path)
                     if #to_fetch == 0 then
                         to_fetch = { next_chapter }
                     end
-                    local out_target = is_epub and file_path or nil
                     local old_keys = (is_epub and not EpubHelper.usesAdjacentSidecar(file_path))
                         and EpubHelper.manifestKeys(EpubHelper.readManifest(file_path))
                         or nil
@@ -254,7 +256,7 @@ function NextChapter.handle(ctx, file_path)
                         manga = updated,
                         chapters = to_fetch,
                         canonical_keys = canonical_keys,
-                        out_path = out_target,
+                        out_path = nil,
                         downloads_dir = ctx.downloads_dir,
                         manga_dir_name = manga_dir_name,
                         progress_text = T(_("Downloading %1 chapter(s)…"), #to_fetch),
@@ -263,17 +265,21 @@ function NextChapter.handle(ctx, file_path)
                         UIManager:show(InfoMessage:new{ text = T(_("Download failed:\n%1"), dl_err) })
                         return
                     end
-                    if EpubHelper.isEpub(path) then
-                        EpubHelper.invalidateCache(path)
-                        if old_keys and #old_keys > 0 and not EpubHelper.usesAdjacentSidecar(path) then
-                            local new_keys = EpubHelper.manifestKeys(EpubHelper.readManifest(path))
-                            EpubHelper.remapDocSettings(path, old_keys, new_keys)
+                    local target_path = ctx.downloads_engine:path(entry.sourceKey, entry.mangaKey, next_chapter.Key)
+                    if target_path == "" then
+                        target_path = path
+                    end
+                    if EpubHelper.isEpub(target_path) then
+                        EpubHelper.invalidateCache()
+                        if old_keys and #old_keys > 0 and not EpubHelper.usesAdjacentSidecar(target_path) then
+                            local new_keys = EpubHelper.manifestKeys(EpubHelper.readManifest(target_path))
+                            EpubHelper.remapDocSettings(target_path, old_keys, new_keys)
                         end
                     end
                     if not ctx.store:isEphemeralMode() then
-                        ctx.downloads_engine:prune(ctx.store:downloadLimitBytes(), path)
+                        ctx.downloads_engine:prune(ctx.store:downloadLimitBytes(), target_path)
                     end
-                    openOrReload(path, next_chapter.Key)
+                    openOrReload(target_path, next_chapter.Key)
                     return
                 end
 

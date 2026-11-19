@@ -33,13 +33,20 @@ import (
 )
 
 const (
+	// DefaultChaptersPerVolume is the fixed chapter cap per sharded EPUB
+	// volume so crengine cold-opens stay sub-second on e-ink hardware.
+	DefaultChaptersPerVolume = 50
+	// BookIndexFilename is the per-book directory index read by Tsundoku's
+	// full-book TOC hook to display chapters across all volumes at once.
+	BookIndexFilename = ".tsundoku_book.json"
+
 	manifestEntryPath = "META-INF/tsundoku.json"
 	containerPath     = "META-INF/container.xml"
 	opfEntryPath      = "OEBPS/content.opf"
 	ncxEntryPath      = "OEBPS/toc.ncx"
 	cssEntryPath      = "OEBPS/style.css"
 	tempPattern       = ".epub-*.tmp"
-	manifestVersion   = 1
+	manifestVersion   = 2
 )
 
 // BookMeta holds book-level metadata embedded in OPF, NCX, and tsundoku.json.
@@ -50,6 +57,10 @@ type BookMeta struct {
 	Authors     []string
 	Description string
 	Language    string
+	VolumeIndex int
+	VolumeSize  int
+	VolumeStart int
+	VolumeEnd   int
 }
 
 // ChapterInput supplies one chapter's content and ordering hints to UpsertChapters.
@@ -86,6 +97,10 @@ type BookManifest struct {
 	Authors     []string          `json:"authors,omitempty"`
 	Description string            `json:"description,omitempty"`
 	Language    string            `json:"language,omitempty"`
+	VolumeIndex int               `json:"volumeIndex,omitempty"`
+	VolumeSize  int               `json:"volumeSize,omitempty"`
+	VolumeStart int               `json:"volumeStart,omitempty"`
+	VolumeEnd   int               `json:"volumeEnd,omitempty"`
 	Chapters    []ManifestChapter `json:"chapters"`
 }
 
@@ -261,21 +276,7 @@ func UpsertChapters(epubPath string, meta BookMeta, incoming []ChapterInput, can
 		return nil, fmt.Errorf("epub: stat %s: %w", epubPath, err)
 	}
 
-	canonicalIdx := make(map[string]int, len(canonicalKeys))
-	for i, k := range canonicalKeys {
-		if k != "" {
-			if _, exists := canonicalIdx[k]; !exists {
-				canonicalIdx[k] = i + 1
-			}
-		}
-	}
-
-	type sortableChapter struct {
-		mc         ManifestChapter
-		isExisting bool
-		origOrder  int
-		payload    []byte
-	}
+	canonicalIdx := canonicalOrderIndexMap(canonicalKeys)
 
 	byKey := make(map[string]*sortableChapter)
 	var oldKeys []string
@@ -356,22 +357,7 @@ func UpsertChapters(epubPath string, meta BookMeta, incoming []ChapterInput, can
 		merged = append(merged, sc)
 	}
 
-	sort.SliceStable(merged, func(i, j int) bool {
-		a, b := merged[i], merged[j]
-		if a.mc.TOCOrder > 0 && b.mc.TOCOrder > 0 && a.mc.TOCOrder != b.mc.TOCOrder {
-			return a.mc.TOCOrder < b.mc.TOCOrder
-		}
-		if a.mc.VolumeNumber != nil && b.mc.VolumeNumber != nil && *a.mc.VolumeNumber != *b.mc.VolumeNumber {
-			return *a.mc.VolumeNumber < *b.mc.VolumeNumber
-		}
-		if a.mc.ChapterNumber != nil && b.mc.ChapterNumber != nil && *a.mc.ChapterNumber != *b.mc.ChapterNumber {
-			return *a.mc.ChapterNumber < *b.mc.ChapterNumber
-		}
-		if a.isExisting != b.isExisting {
-			return a.isExisting
-		}
-		return a.origOrder < b.origOrder
-	})
+	sortSortableChapters(merged)
 
 	finalMeta := mergeMeta(oldManifest, meta)
 	finalChapters := make([]ManifestChapter, len(merged))
@@ -517,6 +503,44 @@ func RemoveChapters(epubPath string, removeKeys []string) (*UpdateResult, error)
 	}, nil
 }
 
+type sortableChapter struct {
+	mc         ManifestChapter
+	isExisting bool
+	origOrder  int
+	payload    []byte
+}
+
+func canonicalOrderIndexMap(canonicalKeys []string) map[string]int {
+	m := make(map[string]int, len(canonicalKeys))
+	for i, k := range canonicalKeys {
+		if k != "" {
+			if _, exists := m[k]; !exists {
+				m[k] = i + 1
+			}
+		}
+	}
+	return m
+}
+
+func sortSortableChapters(items []*sortableChapter) {
+	sort.SliceStable(items, func(i, j int) bool {
+		a, b := items[i], items[j]
+		if a.mc.TOCOrder > 0 && b.mc.TOCOrder > 0 && a.mc.TOCOrder != b.mc.TOCOrder {
+			return a.mc.TOCOrder < b.mc.TOCOrder
+		}
+		if a.mc.VolumeNumber != nil && b.mc.VolumeNumber != nil && *a.mc.VolumeNumber != *b.mc.VolumeNumber {
+			return *a.mc.VolumeNumber < *b.mc.VolumeNumber
+		}
+		if a.mc.ChapterNumber != nil && b.mc.ChapterNumber != nil && *a.mc.ChapterNumber != *b.mc.ChapterNumber {
+			return *a.mc.ChapterNumber < *b.mc.ChapterNumber
+		}
+		if a.isExisting != b.isExisting {
+			return a.isExisting
+		}
+		return a.origOrder < b.origOrder
+	})
+}
+
 func spineShifted(oldKeys, newKeys []string) bool {
 	if len(oldKeys) == 0 {
 		return false
@@ -555,6 +579,20 @@ func mergeMeta(old *BookManifest, incoming BookMeta) BookManifest {
 	}
 	if incoming.Language != "" {
 		m.Language = incoming.Language
+	}
+	if incoming.VolumeIndex > 0 {
+		m.VolumeIndex = incoming.VolumeIndex
+	}
+	if incoming.VolumeSize > 0 {
+		m.VolumeSize = incoming.VolumeSize
+	} else if m.VolumeIndex > 0 && m.VolumeSize <= 0 {
+		m.VolumeSize = DefaultChaptersPerVolume
+	}
+	if incoming.VolumeStart > 0 {
+		m.VolumeStart = incoming.VolumeStart
+	}
+	if incoming.VolumeEnd > 0 {
+		m.VolumeEnd = incoming.VolumeEnd
 	}
 	if m.Language == "" {
 		m.Language = "zh"
@@ -696,7 +734,18 @@ func copyRawZipEntry(zw *zip.Writer, src *zip.File) error {
 
 func bookIdentifier(m *BookManifest) string {
 	sum := sha256.Sum256([]byte(m.SourceKey + "\x00" + m.MangaKey))
-	return "urn:tsundoku:" + hex.EncodeToString(sum[:16])
+	base := "urn:tsundoku:" + hex.EncodeToString(sum[:16])
+	if m.VolumeIndex > 0 {
+		return fmt.Sprintf("%s:v%d", base, m.VolumeIndex)
+	}
+	return base
+}
+
+func displayVolumeTitle(m *BookManifest) string {
+	if m.VolumeIndex > 0 && m.VolumeStart > 0 && m.VolumeEnd >= m.VolumeStart {
+		return fmt.Sprintf("%s (%d-%d)", m.Title, m.VolumeStart, m.VolumeEnd)
+	}
+	return m.Title
 }
 
 func buildContentOPF(m *BookManifest) []byte {
@@ -710,7 +759,7 @@ func buildContentOPF(m *BookManifest) []byte {
 	buf.WriteString(`<package xmlns="http://www.idpf.org/2007/opf" version="2.0" unique-identifier="BookId">` + "\n")
 	buf.WriteString(`  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:opf="http://www.idpf.org/2007/opf">` + "\n")
 	buf.WriteString(`    <dc:identifier id="BookId">` + xmlEscape(bookIdentifier(m)) + `</dc:identifier>` + "\n")
-	buf.WriteString(`    <dc:title>` + xmlEscape(m.Title) + `</dc:title>` + "\n")
+	buf.WriteString(`    <dc:title>` + xmlEscape(displayVolumeTitle(m)) + `</dc:title>` + "\n")
 	buf.WriteString(`    <dc:language>` + xmlEscape(lang) + `</dc:language>` + "\n")
 	for _, a := range m.Authors {
 		if a = trimParagraphSpace(a); a != "" {
@@ -751,7 +800,7 @@ func buildTOCNCX(m *BookManifest) []byte {
 	buf.WriteString(`    <meta name="dtb:totalPageCount" content="0"/>` + "\n")
 	buf.WriteString(`    <meta name="dtb:maxPageNumber" content="0"/>` + "\n")
 	buf.WriteString(`  </head>` + "\n")
-	buf.WriteString(`  <docTitle><text>` + xmlEscape(m.Title) + `</text></docTitle>` + "\n")
+	buf.WriteString(`  <docTitle><text>` + xmlEscape(displayVolumeTitle(m)) + `</text></docTitle>` + "\n")
 	buf.WriteString(`  <navMap>` + "\n")
 	for i, ch := range m.Chapters {
 		order := i + 1
